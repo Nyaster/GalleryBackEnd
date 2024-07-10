@@ -1,0 +1,6 @@
+@GallerySiteBackend_HostAddress = http://localhost:5118
+
+GET {{GallerySiteBackend_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
