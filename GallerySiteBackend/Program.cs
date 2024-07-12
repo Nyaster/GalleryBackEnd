@@ -5,7 +5,9 @@ public class Program
     public static void Main(string[] args)
     {
         var builder = WebApplication.CreateBuilder(args);
-
+        IConfiguration configuration = new ConfigurationBuilder()
+            .AddJsonFile("secrets.json", optional: true, reloadOnChange: true).Build();
+        builder.Configuration.AddConfiguration(configuration);
         // Add services to the container.
 
         builder.Services.AddControllers();
