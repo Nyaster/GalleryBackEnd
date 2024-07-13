@@ -1,3 +1,9 @@
+using System.Text;
+using GallerySiteBackend.Context;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+
 namespace GallerySiteBackend;
 
 public class Program
@@ -14,6 +20,60 @@ public class Program
         // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
         builder.Services.AddEndpointsApiExplorer();
         builder.Services.AddSwaggerGen();
+        builder.Services.AddDbContext<AppDbContext>(opt =>
+            opt.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+        #region JwtConfiguration
+
+        builder.Services.AddAuthentication(option =>
+        {
+            option.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+            option.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+        }).AddJwtBearer(opt =>
+        {
+            opt.TokenValidationParameters = new TokenValidationParameters
+            {
+                ValidateIssuer = true,
+                ValidateAudience = true,
+                ValidateLifetime = true,
+                ClockSkew = TimeSpan.FromMinutes(2),
+                ValidIssuer = builder.Configuration["Issuer"],
+                ValidAudience = builder.Configuration["Issuer"],
+                IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["SecretKey"]))
+            };
+            opt.Events = new JwtBearerEvents()
+            {
+                OnAuthenticationFailed = context =>
+                {
+                    if (context.Exception.GetType() == typeof(SecurityTokenExpiredException))
+                    {
+                        context.Response.Headers["Token-expired"] = "true";
+                    }
+
+                    return Task.CompletedTask;
+                }
+            };
+        }).AddJwtBearer("IgnoreTokenExpirationScheme", opt =>
+        {
+            opt.TokenValidationParameters = new TokenValidationParameters
+            {
+                ValidateIssuer = true, //by who
+                ValidateAudience = true, //for whom
+                ValidateLifetime = false,
+                ClockSkew = TimeSpan.FromMinutes(2),
+                ValidIssuer = builder.Configuration["Issuer"], //should come from configuration
+                ValidAudience = builder.Configuration["Issuer"], //should come from configuration
+                IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["SecretKey"]))
+            };
+        });
+        builder.Services.AddAuthorization(options =>
+        {
+            options.AddPolicy("RequireAdministratorRole", policy => policy.RequireRole("Administrator"));
+            options.AddPolicy("RequireUserRole", policy => policy.RequireRole("User"));
+            options.AddPolicy("RequairedModeratorRole", policy => policy.RequireRole("Moderator"));
+        });
+
+        #endregion
 
         var app = builder.Build();
 
