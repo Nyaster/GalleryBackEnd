@@ -68,9 +68,9 @@ public class Program
         });
         builder.Services.AddAuthorization(options =>
         {
-            options.AddPolicy("RequireAdministratorRole", policy => policy.RequireRole("Administrator"));
+            options.AddPolicy("RequireAdminRole", policy => policy.RequireRole("Admin"));
             options.AddPolicy("RequireUserRole", policy => policy.RequireRole("User"));
-            options.AddPolicy("RequairedModeratorRole", policy => policy.RequireRole("Moderator"));
+            options.AddPolicy("RequaireModeratorRole", policy => policy.RequireRole("Moderator"));
         });
 
         #endregion
