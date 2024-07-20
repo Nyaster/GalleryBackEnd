@@ -2,6 +2,8 @@
 Microsoft Visual Studio Solution File, Format Version 12.00
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GallerySiteBackend", "GallerySiteBackend\GallerySiteBackend.csproj", "{A857029E-A4D9-422C-A905-CD402C300C2D}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GallerySiteUnitTests", "GallerySiteUnitTests\GallerySiteUnitTests.csproj", "{6CAC231A-25A4-4F76-8C9C-C69A03203F90}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -12,5 +14,9 @@ Global
 		{A857029E-A4D9-422C-A905-CD402C300C2D}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A857029E-A4D9-422C-A905-CD402C300C2D}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A857029E-A4D9-422C-A905-CD402C300C2D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6CAC231A-25A4-4F76-8C9C-C69A03203F90}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6CAC231A-25A4-4F76-8C9C-C69A03203F90}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6CAC231A-25A4-4F76-8C9C-C69A03203F90}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6CAC231A-25A4-4F76-8C9C-C69A03203F90}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
