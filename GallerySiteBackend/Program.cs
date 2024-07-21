@@ -1,5 +1,7 @@
 using System.Text;
 using GallerySiteBackend.Context;
+using GallerySiteBackend.Repositories;
+using GallerySiteBackend.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -15,7 +17,6 @@ public class Program
             .AddJsonFile("secrets.json", optional: true, reloadOnChange: true).Build();
         builder.Configuration.AddConfiguration(configuration);
         // Add services to the container.
-
         builder.Services.AddControllers();
         // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
         builder.Services.AddEndpointsApiExplorer();
@@ -75,6 +76,8 @@ public class Program
 
         #endregion
 
+        builder.Services.AddTransient<IAuthorizationService, AuthorizationService>();
+        builder.Services.AddTransient<IAppUserRepository, AppUserRepository>();
         var app = builder.Build();
 
         // Configure the HTTP request pipeline.
