@@ -71,7 +71,7 @@ public class Program
         {
             options.AddPolicy("RequireAdminRole", policy => policy.RequireRole("Admin"));
             options.AddPolicy("RequireUserRole", policy => policy.RequireRole("User"));
-            options.AddPolicy("RequaireModeratorRole", policy => policy.RequireRole("Moderator"));
+            options.AddPolicy("RequireModeratorRole", policy => policy.RequireRole("Moderator"));
         });
 
         #endregion
@@ -93,7 +93,6 @@ public class Program
 
 
         app.MapControllers();
-
         app.Run();
     }
 }
