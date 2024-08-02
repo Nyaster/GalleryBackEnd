@@ -6,6 +6,8 @@ using IAuthorizationService = GallerySiteBackend.Services.IAuthorizationService;
 namespace GallerySiteBackend.Controllers;
 
 [ApiController]
+[AllowAnonymous]
+[Route("api/auth")]
 public class AuthorizationController : ControllerBase
 {
     private IAuthorizationService _authorizationService;
@@ -14,13 +16,13 @@ public class AuthorizationController : ControllerBase
     {
         _authorizationService = authorizationService;
     }
-
+    [HttpPost("login")]
     public async Task<IActionResult> Login(AppLoginRequest loginRequest)
     {
         var jwtTokenResponse = await _authorizationService.LoginAsync(loginRequest);
         return Ok(jwtTokenResponse);
     }
-
+    [HttpPost("register")]
     public async Task<IActionResult> Registration(AppUserRegistrationRequest registrationRequest)
     {
         await _authorizationService.RegisterAsync(registrationRequest);

@@ -13,6 +13,6 @@ public class AppUserEfConfiguration : IEntityTypeConfiguration<AppUser>
         builder.Property(x => x.Salt).IsRequired();
         builder.Property(x => x.RefreshToken).IsRequired(false);
         builder.Property(x => x.RefreshTokenExp).IsRequired(false);
-        builder.HasMany(x => x.UploadedImages).WithOne(x => x.UploadedBy).HasForeignKey(x => x.UploadedById);
+        builder.HasMany(x => x.UploadedImages).WithOne(x => x.UploadedBy).HasForeignKey(x=>x.UploadedById);
     }
 }

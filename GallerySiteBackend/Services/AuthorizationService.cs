@@ -52,12 +52,12 @@ public class AuthorizationService : IAuthorizationService
             issuer: _configuration["Issuer"],
             audience: _configuration["Issuer"],
             claims: userclaim,
-            expires: DateTime.Now.AddMinutes(15),
+            expires: DateTime.Now.AddMinutes(15).ToUniversalTime(),
             signingCredentials: creds
         );
 
         user.RefreshToken = SecurityHelpers.GenerateRefreshToken();
-        user.RefreshTokenExp = DateTime.Now.AddDays(1);
+        user.RefreshTokenExp = DateTime.Now.AddDays(1).ToUniversalTime();
         await _userRepository.Update(user);
 
         return new JwtTokenResponse()
@@ -83,7 +83,7 @@ public class AuthorizationService : IAuthorizationService
             Password = hashedPasswordAndSalt.Item1,
             Salt = hashedPasswordAndSalt.Item2,
             RefreshToken = SecurityHelpers.GenerateRefreshToken(),
-            RefreshTokenExp = DateTime.Now.AddDays(1),
+            RefreshTokenExp = DateTime.Now.AddDays(1).ToUniversalTime(),
             AppUserRolesList = [AppUserRoles.User],
         };
 
@@ -115,12 +115,12 @@ public class AuthorizationService : IAuthorizationService
             issuer: _configuration["Issuer"],
             audience: _configuration["Issuer"],
             claims: userclaim,
-            expires: DateTime.Now.AddMinutes(10),
+            expires: DateTime.Now.AddMinutes(10).ToUniversalTime(),
             signingCredentials: creds
         );
 
         user.RefreshToken = SecurityHelpers.GenerateRefreshToken();
-        user.RefreshTokenExp = DateTime.Now.AddDays(1);
+        user.RefreshTokenExp = DateTime.Now.AddDays(1).ToUniversalTime();
 
         return new JwtTokenResponse()
         {

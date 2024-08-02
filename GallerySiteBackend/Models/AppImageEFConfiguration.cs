@@ -13,8 +13,8 @@ public class AppImageEfConfiguration : IEntityTypeConfiguration<AppImage>
         builder.Property(x => x.IsHidden).IsRequired();
         builder.Property(x => x.LikesCount).IsRequired();
         builder.Property(x => x.FavoritesCount).IsRequired();
-        builder.HasMany(x => x.LikedBy).WithOne();
-        builder.HasMany(x => x.FavoriteBy).WithOne();
+        builder.HasMany(x => x.LikedBy).WithMany();
+        builder.HasMany(x => x.FavoriteBy).WithMany();
         builder.HasMany(x => x.Tags).WithMany(x => x.AppImages);
         builder.Property(x => x.PathToFileOnDisc).IsRequired();
     }

@@ -23,7 +23,14 @@ public class Program
         builder.Services.AddSwaggerGen();
         builder.Services.AddDbContext<AppDbContext>(opt =>
             opt.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
-
+        builder.Services.AddCors(options =>
+        {
+            options.AddPolicy("AllowSpecificOrigin",
+                x => x.WithOrigins("http://localhost:4200") // Angular app URL
+                    .AllowAnyHeader()
+                    .AllowAnyMethod()
+                    .AllowCredentials());
+        });
         #region JwtConfiguration
 
         builder.Services.AddAuthentication(option =>
@@ -78,6 +85,8 @@ public class Program
 
         builder.Services.AddTransient<IAuthorizationService, AuthorizationService>();
         builder.Services.AddTransient<IAppUserRepository, AppUserRepository>();
+        builder.Services.AddTransient<IAppImageRepository, AppImageRepository>();
+        builder.Services.AddTransient<IAppImageService, AppImageService>();
         var app = builder.Build();
 
         // Configure the HTTP request pipeline.
@@ -87,6 +96,9 @@ public class Program
             app.UseSwaggerUI();
         }
 
+        app.UseCors("AllowSpecificOrigin");
+        app.UseAuthentication();
+        app.UseAuthorization();
         app.UseHttpsRedirection();
 
         app.UseAuthorization();

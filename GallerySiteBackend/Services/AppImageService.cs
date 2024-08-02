@@ -1,7 +1,10 @@
-﻿using GallerySiteBackend.Exceptions;
+﻿using System.Net;
+using GallerySiteBackend.Exceptions;
 using GallerySiteBackend.Models;
+using GallerySiteBackend.Models.DTOs;
 using GallerySiteBackend.Models.Requests;
 using GallerySiteBackend.Repositories;
+using Microsoft.AspNetCore.Mvc;
 
 namespace GallerySiteBackend.Services;
 
@@ -34,12 +37,64 @@ public class AppImageService : IAppImageService
         var image = new AppImage()
         {
             UploadedBy = user,
-            UploadedDate = DateTime.Now,
+            UploadedDate = DateTime.Now.ToUniversalTime(),
             IsHidden = dto.IsHidden,
             Tags = tags,
             PathToFileOnDisc = imagePath,
         };
         await _appImageRepository.Add(image);
+    }
+
+    public async Task<FileContentResult> GetFileBytesAsync(int id)
+    {
+        var byId = await _appImageRepository.GetById(id);
+        var fileBytes = await System.IO.File.ReadAllBytesAsync(byId.PathToFileOnDisc);
+        var contentType = GetFileType(byId.PathToFileOnDisc);
+        return new FileContentResult(fileBytes, contentType);
+    }
+
+    public async Task<PageableImagesDTO> GetImagesBySearchConditions(GetImageRequest getImageRequest)
+    {
+        List<ImageTag> list = new List<ImageTag>();
+        if (getImageRequest.Page < 1)
+        {
+            getImageRequest.Page = 1;
+        }
+
+        var pageNumber = getImageRequest.Page - 1;
+        var searchImagesByTags = await _appImageRepository.SearchImagesByTags(list, OrderBy.Id, pageNumber);
+        var page = new PageableImagesDTO()
+        {
+            Images = searchImagesByTags.Select(x => new AppImageDTO()
+            {
+                Id = x.Id,
+                UploadedBy = x.UploadedBy.Login,
+                UploadDate = x.UploadedDate,
+                UrlToImage = $"/api/images/{x.Id}"
+            }).ToList(),
+            OrderBy = OrderBy.Id.ToString(),
+            Page = getImageRequest.Page,
+            PageSize = 10,
+        };
+        return page;
+    }
+
+    public string GetFileType(string path)
+    {
+        var extension = Path.GetExtension(path).ToLowerInvariant();
+        return extension switch
+        {
+            ".jpg" => "image/jpeg",
+            ".jpeg" => "image/jpeg",
+            ".png" => "image/png",
+            ".webp"=>"image/webp",
+            _ => "application/octet-stream",
+        };
+    }
+
+    public Task AddTagsToImage()
+    {
+        throw new NotImplementedException();
     }
 
     private async Task ValidateImage(IFormFile file)
