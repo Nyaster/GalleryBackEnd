@@ -1,5 +1,6 @@
 using System.Text;
 using GallerySiteBackend.Context;
+using GallerySiteBackend.Extensions;
 using GallerySiteBackend.Repositories;
 using GallerySiteBackend.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -23,14 +24,8 @@ public class Program
         builder.Services.AddSwaggerGen();
         builder.Services.AddDbContext<AppDbContext>(opt =>
             opt.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
-        builder.Services.AddCors(options =>
-        {
-            options.AddPolicy("AllowSpecificOrigin",
-                x => x.WithOrigins("http://localhost:4200") // Angular app URL
-                    .AllowAnyHeader()
-                    .AllowAnyMethod()
-                    .AllowCredentials());
-        });
+        builder.Services.ConfigureCors();
+
         #region JwtConfiguration
 
         builder.Services.AddAuthentication(option =>
