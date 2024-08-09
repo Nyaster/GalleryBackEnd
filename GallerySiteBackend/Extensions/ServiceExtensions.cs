@@ -1,4 +1,7 @@
-﻿namespace GallerySiteBackend.Extensions;
+﻿using Contracts;
+using LoggerService;
+
+namespace GallerySiteBackend.Extensions;
 
 public static class ServiceExtensions
 {
@@ -6,5 +9,10 @@ public static class ServiceExtensions
     {
         services.AddCors(options =>
             options.AddPolicy("CorsPolicy", builder => builder.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
+    }
+
+    public static void ConfigureLoggerService(this IServiceCollection services)
+    {
+        services.AddSingleton<ILoggerManager, LoggerManager>();
     }
 }

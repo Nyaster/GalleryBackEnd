@@ -6,6 +6,7 @@ using GallerySiteBackend.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using NLog;
 
 namespace GallerySiteBackend;
 
@@ -14,6 +15,8 @@ public class Program
     public static void Main(string[] args)
     {
         var builder = WebApplication.CreateBuilder(args);
+        LogManager.LoadConfiguration(string.Concat(Directory.GetCurrentDirectory(),
+            "/nlog.config"));
         IConfiguration configuration = new ConfigurationBuilder()
             .AddJsonFile("secrets.json", optional: true, reloadOnChange: true).Build();
         builder.Configuration.AddConfiguration(configuration);
@@ -91,7 +94,7 @@ public class Program
             app.UseSwaggerUI();
         }
 
-        app.UseCors("AllowSpecificOrigin");
+        app.UseCors("CorsPolicy");
         app.UseAuthentication();
         app.UseAuthorization();
         app.UseHttpsRedirection();
