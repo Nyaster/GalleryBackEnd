@@ -1,4 +1,4 @@
-﻿using GallerySiteBackend.Models.Requests;
+﻿using Entities.Models.Requests;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using IAuthorizationService = GallerySiteBackend.Services.IAuthorizationService;

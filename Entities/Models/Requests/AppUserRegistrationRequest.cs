@@ -1,6 +1,6 @@
-﻿namespace GallerySiteBackend.Models.Requests;
+﻿namespace Entities.Models.Requests;
 
-public class AppLoginRequest
+public class AppUserRegistrationRequest
 {
     public required string Login { get; set; }
     public required string Password { get; set; }

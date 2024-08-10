@@ -1,9 +1,9 @@
 ﻿using System.Net;
+using Contracts;
+using Entities.Models.Requests;
 using GallerySiteBackend.Exceptions;
 using GallerySiteBackend.Models;
 using GallerySiteBackend.Models.DTOs;
-using GallerySiteBackend.Models.Requests;
-using GallerySiteBackend.Repositories;
 using Microsoft.AspNetCore.Mvc;
 
 namespace GallerySiteBackend.Services;

@@ -2,12 +2,12 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using Contracts;
+using Entities.Models.Requests;
 using GallerySiteBackend.Exceptions;
 using GallerySiteBackend.Helpers;
 using GallerySiteBackend.Models;
 using GallerySiteBackend.Models.DTOs;
-using GallerySiteBackend.Models.Requests;
-using GallerySiteBackend.Repositories;
 using Microsoft.AspNetCore.Identity.Data;
 using Microsoft.IdentityModel.Tokens;
 

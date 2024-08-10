@@ -1,12 +1,12 @@
 using System.Text;
-using GallerySiteBackend.Context;
+using Contracts;
 using GallerySiteBackend.Extensions;
-using GallerySiteBackend.Repositories;
 using GallerySiteBackend.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using NLog;
+using Repository;
 
 namespace GallerySiteBackend;
 
@@ -20,13 +20,13 @@ public class Program
         IConfiguration configuration = new ConfigurationBuilder()
             .AddJsonFile("secrets.json", optional: true, reloadOnChange: true).Build();
         builder.Configuration.AddConfiguration(configuration);
+        builder.Services.ConfigureLoggerService();
+        builder.Services.ConfigureRepositoryManager();
         // Add services to the container.
         builder.Services.AddControllers();
         // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
         builder.Services.AddEndpointsApiExplorer();
         builder.Services.AddSwaggerGen();
-        builder.Services.AddDbContext<AppDbContext>(opt =>
-            opt.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
         builder.Services.ConfigureCors();
 
         #region JwtConfiguration

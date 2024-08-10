@@ -1,14 +1,13 @@
-﻿using GallerySiteBackend.Context;
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 
-namespace GallerySiteBackend.Repositories;
+namespace Repository;
 
 public abstract class BaseRepository<T> : IBaseRepository<T> where T : class
 {
-    protected readonly AppDbContext _context;
+    protected readonly RepositoryContext _context;
     protected readonly DbSet<T> _dbSet;
 
-    public BaseRepository(AppDbContext context)
+    public BaseRepository(RepositoryContext context)
     {
         _context = context;
         _dbSet = _context.Set<T>();

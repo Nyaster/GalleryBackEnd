@@ -1,5 +1,5 @@
-﻿using GallerySiteBackend.Models.DTOs;
-using GallerySiteBackend.Models.Requests;
+﻿using Entities.Models.Requests;
+using GallerySiteBackend.Models.DTOs;
 using Microsoft.AspNetCore.Identity.Data;
 
 namespace GallerySiteBackend.Services;

@@ -1,12 +1,12 @@
-﻿using GallerySiteBackend.Context;
+﻿using Contracts;
 using GallerySiteBackend.Models;
 using Microsoft.EntityFrameworkCore;
 
-namespace GallerySiteBackend.Repositories;
+namespace Repository;
 
 public class AppUserRepository : BaseRepository<AppUser>, IAppUserRepository
 {
-    public AppUserRepository(AppDbContext context) : base(context)
+    public AppUserRepository(RepositoryContext context) : base(context)
     {
     }
 

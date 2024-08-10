@@ -1,8 +1,8 @@
 ﻿using GallerySiteBackend.Models;
 
-namespace GallerySiteBackend.Repositories;
+namespace Contracts;
 
-public interface IAppUserRepository : IBaseRepository<AppUser>
+public interface IAppUserRepository
 {
     public Task<AppUser?> GetByLoginAsync(string login);
     public Task<AppUser?> GetByRefreshTokenAsync(string refreshToken);

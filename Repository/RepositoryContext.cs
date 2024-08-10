@@ -1,22 +1,24 @@
 ﻿using GallerySiteBackend.Models;
 using Microsoft.EntityFrameworkCore;
+using Repository.Configuration;
 
-namespace GallerySiteBackend.Context;
+namespace Repository;
 
-public class AppDbContext : DbContext{
-  public AppDbContext()
+public class RepositoryContext : DbContext
+{
+    protected RepositoryContext()
     {
     }
 
-    public AppDbContext(DbContextOptions options) : base(options)
+    public RepositoryContext(DbContextOptions options) : base(options)
     {
     }
-    
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        base.OnModelCreating(modelBuilder);
-        modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppUserEfConfiguration).Assembly);
+        modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppImageEfConfiguration).Assembly);
     }
+
     public DbSet<ImageTag> Tags { get; init; }
     public DbSet<AppImage> Images { get; init; }
     public DbSet<AppUser> AppUsers { get; init; }

@@ -1,15 +1,14 @@
-﻿using GallerySiteBackend.Context;
+﻿using Contracts;
 using GallerySiteBackend.Models;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.IdentityModel.Tokens;
 
-namespace GallerySiteBackend.Repositories;
+namespace Repository;
 
-public class AppImageRepository : BaseRepository<AppImage>, IAppImageRepository
+public class AppImageRepository : RepositoryBase<AppImage>, IAppImageRepository
 {
     private DbSet<ImageTag> _imageTags;
 
-    public AppImageRepository(AppDbContext context) : base(context)
+    public AppImageRepository(RepositoryContext context) : base(context)
     {
         _imageTags = context.Set<ImageTag>();
     }
@@ -25,6 +24,7 @@ public class AppImageRepository : BaseRepository<AppImage>, IAppImageRepository
         var tagsList = await _imageTags.Where(x => tags.Contains(x.Name.ToLower())).ToListAsync();
         return tagsList;
     }
+    
 
     public async Task<List<AppImage>> SearchImagesByTags(List<ImageTag> tags, OrderBy orderBy, int page)
     {
@@ -51,8 +51,3 @@ public class AppImageRepository : BaseRepository<AppImage>, IAppImageRepository
     }
 }
 
-public enum OrderBy
-{
-    Id,
-    UploadDate
-}

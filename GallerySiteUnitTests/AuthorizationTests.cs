@@ -1,8 +1,8 @@
+using Contracts;
+using Entities.Models.Requests;
 using GallerySiteBackend.Exceptions;
 using GallerySiteBackend.Helpers;
 using GallerySiteBackend.Models;
-using GallerySiteBackend.Models.Requests;
-using GallerySiteBackend.Repositories;
 using GallerySiteBackend.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;

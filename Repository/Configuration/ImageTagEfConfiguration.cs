@@ -1,7 +1,8 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using GallerySiteBackend.Models;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
-namespace GallerySiteBackend.Models;
+namespace Repository.Configuration;
 
 public class ImageTagEfConfiguration : IEntityTypeConfiguration<ImageTag>
 {

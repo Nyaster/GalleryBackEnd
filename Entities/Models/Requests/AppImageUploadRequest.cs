@@ -1,4 +1,6 @@
-﻿namespace GallerySiteBackend.Models.Requests;
+﻿using Microsoft.AspNetCore.Http;
+
+namespace Entities.Models.Requests;
 
 public class AppImageUploadRequest
 {

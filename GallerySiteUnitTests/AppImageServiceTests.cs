@@ -1,7 +1,7 @@
-﻿using GallerySiteBackend.Exceptions;
+﻿using Contracts;
+using Entities.Models.Requests;
+using GallerySiteBackend.Exceptions;
 using GallerySiteBackend.Models;
-using GallerySiteBackend.Models.Requests;
-using GallerySiteBackend.Repositories;
 using GallerySiteBackend.Services;
 using Microsoft.AspNetCore.Http;
 using Moq;

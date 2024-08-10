@@ -1,4 +1,4 @@
-﻿namespace GallerySiteBackend.Models.Requests;
+﻿namespace Entities.Models.Requests;
 
 public class GetImageRequest
 {
