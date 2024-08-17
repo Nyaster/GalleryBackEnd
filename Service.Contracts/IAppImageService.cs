@@ -1,9 +1,8 @@
-﻿using System.Net;
-using Entities.Models.Requests;
-using GallerySiteBackend.Models.DTOs;
+﻿using Entities.Models.Requests;
 using Microsoft.AspNetCore.Mvc;
+using Shared.DataTransferObjects;
 
-namespace GallerySiteBackend.Services;
+namespace Service.Contracts;
 
 public interface IAppImageService
 {

@@ -1,6 +1,9 @@
 ﻿using Contracts;
 using LoggerService;
+using Microsoft.EntityFrameworkCore;
 using Repository;
+using Service;
+using Service.Contracts;
 
 namespace GallerySiteBackend.Extensions;
 
@@ -19,6 +22,17 @@ public static class ServiceExtensions
 
     public static void ConfigureRepositoryManager(this IServiceCollection services)
     {
-        services.AddScoped<IRepositoryManager, RepositoryManager>();    
+        services.AddScoped<IRepositoryManager, RepositoryManager>();
+    }
+
+    public static void ConfigureServiceManager(this IServiceCollection services)
+    {
+        services.AddScoped<IServiceManager, ServiceManager>();
+    }
+
+    public static void ConfigureNpsqlContext(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddDbContext<RepositoryContext>(options =>
+            options.UseNpgsql(configuration.GetConnectionString("DefaultConnection")));
     }
 }

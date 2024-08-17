@@ -1,38 +1,43 @@
-﻿using System.Net;
+﻿using AutoMapper;
 using Contracts;
+using Entities.Exceptions;
 using Entities.Models.Requests;
-using GallerySiteBackend.Exceptions;
 using GallerySiteBackend.Models;
-using GallerySiteBackend.Models.DTOs;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Service.Contracts;
+using Shared.DataTransferObjects;
 
-namespace GallerySiteBackend.Services;
+namespace Service;
 
 public class AppImageService : IAppImageService
 {
-    private readonly IAppImageRepository _appImageRepository;
-    private readonly IAppUserRepository _userRepository;
+    private readonly IRepositoryManager _repositoryManager;
     private readonly long _fileSizeLimit = 5 * 1024 * 1024; //todo: Make this read from configuration
+    private readonly ILoggerManager _logger;
+    private readonly IMapper _mapper;
 
     private readonly List<string>
         _acceptedFileTypes = new List<string> { ".jpg", ".jpeg", ".png" }; //todo:Make this read from configuration
 
-    public AppImageService(IAppImageRepository appImageRepository, IAppUserRepository userRepository)
+
+    public AppImageService(IRepositoryManager repositoryManager, ILoggerManager logger, IMapper mapper)
     {
-        _appImageRepository = appImageRepository;
-        _userRepository = userRepository;
+        _repositoryManager = repositoryManager;
+        _logger = logger;
+        _mapper = mapper;
     }
 
     public async Task UploadImageAsync(AppImageUploadRequest dto)
     {
-        await ValidateImage(dto.Image);
-        var user = await _userRepository.GetByLoginAsync(dto.UploadedBy);
+            await ValidateImage(dto.Image);
+        var user = await _repositoryManager.AppUser.GetByLoginAsync(dto.UploadedBy);
         if (user == null)
         {
             throw new AppUserNotFoundException($"{dto.UploadedBy} this user can't found, please try again");
         }
 
-        var tags = await _appImageRepository.GetTagsByIds(dto.TagIds);
+        var tags = await _repositoryManager.AppImage.GetTagsByIds(dto.TagIds);
         var imagePath = await SaveFileToDisk(dto.Image, user.Login);
         var image = new AppImage()
         {
@@ -42,12 +47,13 @@ public class AppImageService : IAppImageService
             Tags = tags,
             PathToFileOnDisc = imagePath,
         };
-        await _appImageRepository.Add(image);
+        await _repositoryManager.AppImage.Create(image);
+        await _repositoryManager.Save();
     }
-
+    
     public async Task<FileContentResult> GetFileBytesAsync(int id)
     {
-        var byId = await _appImageRepository.GetById(id);
+        var byId = await _repositoryManager.AppImage.GetById(id);
         var fileBytes = await System.IO.File.ReadAllBytesAsync(byId.PathToFileOnDisc);
         var contentType = GetFileType(byId.PathToFileOnDisc);
         return new FileContentResult(fileBytes, contentType);
@@ -62,7 +68,7 @@ public class AppImageService : IAppImageService
         }
 
         var pageNumber = getImageRequest.Page - 1;
-        var searchImagesByTags = await _appImageRepository.SearchImagesByTags(list, OrderBy.Id, pageNumber);
+        var searchImagesByTags = await _repositoryManager.AppImage.SearchImagesByTags(list, OrderBy.Id, pageNumber);
         var page = new PageableImagesDTO()
         {
             Images = searchImagesByTags.Select(x => new AppImageDTO()
@@ -87,7 +93,7 @@ public class AppImageService : IAppImageService
             ".jpg" => "image/jpeg",
             ".jpeg" => "image/jpeg",
             ".png" => "image/png",
-            ".webp"=>"image/webp",
+            ".webp" => "image/webp",
             _ => "application/octet-stream",
         };
     }

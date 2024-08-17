@@ -7,7 +7,7 @@ namespace Repository;
 public abstract class RepositoryBase<T>(RepositoryContext repositoryContext) : IRepositoryBase<T>
     where T : class
 {
-    protected RepositoryContext RepositoryContext = repositoryContext;
+    protected readonly RepositoryContext RepositoryContext = repositoryContext;
 
     public IQueryable<T> FindAll(bool trackChanges)
     {
@@ -21,9 +21,9 @@ public abstract class RepositoryBase<T>(RepositoryContext repositoryContext) : I
             : RepositoryContext.Set<T>().Where(expression);
     }
 
-    public void Create(T entity)
+    public async Task Create(T entity)
     {
-        RepositoryContext.Set<T>().Add(entity);
+        await RepositoryContext.Set<T>().AddAsync(entity);
     }
 
     public void Update(T entity)

@@ -4,5 +4,5 @@ public interface IRepositoryManager
 {
     IAppUserRepository AppUser { get; }
     IAppImageRepository AppImage { get; }
-    void Save();
+    Task Save();
 }

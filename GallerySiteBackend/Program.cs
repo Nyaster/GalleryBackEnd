@@ -1,12 +1,8 @@
 using System.Text;
-using Contracts;
 using GallerySiteBackend.Extensions;
-using GallerySiteBackend.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using NLog;
-using Repository;
 
 namespace GallerySiteBackend;
 
@@ -15,19 +11,24 @@ public class Program
     public static void Main(string[] args)
     {
         var builder = WebApplication.CreateBuilder(args);
-        LogManager.LoadConfiguration(string.Concat(Directory.GetCurrentDirectory(),
+        LogManager.Setup().LoadConfigurationFromFile(string.Concat(Directory.GetCurrentDirectory(),
             "/nlog.config"));
         IConfiguration configuration = new ConfigurationBuilder()
             .AddJsonFile("secrets.json", optional: true, reloadOnChange: true).Build();
         builder.Configuration.AddConfiguration(configuration);
+        builder.Services.ConfigureNpsqlContext(builder.Configuration);
         builder.Services.ConfigureLoggerService();
         builder.Services.ConfigureRepositoryManager();
+        builder.Services.ConfigureServiceManager();
         // Add services to the container.
-        builder.Services.AddControllers();
+        builder.Services.AddControllers()
+            .AddApplicationPart(typeof(Presentation.AssemblyReference).Assembly);
         // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
         builder.Services.AddEndpointsApiExplorer();
         builder.Services.AddSwaggerGen();
         builder.Services.ConfigureCors();
+        builder.Services.AddAutoMapper(typeof(Program));
+        builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 
         #region JwtConfiguration
 
@@ -81,13 +82,15 @@ public class Program
 
         #endregion
 
-        builder.Services.AddTransient<IAuthorizationService, AuthorizationService>();
-        builder.Services.AddTransient<IAppUserRepository, AppUserRepository>();
-        builder.Services.AddTransient<IAppImageRepository, AppImageRepository>();
-        builder.Services.AddTransient<IAppImageService, AppImageService>();
-        var app = builder.Build();
 
+        var app = builder.Build();
+        /*var logger = app.Services.GetRequiredService<ILoggerManager>();
+        app.ConfigureExceptionHandler(logger);*/
         // Configure the HTTP request pipeline.
+        if (app.Environment.IsProduction())
+        {
+            app.UseHsts();
+        }
         if (app.Environment.IsDevelopment())
         {
             app.UseSwagger();

@@ -1,4 +1,4 @@
-﻿namespace GallerySiteBackend.Exceptions;
+﻿namespace Entities.Exceptions;
 
 public class Base400BadRequestException(string? message) : Exception(message)
 {

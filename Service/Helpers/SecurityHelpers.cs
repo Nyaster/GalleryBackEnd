@@ -5,7 +5,7 @@ using System.Text;
 using Microsoft.AspNetCore.Cryptography.KeyDerivation;
 using Microsoft.IdentityModel.Tokens;
 
-namespace GallerySiteBackend.Helpers;
+namespace Service.Helpers;
 
 public class SecurityHelpers
 {
@@ -59,8 +59,8 @@ public class SecurityHelpers
             ValidateIssuer = true,
             ValidateActor = true,
             ClockSkew = TimeSpan.FromMinutes(2),
-            ValidIssuer = "https://localhost:5001", //should come from configuration
-            ValidAudience = "https://localhost:5001", //should come from configuration
+            ValidIssuer = "https://localhost:5001", //Todo:should come from configuration
+            ValidAudience = "https://localhost:5001", //Todo:should come from configuration
             ValidateLifetime = false, // We don't validate lifetime
             IssuerSigningKey =
                 new SymmetricSecurityKey(

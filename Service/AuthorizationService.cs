@@ -1,32 +1,38 @@
-﻿using System.Collections;
-using System.IdentityModel.Tokens.Jwt;
+﻿using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using AutoMapper;
 using Contracts;
+using Entities.Exceptions;
 using Entities.Models.Requests;
-using GallerySiteBackend.Exceptions;
-using GallerySiteBackend.Helpers;
 using GallerySiteBackend.Models;
-using GallerySiteBackend.Models.DTOs;
-using Microsoft.AspNetCore.Identity.Data;
+using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
+using Service.Contracts;
+using Service.Helpers;
+using Shared.DataTransferObjects;
 
-namespace GallerySiteBackend.Services;
+namespace Service;
 
 public class AuthorizationService : IAuthorizationService
 {
-    private IAppUserRepository _userRepository;
+    private IRepositoryManager _repositoryManager;
     private IConfiguration _configuration;
+    private readonly ILoggerManager _logger;
+    private readonly IMapper _mapper;
 
-    public AuthorizationService(IAppUserRepository userRepository, IConfiguration configuration)
+
+    public AuthorizationService(IRepositoryManager repositoryManager, IConfiguration configuration, ILoggerManager logger, IMapper mapper)
     {
-        _userRepository = userRepository;
+        _repositoryManager = repositoryManager;
         _configuration = configuration;
+        _logger = logger;
+        _mapper = mapper;
     }
 
     public async Task<JwtTokenResponse> LoginAsync(AppLoginRequest loginRequest)
     {
-        AppUser? user = await _userRepository.GetByLoginAsync(loginRequest.Login);
+        AppUser? user = await _repositoryManager.AppUser.GetByLoginAsync(loginRequest.Login);
         if (user == null)
         {
             throw new AppUserNotFoundException("User not found");
@@ -58,7 +64,7 @@ public class AuthorizationService : IAuthorizationService
 
         user.RefreshToken = SecurityHelpers.GenerateRefreshToken();
         user.RefreshTokenExp = DateTime.Now.AddDays(1).ToUniversalTime();
-        await _userRepository.Update(user);
+        _repositoryManager.AppUser.Update(user);
 
         return new JwtTokenResponse()
         {
@@ -70,7 +76,7 @@ public class AuthorizationService : IAuthorizationService
 
     public async Task RegisterAsync(AppUserRegistrationRequest registrationRequest)
     {
-        var userByLogin = await _userRepository.GetByLoginAsync(registrationRequest.Login.ToLower());
+        var userByLogin = await _repositoryManager.AppUser.GetByLoginAsync(registrationRequest.Login.ToLower());
         if (userByLogin != null)
         {
             throw new UserArleadyExistException($" {registrationRequest.Login} is already exist");
@@ -87,12 +93,13 @@ public class AuthorizationService : IAuthorizationService
             AppUserRolesList = [AppUserRoles.User],
         };
 
-        await _userRepository.Add(user);
+        await _repositoryManager.AppUser.Create(user);
+        await _repositoryManager.Save();
     }
 
     public async Task<JwtTokenResponse> RefreshJwtTokenAsync(AppRefreshTokenRequest refreshRequest)
     {
-        AppUser? user = await _userRepository.GetByRefreshTokenAsync(refreshRequest.RefreshToken);
+        AppUser? user = await _repositoryManager.AppUser.GetByRefreshTokenAsync(refreshRequest.RefreshToken);
         if (user == null)
         {
             throw new SecurityTokenException("Invalid refresh token");

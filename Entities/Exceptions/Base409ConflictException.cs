@@ -1,4 +1,4 @@
-﻿namespace GallerySiteBackend.Exceptions;
+﻿namespace Entities.Exceptions;
 
 public class Base409ConflictException(string? message) : Exception(message)
 {

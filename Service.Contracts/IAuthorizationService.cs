@@ -1,8 +1,7 @@
 ﻿using Entities.Models.Requests;
-using GallerySiteBackend.Models.DTOs;
-using Microsoft.AspNetCore.Identity.Data;
+using Shared.DataTransferObjects;
 
-namespace GallerySiteBackend.Services;
+namespace Service.Contracts;
 
 public interface IAuthorizationService
 {

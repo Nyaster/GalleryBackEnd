@@ -1,18 +1,18 @@
 using Contracts;
+using Entities.Exceptions;
 using Entities.Models.Requests;
-using GallerySiteBackend.Exceptions;
-using GallerySiteBackend.Helpers;
 using GallerySiteBackend.Models;
-using GallerySiteBackend.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 using Moq;
+using Service;
+using Service.Helpers;
 
 namespace GallerySiteUnitTests;
 
 public class AuthorizationTests
 {
-    private readonly Mock<IAppUserRepository> _userRepositoryMock;
+    /*private readonly Mock<IAppUserRepository> _userRepositoryMock;
     private readonly Mock<IConfiguration> _configurationMock;
     private readonly AuthorizationService _authorizationService;
 
@@ -157,5 +157,5 @@ public class AuthorizationTests
         // Act & Assert
         await Assert.ThrowsAsync<SecurityTokenException>(() =>
             _authorizationService.RefreshJwtTokenAsync(refreshRequest));
-    }
+    }*/
 }

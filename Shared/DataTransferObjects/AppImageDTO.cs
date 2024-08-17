@@ -1,4 +1,4 @@
-﻿namespace GallerySiteBackend.Models.DTOs;
+﻿namespace Shared.DataTransferObjects;
 
     public class AppImageDTO
     {
