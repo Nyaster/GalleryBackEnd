@@ -1,8 +1,10 @@
 using System.Text;
 using GallerySiteBackend.Extensions;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 using NLog;
+using Service;
 
 namespace GallerySiteBackend;
 
@@ -21,13 +23,15 @@ public class Program
         builder.Services.ConfigureRepositoryManager();
         builder.Services.ConfigureServiceManager();
         // Add services to the container.
+        builder.Services.AddAutoMapper(typeof(Program));
         builder.Services.AddControllers()
             .AddApplicationPart(typeof(Presentation.AssemblyReference).Assembly);
+        builder.Services.Configure<ApiBehaviorOptions>(options => options.SuppressModelStateInvalidFilter = true);
         // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
         builder.Services.AddEndpointsApiExplorer();
         builder.Services.AddSwaggerGen();
         builder.Services.ConfigureCors();
-        builder.Services.AddAutoMapper(typeof(Program));
+        builder.Services.AddScoped<AppImageParserService>();
         builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 
         #region JwtConfiguration
@@ -58,7 +62,7 @@ public class Program
                     }
 
                     return Task.CompletedTask;
-                }
+                },
             };
         }).AddJwtBearer("IgnoreTokenExpirationScheme", opt =>
         {
@@ -91,6 +95,7 @@ public class Program
         {
             app.UseHsts();
         }
+
         if (app.Environment.IsDevelopment())
         {
             app.UseSwagger();
@@ -101,10 +106,6 @@ public class Program
         app.UseAuthentication();
         app.UseAuthorization();
         app.UseHttpsRedirection();
-
-        app.UseAuthorization();
-
-
         app.MapControllers();
         app.Run();
     }

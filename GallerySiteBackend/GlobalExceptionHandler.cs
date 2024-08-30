@@ -1,6 +1,7 @@
 ﻿using System.Net;
 using Contracts;
 using Entities.ErrorModel;
+using Entities.Exceptions;
 using Microsoft.AspNetCore.Diagnostics;
 
 namespace GallerySiteBackend;
@@ -22,6 +23,11 @@ public class GlobalExceptionHandler : IExceptionHandler
         var contextFeature = httpContext.Features.Get<IExceptionHandlerFeature>();
         if (contextFeature != null)
         {
+            httpContext.Response.StatusCode = contextFeature.Error switch
+            {
+                AppUserNotFoundException _ => StatusCodes.Status404NotFound,
+                _ => StatusCodes.Status500InternalServerError,
+            };
             _logger.LogError($"Something went wrong: {contextFeature.Error}");
             await httpContext.Response.WriteAsync(new ErrorDetails()
             {

@@ -1,6 +1,4 @@
 using Contracts;
-using Entities.Exceptions;
-using Entities.Models.Requests;
 using GallerySiteBackend.Models;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;

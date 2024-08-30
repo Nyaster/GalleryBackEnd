@@ -1,8 +1,15 @@
-﻿namespace GallerySiteBackend.Models;
+﻿using GallerySiteBackend.Models;
+
+namespace Entities.Models;
 
 public class AppImage
 {
+    public AppImage()
+    {
+    }
+
     public int Id { get; set; }
+    public int MediaId { get; set; }
     public AppUser UploadedBy { get; set; }
     public int UploadedById { get; set; }
     public DateTime UploadedDate { get; set; }
@@ -14,4 +21,6 @@ public class AppImage
     public bool IsDeleted { get; set; }
     public List<ImageTag> Tags { get; set; }
     public string PathToFileOnDisc { get; set; }
+    public int Width { get; set; }
+    public int Height { get; set; }
 }

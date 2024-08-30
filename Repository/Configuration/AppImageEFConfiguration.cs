@@ -1,4 +1,5 @@
-﻿using GallerySiteBackend.Models;
+﻿using Entities.Models;
+using GallerySiteBackend.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -18,5 +19,6 @@ public class AppImageEfConfiguration : IEntityTypeConfiguration<AppImage>
         builder.HasMany(x => x.FavoriteBy).WithMany();
         builder.HasMany(x => x.Tags).WithMany(x => x.AppImages);
         builder.Property(x => x.PathToFileOnDisc).IsRequired();
+        builder.Property(x => x.MediaId).IsRequired(true);
     }
 }

@@ -1,7 +1,7 @@
-﻿using Entities.Models.Requests;
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Service.Contracts;
+using Shared.DataTransferObjects;
 using IAuthorizationService = Service.Contracts.IAuthorizationService;
 
 namespace GallerySiteBackend.Presentation;
@@ -20,23 +20,34 @@ public class AuthorizationController : ControllerBase
 
 
     [HttpPost("login")]
-    public async Task<IActionResult> Login(AppLoginRequest loginRequest)
+    public async Task<IActionResult> Login(AppLoginDto loginRequest)
     {
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(ModelState);
+        }
         var jwtTokenResponse = await _serviceManager.AuthorizationService.LoginAsync(loginRequest);
         return Ok(jwtTokenResponse);
     }
+
     [HttpPost("register")]
-    public async Task<IActionResult> Registration(AppUserRegistrationRequest registrationRequest)
+    public async Task<IActionResult> Registration(CreateUserDto registrationRequest)
     {
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(ModelState);
+        }
         await _serviceManager.AuthorizationService.RegisterAsync(registrationRequest);
         return Created();
     }
 
     [Authorize(AuthenticationSchemes = "IgnoreTokenExpirationScheme")]
     [HttpPost("refresh")]
-    public async Task<IActionResult> Refresh(AppRefreshTokenRequest refreshTokenRequest)
+    public async Task<IActionResult> Refresh(AppRefreshhTokenResetDto refreshTokenRequest)
     {
-        var refreshJwtTokenAsync = await _serviceManager.AuthorizationService.RefreshJwtTokenAsync(refreshTokenRequest);
+        var token = HttpContext.Request.Headers["Authorization"].ToString().Replace("Bearer ", "");
+        var refreshJwtTokenAsync =
+            await _serviceManager.AuthorizationService.RefreshJwtTokenAsync(refreshTokenRequest, token);
         return Ok(refreshJwtTokenAsync);
     }
 }

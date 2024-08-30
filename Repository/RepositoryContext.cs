@@ -1,4 +1,5 @@
-﻿using GallerySiteBackend.Models;
+﻿using Entities.Models;
+using GallerySiteBackend.Models;
 using Microsoft.EntityFrameworkCore;
 using Repository.Configuration;
 

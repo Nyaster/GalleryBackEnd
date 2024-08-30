@@ -10,15 +10,16 @@ public class AppUserRepository : RepositoryBase<AppUser>, IAppUserRepository
     {
     }
 
-    public async Task<AppUser?> GetByLoginAsync(string login)
+    public async Task<AppUser?> GetByLoginAsync(string login, bool trackChanges)
     {
-        var appUser = await RepositoryContext.AppUsers.FirstOrDefaultAsync(x => x.Login.Equals(login));
+        var appUser = await FindByCondition(x => x.Login == login, trackChanges).SingleOrDefaultAsync();
         return appUser;
     }
 
-    public async Task<AppUser?> GetByRefreshTokenAsync(string refreshToken)
+    public async Task<AppUser?> GetByRefreshTokenAsync(string refreshToken, bool trackChanges)
     {
-        return await RepositoryContext.AppUsers.FirstOrDefaultAsync(x => x.RefreshToken.Equals(refreshToken));
+        var appUser = await FindByCondition(x => x.RefreshToken == refreshToken, trackChanges).SingleOrDefaultAsync();
+        return appUser;
     }
 
     public new void Update(AppUser user)

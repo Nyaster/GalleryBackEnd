@@ -1,4 +1,6 @@
-﻿namespace GallerySiteBackend.Models;
+﻿using Entities.Models;
+
+namespace GallerySiteBackend.Models;
 
 public class AppUser
 {

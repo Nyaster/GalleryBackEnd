@@ -4,7 +4,6 @@ using System.Text;
 using AutoMapper;
 using Contracts;
 using Entities.Exceptions;
-using Entities.Models.Requests;
 using GallerySiteBackend.Models;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
@@ -22,7 +21,8 @@ public class AuthorizationService : IAuthorizationService
     private readonly IMapper _mapper;
 
 
-    public AuthorizationService(IRepositoryManager repositoryManager, IConfiguration configuration, ILoggerManager logger, IMapper mapper)
+    public AuthorizationService(IRepositoryManager repositoryManager, IConfiguration configuration,
+        ILoggerManager logger, IMapper mapper)
     {
         _repositoryManager = repositoryManager;
         _configuration = configuration;
@@ -30,9 +30,9 @@ public class AuthorizationService : IAuthorizationService
         _mapper = mapper;
     }
 
-    public async Task<JwtTokenResponse> LoginAsync(AppLoginRequest loginRequest)
+    public async Task<JwtTokenResponse> LoginAsync(AppLoginDto loginRequest)
     {
-        AppUser? user = await _repositoryManager.AppUser.GetByLoginAsync(loginRequest.Login);
+        AppUser? user = await _repositoryManager.AppUser.GetByLoginAsync(loginRequest.Login, trackChanges: false);
         if (user == null)
         {
             throw new AppUserNotFoundException("User not found");
@@ -58,25 +58,26 @@ public class AuthorizationService : IAuthorizationService
             issuer: _configuration["Issuer"],
             audience: _configuration["Issuer"],
             claims: userclaim,
-            expires: DateTime.Now.AddMinutes(15).ToUniversalTime(),
+            expires: DateTime.Now.AddMinutes(10).ToUniversalTime(),
             signingCredentials: creds
         );
 
         user.RefreshToken = SecurityHelpers.GenerateRefreshToken();
         user.RefreshTokenExp = DateTime.Now.AddDays(1).ToUniversalTime();
         _repositoryManager.AppUser.Update(user);
+        await _repositoryManager.Save();
 
         return new JwtTokenResponse()
         {
             Token = new JwtSecurityTokenHandler().WriteToken(token),
             RefreshToken = user.RefreshToken
         };
-        ;
     }
 
-    public async Task RegisterAsync(AppUserRegistrationRequest registrationRequest)
+    public async Task RegisterAsync(CreateUserDto registrationRequest)
     {
-        var userByLogin = await _repositoryManager.AppUser.GetByLoginAsync(registrationRequest.Login.ToLower());
+        var userByLogin =
+            await _repositoryManager.AppUser.GetByLoginAsync(registrationRequest.Login.ToLower(), trackChanges: false);
         if (userByLogin != null)
         {
             throw new UserArleadyExistException($" {registrationRequest.Login} is already exist");
@@ -97,10 +98,17 @@ public class AuthorizationService : IAuthorizationService
         await _repositoryManager.Save();
     }
 
-    public async Task<JwtTokenResponse> RefreshJwtTokenAsync(AppRefreshTokenRequest refreshRequest)
+    public async Task<JwtTokenResponse> RefreshJwtTokenAsync(AppRefreshhTokenResetDto refreshRequest,
+        string accessToken)
     {
-        AppUser? user = await _repositoryManager.AppUser.GetByRefreshTokenAsync(refreshRequest.RefreshToken);
+        var userLogin = SecurityHelpers.GetUserIdFromAccessToken(accessToken, _configuration["SecretKey"]);
+        AppUser? user = await _repositoryManager.AppUser.GetByLoginAsync(userLogin, trackChanges: false);
         if (user == null)
+        {
+            throw new SecurityTokenException("Invalid refresh token");
+        }
+
+        if (user.RefreshToken != refreshRequest.RefreshToken)
         {
             throw new SecurityTokenException("Invalid refresh token");
         }
