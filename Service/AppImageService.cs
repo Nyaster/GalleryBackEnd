@@ -47,7 +47,7 @@ public class AppImageService : IAppImageService
         List<ImageTag> tags = await _repositoryManager.AppImage.GetTagsByNames(dto.Tags);
         _repositoryManager.AppImage.AttachTags(tags);
         var imagePath = await SaveFileToDisk(dto.ImageFile, user.Login);
-        var returnedImage = Helpers.ImageHelpers.GetImageDimensions(imagePath);
+        var returnedImage = await Helpers.ImageHelpers.GetImageDimensionsAsync(imagePath);
 
         var image = new AppImage()
         {
@@ -56,8 +56,8 @@ public class AppImageService : IAppImageService
             IsHidden = dto.IsHidden,
             Tags = tags,
             PathToFileOnDisc = imagePath,
-            Width = returnedImage.width,
-            Height = returnedImage.height,
+            Width = returnedImage.Width,
+            Height = returnedImage.Height,
         };
         await _repositoryManager.AppImage.Create(image);
         await _repositoryManager.Save();
@@ -66,11 +66,23 @@ public class AppImageService : IAppImageService
         return appImageDto;
     }
 
-    public async Task<FileContentResult> GetFileBytesAsync(int id)
+    public async Task<FileContentResult> GetFileBytesAsync(int id, bool asJpeg)
     {
         var byId = await _repositoryManager.AppImage.GetById(id);
-        var fileBytes = await System.IO.File.ReadAllBytesAsync(byId.PathToFileOnDisc);
-        var contentType = GetFileType(byId.PathToFileOnDisc);
+        var filePath = byId.PathToFileOnDisc;
+        byte[] fileBytes;
+        string contentType;
+        if (asJpeg)
+        {
+            fileBytes = await Helpers.ImageHelpers.ConvertImageToJpeg(filePath);
+            contentType = "image/jpeg";
+        }
+        else
+        {
+            fileBytes = await File.ReadAllBytesAsync(byId.PathToFileOnDisc);
+            contentType = GetFileType(byId.PathToFileOnDisc);
+        }
+
         return new FileContentResult(fileBytes, contentType);
     }
 
@@ -104,7 +116,7 @@ public class AppImageService : IAppImageService
             await _repositoryManager.AppImage.SearchImagesByTags(list, OrderBy.Id, pageNumber, pageSize);
         var page = new PageableImagesDto()
         {
-            Images = searchImagesByTags.listAsync.Select(x => _mapper.Map<AppImage, AppImageDto>(x)).ToList(),
+            Images = searchImagesByTags.images.Select(x => _mapper.Map<AppImage, AppImageDto>(x)).ToList(),
             OrderBy = OrderBy.Id.ToString(),
             Page = getImageRequest.Page,
             PageSize = pageSize,

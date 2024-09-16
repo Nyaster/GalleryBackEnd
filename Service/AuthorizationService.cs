@@ -58,7 +58,7 @@ public class AuthorizationService : IAuthorizationService
             issuer: _configuration["Issuer"],
             audience: _configuration["Issuer"],
             claims: userclaim,
-            expires: DateTime.Now.AddMinutes(10).ToUniversalTime(),
+            expires: DateTime.Now.AddSeconds(30).ToUniversalTime(),
             signingCredentials: creds
         );
 
@@ -133,10 +133,10 @@ public class AuthorizationService : IAuthorizationService
             expires: DateTime.Now.AddMinutes(10).ToUniversalTime(),
             signingCredentials: creds
         );
-
         user.RefreshToken = SecurityHelpers.GenerateRefreshToken();
         user.RefreshTokenExp = DateTime.Now.AddDays(1).ToUniversalTime();
-
+        _repositoryManager.AppUser.Update(user);
+        await _repositoryManager.Save();
         return new JwtTokenResponse()
         {
             Token = new JwtSecurityTokenHandler().WriteToken(jwtToken),

@@ -11,7 +11,6 @@ namespace GallerySiteBackend.Presentation;
 
 [ApiController]
 [Route("/api/images")]
-[AllowAnonymous]
 public class ImageController : ControllerBase
 {
     private IServiceManager _serviceManager;
@@ -39,9 +38,9 @@ public class ImageController : ControllerBase
 
 
     [HttpGet("{id:int}", Name = "GetImageById")]
-    public async Task<IActionResult> GetImageById(int id)
+    public async Task<IActionResult> GetImageById(int id, bool asJpeg = false)
     {
-        var fileBytesAsync = await _serviceManager.AppImageService.GetFileBytesAsync(id);
+        var fileBytesAsync = await _serviceManager.AppImageService.GetFileBytesAsync(id, asJpeg);
         return fileBytesAsync;
     }
 

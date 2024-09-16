@@ -9,8 +9,6 @@ using Contracts;
 using Entities.Models;
 using GallerySiteBackend.Models;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Playwright;
-using Cookie = Microsoft.Playwright.Cookie;
 using IConfiguration = Microsoft.Extensions.Configuration.IConfiguration;
 
 namespace Service;
@@ -218,10 +216,11 @@ public class AppImageParserService
                 var imageUrl = element.QuerySelector("a");
                 var imageSrc = imageUrl!.GetAttribute("href");
                 var tagsElement = element.QuerySelector(".overlay > p.tags");
-                var dateElement = element.QuerySelector(".overlay>p:nth-child(1)");
+               
                 var mediaIdElement = element.QuerySelector("div.like");
                 var mediaIdAttribute = mediaIdElement.GetAttribute("data-media-id");
                 var mediaId = int.Parse(mediaIdAttribute);
+                var dateElement = element.QuerySelector(".overlay>p:nth-child(1)");
                 var dateText = dateElement.Text();
                 var date = await GetDateFromString(dateText);
                 var tagsText = tagsElement != null ? tagsElement.TextContent : string.Empty;
@@ -267,15 +266,7 @@ public class AppImageParserService
         string format = "M/d/yyyy";
         return DateTime.ParseExact(clearedInputString, format, CultureInfo.InvariantCulture);
     }
-
-    private static async Task<bool> IsLoggedInAsync(IPage page)
-    {
-        // Check for an element or some indication that the user is logged in
-        // Customize this based on how you determine if the user is logged in
-        var content = await page.QuerySelectorAsync("button.btn:nth-child(1)");
-        return content != null;
-    }
-
+    
 
     private async Task LoginAsync(IBrowsingContext page)
     {
@@ -289,14 +280,7 @@ public class AppImageParserService
         var formElement = htmlFormElement.SetValues(dictionary);
         var submitAsync = await formElement.SubmitAsync();
     }
-
-    private static async Task AcceptEula(IPage page)
-    {
-        if (await page.QuerySelectorAsync(".confirm") != null)
-        {
-            await page.ClickAsync(".confirm");
-        }
-    }
+    
 
     private static async Task SaveCookiesAsync(IBrowsingContext page)
     {

@@ -17,37 +17,48 @@ public class AppImageRepository(RepositoryContext repositoryContext)
     }
 
 
-    public async Task<(List<AppImage> listAsync, int total)> SearchImagesByTags(List<ImageTag> tags, OrderBy orderBy,
+    public async Task<(List<AppImage> images, int total)> SearchImagesByTags(List<ImageTag> tags, OrderBy orderBy,
         int page, int pageSize)
     {
-        var queryable = RepositoryContext.Images.AsQueryable();
-        if (tags.Count == 0)
-        {
-            queryable = queryable.Include(x => x.Tags)
-                .Include(x => x.UploadedBy).AsQueryable();
-        }
-        else
-        {
-            queryable = queryable
-                .Include(x => x.Tags)
-                .Include(x => x.UploadedBy)
-                .Where(image => !tags
-                    .Select(t => t.Id)
-                    .Except(image.Tags.Select(t => t.Id))
-                    .Any());
-        }
+        IQueryable<AppImage> queryable = RepositoryContext.Images.AsQueryable();
 
-        queryable = orderBy switch
+        queryable = tags.Count == 0
+            ? IncludeStandardProperties(queryable)
+            : IncludeAndFilterByTags(queryable, tags);
+
+        queryable = ApplyOrdering(queryable, orderBy);
+
+        var total = await queryable.CountAsync();
+        var skip = page * pageSize;
+        var images = await queryable.Skip(skip).Take(pageSize).ToListAsync();
+
+        return (images, total);
+    }
+
+    private IQueryable<AppImage> IncludeStandardProperties(IQueryable<AppImage> queryable)
+    {
+        return queryable.Include(x => x.Tags)
+            .Include(x => x.UploadedBy)
+            .AsQueryable();
+    }
+
+    private IQueryable<AppImage> IncludeAndFilterByTags(IQueryable<AppImage> queryable, List<ImageTag> tags)
+    {
+        var tagIds = tags.Select(t => t.Id).ToList();
+
+        return queryable.Include(image => image.Tags)
+            .Include(image => image.UploadedBy)
+            .Where(image => tagIds.All(tagId => image.Tags.Any(tag => tag.Id == tagId)));
+    }
+
+    private IQueryable<AppImage> ApplyOrdering(IQueryable<AppImage> queryable, OrderBy orderBy)
+    {
+        return orderBy switch
         {
             OrderBy.Id => queryable.OrderBy(a => a.Id).AsQueryable(),
             OrderBy.UploadDate => queryable.OrderBy(a => a.UploadedDate).AsQueryable(),
             _ => queryable.OrderBy(a => a.Id).AsQueryable()
         };
-        var total = await queryable.CountAsync();
-        var position = page * pageSize;
-        queryable = queryable.Skip(position).Take(pageSize).AsQueryable();
-        var listAsync = await queryable.ToListAsync();
-        return (listAsync, total);
     }
 
     public new async Task Create(AppImage image) => await base.Create(image);
