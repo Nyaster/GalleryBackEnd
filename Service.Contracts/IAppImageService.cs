@@ -10,4 +10,5 @@ public interface IAppImageService
     public Task<FileContentResult> GetFileBytesAsync(int id, bool asJpeg);
     public Task<PageableImagesDto> GetImagesBySearchConditions(SearchImageDto getImageRequest);
     Task<List<TagsDto>> GetTagsSuggestion(string tags);
+    public Task<AppImageDto> GetImageByIdAsync(int id);
 }

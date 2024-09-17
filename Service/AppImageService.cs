@@ -132,6 +132,13 @@ public class AppImageService : IAppImageService
         return tagsDtos;
     }
 
+    public async Task<AppImageDto> GetImageByIdAsync(int id)
+    {
+        var byId = await _repositoryManager.AppImage.GetById(id);
+        var appImageDto = _mapper.Map<AppImage, AppImageDto>(byId);
+        return appImageDto;
+    }
+
     public string GetFileType(string path)
     {
         var extension = Path.GetExtension(path).ToLowerInvariant();

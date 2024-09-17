@@ -38,6 +38,13 @@ public class ImageController : ControllerBase
 
 
     [HttpGet("{id:int}", Name = "GetImageById")]
+    public async Task<IActionResult> GetImageById(int id)
+    {
+        var image = await _serviceManager.AppImageService.GetImageByIdAsync(id);
+        return Ok(image);
+    }
+
+    [HttpGet("{id:int}/content", Name = "GetImageFileById")]
     public async Task<IActionResult> GetImageById(int id, bool asJpeg = false)
     {
         var fileBytesAsync = await _serviceManager.AppImageService.GetFileBytesAsync(id, asJpeg);
