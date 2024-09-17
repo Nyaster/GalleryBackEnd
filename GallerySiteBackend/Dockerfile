@@ -8,14 +8,14 @@ FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
 COPY ["GallerySiteBackend/GallerySiteBackend.csproj", "GallerySiteBackend/"]
-COPY ["Contracts/Contracts.csproj", "Contracts/"]
-COPY ["Entities/Entities.csproj", "Entities/"]
-COPY ["GallerySiteBackend.Presentation/GallerySiteBackend.Presentation.csproj", "GallerySiteBackend.Presentation/"]
-COPY ["Service.Contracts/Service.Contracts.csproj", "Service.Contracts/"]
 COPY ["Shared/Shared.csproj", "Shared/"]
 COPY ["Service/Service.csproj", "Service/"]
-COPY ["LoggerService/LoggerService.csproj", "LoggerService/"]
+COPY ["Contracts/Contracts.csproj", "Contracts/"]
+COPY ["Entities/Entities.csproj", "Entities/"]
+COPY ["Service.Contracts/Service.Contracts.csproj", "Service.Contracts/"]
 COPY ["Repository/Repository.csproj", "Repository/"]
+COPY ["LoggerService/LoggerService.csproj", "LoggerService/"]
+COPY ["GallerySiteBackend.Presentation/GallerySiteBackend.Presentation.csproj", "GallerySiteBackend.Presentation/"]
 RUN dotnet restore "GallerySiteBackend/GallerySiteBackend.csproj"
 COPY . .
 WORKDIR "/src/GallerySiteBackend"
