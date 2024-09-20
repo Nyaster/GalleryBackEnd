@@ -1,12 +1,4 @@
-﻿using Contracts;
-using Entities.Exceptions;
-
-using GallerySiteBackend.Models;
-using Microsoft.AspNetCore.Http;
-using Moq;
-using Service;
-
-namespace GallerySiteUnitTests;
+﻿namespace GallerySiteUnitTests;
 
 public class AppImageServiceTests
 {

@@ -1,5 +1,6 @@
 using System.Text;
 using GallerySiteBackend.Extensions;
+using GallerySiteBackend.Presentation;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
@@ -16,7 +17,7 @@ public class Program
         LogManager.Setup().LoadConfigurationFromFile(string.Concat(Directory.GetCurrentDirectory(),
             "/nlog.config"));
         IConfiguration configuration = new ConfigurationBuilder()
-            .AddJsonFile("secrets.json", optional: true, reloadOnChange: true).Build();
+            .AddJsonFile("secrets.json", true, true).Build();
         builder.Configuration.AddConfiguration(configuration);
         builder.Services.ConfigureNpsqlContext(builder.Configuration);
         builder.Services.ConfigureLoggerService();
@@ -25,7 +26,7 @@ public class Program
         // Add services to the container.
         builder.Services.AddAutoMapper(typeof(Program));
         builder.Services.AddControllers()
-            .AddApplicationPart(typeof(Presentation.AssemblyReference).Assembly);
+            .AddApplicationPart(typeof(AssemblyReference).Assembly);
         builder.Services.Configure<ApiBehaviorOptions>(options => options.SuppressModelStateInvalidFilter = true);
         // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
         builder.Services.AddEndpointsApiExplorer();
@@ -52,17 +53,15 @@ public class Program
                 ValidAudience = builder.Configuration["Issuer"],
                 IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["SecretKey"]))
             };
-            opt.Events = new JwtBearerEvents()
+            opt.Events = new JwtBearerEvents
             {
                 OnAuthenticationFailed = context =>
                 {
                     if (context.Exception.GetType() == typeof(SecurityTokenExpiredException))
-                    {
                         context.Response.Headers["Token-expired"] = "true";
-                    }
 
                     return Task.CompletedTask;
-                },
+                }
             };
         }).AddJwtBearer("IgnoreTokenExpirationScheme", opt =>
         {
@@ -91,10 +90,7 @@ public class Program
         /*var logger = app.Services.GetRequiredService<ILoggerManager>();
         app.ConfigureExceptionHandler(logger);*/
         // Configure the HTTP request pipeline.
-        if (app.Environment.IsProduction())
-        {
-            app.UseHsts();
-        }
+        if (app.Environment.IsProduction()) app.UseHsts();
 
         if (app.Environment.IsDevelopment())
         {

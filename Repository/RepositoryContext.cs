@@ -15,12 +15,12 @@ public class RepositoryContext : DbContext
     {
     }
 
+    public DbSet<ImageTag> Tags { get; init; }
+    public DbSet<AppImage> Images { get; init; }
+    public DbSet<AppUser> AppUsers { get; init; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppImageEfConfiguration).Assembly);
     }
-
-    public DbSet<ImageTag> Tags { get; init; }
-    public DbSet<AppImage> Images { get; init; }
-    public DbSet<AppUser> AppUsers { get; init; }
 }

@@ -1,6 +1,4 @@
-﻿using GallerySiteBackend.Models;
-
-namespace Contracts;
+﻿namespace Contracts;
 
 public interface IRepositoryManager
 {

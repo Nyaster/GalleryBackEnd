@@ -2,4 +2,4 @@
 
 namespace Shared.DataTransferObjects;
 
-public record AppLoginDto([Required] string Login, [Required]string Password);
+public record AppLoginDto([Required] string Login, [Required] string Password);

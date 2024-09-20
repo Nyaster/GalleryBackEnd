@@ -15,9 +15,9 @@ namespace Service;
 
 public class AuthorizationService : IAuthorizationService
 {
+    private readonly IConfiguration _configuration;
     private readonly ILoggerManager _logger;
     private readonly IMapper _mapper;
-    private readonly IConfiguration _configuration;
     private readonly IRepositoryManager _repositoryManager;
 
 

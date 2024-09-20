@@ -26,10 +26,10 @@ public class GlobalExceptionHandler : IExceptionHandler
             httpContext.Response.StatusCode = contextFeature.Error switch
             {
                 AppUserNotFoundException _ => StatusCodes.Status404NotFound,
-                _ => StatusCodes.Status500InternalServerError,
+                _ => StatusCodes.Status500InternalServerError
             };
             _logger.LogError($"Something went wrong: {contextFeature.Error}");
-            await httpContext.Response.WriteAsync(new ErrorDetails()
+            await httpContext.Response.WriteAsync(new ErrorDetails
             {
                 StatusCode = httpContext.Response.StatusCode,
                 Message = "Internal Server Error."

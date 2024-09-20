@@ -1,10 +1,8 @@
 ﻿using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Service;
 using Service.Contracts;
-using Shared;
 using Shared.DataTransferObjects;
 
 namespace GallerySiteBackend.Presentation;
@@ -13,8 +11,8 @@ namespace GallerySiteBackend.Presentation;
 [Route("/api/images")]
 public class ImageController : ControllerBase
 {
-    private IServiceManager _serviceManager;
-    private AppImageParserService _imageParserService;
+    private readonly AppImageParserService _imageParserService;
+    private readonly IServiceManager _serviceManager;
 
     public ImageController(IServiceManager serviceManager, AppImageParserService imageParserService)
     {
@@ -28,9 +26,7 @@ public class ImageController : ControllerBase
     {
         var value = "admin";
         if (HttpContext.User.Identity.IsAuthenticated)
-        {
             value = HttpContext.User.Claims.First(x => x.Type == ClaimTypes.Name).Value;
-        }
 
         var uploadImageAsync = await _serviceManager.AppImageService.UploadImageAsync(request, value);
         return CreatedAtRoute("GetImageById", new { id = uploadImageAsync.Id }, uploadImageAsync);

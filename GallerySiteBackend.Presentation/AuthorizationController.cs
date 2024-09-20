@@ -2,7 +2,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Service.Contracts;
 using Shared.DataTransferObjects;
-using IAuthorizationService = Service.Contracts.IAuthorizationService;
 
 namespace GallerySiteBackend.Presentation;
 
@@ -11,7 +10,7 @@ namespace GallerySiteBackend.Presentation;
 [Route("api/auth")]
 public class AuthorizationController : ControllerBase
 {
-    private IServiceManager _serviceManager;
+    private readonly IServiceManager _serviceManager;
 
     public AuthorizationController(IServiceManager serviceManager)
     {
@@ -22,10 +21,7 @@ public class AuthorizationController : ControllerBase
     [HttpPost("login")]
     public async Task<IActionResult> Login(AppLoginDto loginRequest)
     {
-        if (!ModelState.IsValid)
-        {
-            return BadRequest(ModelState);
-        }
+        if (!ModelState.IsValid) return BadRequest(ModelState);
         var jwtTokenResponse = await _serviceManager.AuthorizationService.LoginAsync(loginRequest);
         return Ok(jwtTokenResponse);
     }
@@ -33,10 +29,7 @@ public class AuthorizationController : ControllerBase
     [HttpPost("register")]
     public async Task<IActionResult> Registration(CreateUserDto registrationRequest)
     {
-        if (!ModelState.IsValid)
-        {
-            return BadRequest(ModelState);
-        }
+        if (!ModelState.IsValid) return BadRequest(ModelState);
         await _serviceManager.AuthorizationService.RegisterAsync(registrationRequest);
         return Created();
     }

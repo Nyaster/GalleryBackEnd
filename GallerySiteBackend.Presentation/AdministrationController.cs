@@ -9,7 +9,7 @@ namespace GallerySiteBackend.Presentation;
 [Authorize(Roles = "Admin")]
 public class AdministrationController : ControllerBase
 {
-    IServiceManager _serviceManager;
+    private readonly IServiceManager _serviceManager;
 
     public AdministrationController(IServiceManager serviceManager)
     {
@@ -31,6 +31,5 @@ public class AdministrationController : ControllerBase
 
     public async Task<IActionResult> ParseNewImages()
     {
-        
     }
 }
