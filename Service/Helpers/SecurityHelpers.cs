@@ -11,34 +11,34 @@ public class SecurityHelpers
 {
     public static Tuple<string, string> GetHashedPasswordAndSalt(string password)
     {
-        byte[] salt = new byte[128 / 8];
+        var salt = new byte[128 / 8];
         using (var rng = RandomNumberGenerator.Create())
         {
             rng.GetBytes(salt);
         }
 
-        string hashed = Convert.ToBase64String(KeyDerivation.Pbkdf2(
-            password: password,
-            salt: salt,
-            prf: KeyDerivationPrf.HMACSHA1,
-            iterationCount: 10000,
-            numBytesRequested: 256 / 8));
+        var hashed = Convert.ToBase64String(KeyDerivation.Pbkdf2(
+            password,
+            salt,
+            KeyDerivationPrf.HMACSHA1,
+            10000,
+            256 / 8));
 
-        string saltBase64 = Convert.ToBase64String(salt);
+        var saltBase64 = Convert.ToBase64String(salt);
 
-        return new(hashed, saltBase64);
+        return new Tuple<string, string>(hashed, saltBase64);
     }
 
     public static string GetHashedPasswordWithSalt(string password, string salt)
     {
-        byte[] saltBytes = Convert.FromBase64String(salt);
+        var saltBytes = Convert.FromBase64String(salt);
 
-        string currentHashedPassword = Convert.ToBase64String(KeyDerivation.Pbkdf2(
-            password: password,
-            salt: saltBytes,
-            prf: KeyDerivationPrf.HMACSHA1,
-            iterationCount: 10000,
-            numBytesRequested: 256 / 8));
+        var currentHashedPassword = Convert.ToBase64String(KeyDerivation.Pbkdf2(
+            password,
+            saltBytes,
+            KeyDerivationPrf.HMACSHA1,
+            10000,
+            256 / 8));
 
         return currentHashedPassword;
     }
@@ -73,16 +73,11 @@ public class SecurityHelpers
         if (securityToken is not JwtSecurityToken jwtSecurityToken || !jwtSecurityToken.Header.Alg.Equals(
                 SecurityAlgorithms.HmacSha256,
                 StringComparison.InvariantCultureIgnoreCase))
-        {
             throw new SecurityTokenException("Invalid token!");
-        }
 
         var userId = principal.FindFirst(ClaimTypes.Name)?.Value;
 
-        if (string.IsNullOrEmpty(userId))
-        {
-            throw new SecurityTokenException($"Missing claim: {ClaimTypes.Name}!");
-        }
+        if (string.IsNullOrEmpty(userId)) throw new SecurityTokenException($"Missing claim: {ClaimTypes.Name}!");
 
         return userId;
     }

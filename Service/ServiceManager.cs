@@ -7,9 +7,9 @@ namespace Service;
 
 public class ServiceManager : IServiceManager
 {
+    private readonly Lazy<IAppAdministrationService> _appAdministrationService;
     private readonly Lazy<IAppImageService> _appImageService;
     private readonly Lazy<IAuthorizationService> _authorizationService;
-    private readonly Lazy<IAppAdministrationService> _appAdministrationService;
 
     public ServiceManager(IRepositoryManager repositoryManager, ILoggerManager logger, IConfiguration configuration,
         IMapper mapper)

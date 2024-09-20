@@ -28,4 +28,9 @@ public class AdministrationController : ControllerBase
     {
         return Ok();
     }
+
+    public async Task<IActionResult> ParseNewImages()
+    {
+        
+    }
 }

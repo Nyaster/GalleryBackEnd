@@ -83,7 +83,7 @@ public class AppImageRepository(RepositoryContext repositoryContext)
         await repositoryContext.Tags.AddRangeAsync(newTags);
     }
 
-    public async Task<List<AppImage>> FindImageByMediaId(List<AppImage> images)
+    public async Task<List<AppImage>> FindImageByMediaId(List<AppImage?> images)
     {
         var enumerable = images.Select(x => x.MediaId).ToList();
         return await RepositoryContext.Images
@@ -108,5 +108,15 @@ public class AppImageRepository(RepositoryContext repositoryContext)
     {
         var notApprovedImages = await FindByCondition(x => x.IsHidden == true, false).ToListAsync();
         return notApprovedImages;
+    }
+
+    public async Task AttachImagesAsync(List<AppImage> images)
+    {
+        RepositoryContext.Images.AttachRange(images);
+    }
+
+    public async Task UpdateImagesAsync(List<AppImage> images)
+    {
+        RepositoryContext.Images.UpdateRange(images);
     }
 }

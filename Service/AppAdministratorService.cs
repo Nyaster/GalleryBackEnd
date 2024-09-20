@@ -8,8 +8,8 @@ namespace Service;
 
 public class AppAdministratorService : IAppAdministrationService
 {
-    private IRepositoryManager _repositoryManager;
-    private IMapper _mapper;
+    private readonly IMapper _mapper;
+    private readonly IRepositoryManager _repositoryManager;
 
     public AppAdministratorService(IRepositoryManager repositoryManager, IMapper mapper)
     {

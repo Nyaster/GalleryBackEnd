@@ -1,17 +1,11 @@
-﻿using System.Drawing;
-using System.Net.Mime;
-using System.Runtime.Intrinsics.Arm;
-using System.Security.Cryptography;
-using System.Text;
-using Microsoft.AspNetCore.Http;
+﻿using System.Security.Cryptography;
 using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Formats;
 
 namespace Service.Helpers;
 
 public static class ImageHelpers
 {
-    public async static Task<(int Width, int Height)> GetImageDimensionsAsync(string imagePath)
+    public static async Task<(int Width, int Height)> GetImageDimensionsAsync(string imagePath)
     {
         using var image = await Image.LoadAsync(imagePath);
         return (image.Width, image.Height);
