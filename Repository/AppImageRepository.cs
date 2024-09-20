@@ -98,8 +98,15 @@ public class AppImageRepository(RepositoryContext repositoryContext)
 
     public async Task<List<ImageTag>> GetTagsSuggestion(string tag)
     {
-        var imageTags = RepositoryContext.Tags.Where(x => EF.Functions.Like(x.Name, $"%{tag.ToLower()}%")).Take(10)
-            .ToList();
+        var imageTags = await RepositoryContext.Tags.Where(x => EF.Functions.Like(x.Name, $"%{tag.ToLower()}%"))
+            .Take(10)
+            .ToListAsync();
         return imageTags;
+    }
+
+    public async Task<List<AppImage>> GetNotApprovedImagesAsync()
+    {
+        var notApprovedImages = await FindByCondition(x => x.IsHidden == true, false).ToListAsync();
+        return notApprovedImages;
     }
 }

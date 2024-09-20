@@ -18,6 +18,7 @@ public interface IAppImageRepository
     Task<List<AppImage>> FindImageByMediaId(List<AppImage> images);
     Task AddImagesAsync(List<AppImage> list);
     Task<List<ImageTag>> GetTagsSuggestion(string tags);
+    public Task<List<AppImage>> GetNotApprovedImagesAsync();
 }
 
 public enum OrderBy
