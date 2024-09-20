@@ -43,4 +43,11 @@ public class AuthorizationController : ControllerBase
             await _serviceManager.AuthorizationService.RefreshJwtTokenAsync(refreshTokenRequest, token);
         return Ok(refreshJwtTokenAsync);
     }
+    [Authorize(Roles = "User,Admin")]
+    [HttpGet("test")]
+    public async Task<IActionResult> CheckUpdates()
+    {
+        ;
+        return Ok();
+    }
 }

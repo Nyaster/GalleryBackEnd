@@ -11,13 +11,11 @@ namespace GallerySiteBackend.Presentation;
 [Route("/api/images")]
 public class ImageController : ControllerBase
 {
-    private readonly AppImageParserService _imageParserService;
     private readonly IServiceManager _serviceManager;
 
-    public ImageController(IServiceManager serviceManager, AppImageParserService imageParserService)
+    public ImageController(IServiceManager serviceManager)
     {
         _serviceManager = serviceManager;
-        _imageParserService = imageParserService;
     }
 
     [Authorize(Roles = "User,Admin")]
@@ -58,13 +56,7 @@ public class ImageController : ControllerBase
         return Ok(imagesBySearchConditions);
     }
 
-    [Authorize(Roles = "User,Admin")]
-    [HttpGet("test")]
-    public async Task<IActionResult> CheckUpdates()
-    {
-        await _imageParserService.CheckUpdates();
-        return Ok();
-    }
+
 
     [Authorize(Roles = "User,Admin")]
     [HttpGet("/api/tags/suggestions")]

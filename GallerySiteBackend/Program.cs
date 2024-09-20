@@ -32,7 +32,6 @@ public class Program
         builder.Services.AddEndpointsApiExplorer();
         builder.Services.AddSwaggerGen();
         builder.Services.ConfigureCors();
-        builder.Services.AddScoped<AppImageParserService>();
         builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 
         #region JwtConfiguration

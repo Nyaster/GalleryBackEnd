@@ -10,6 +10,7 @@ public class ServiceManager : IServiceManager
     private readonly Lazy<IAppAdministrationService> _appAdministrationService;
     private readonly Lazy<IAppImageService> _appImageService;
     private readonly Lazy<IAuthorizationService> _authorizationService;
+    private readonly Lazy<IImageParserService> _appImageParser;
 
     public ServiceManager(IRepositoryManager repositoryManager, ILoggerManager logger, IConfiguration configuration,
         IMapper mapper)
@@ -20,9 +21,12 @@ public class ServiceManager : IServiceManager
                 new AuthorizationService(repositoryManager, configuration, logger, mapper));
         _appAdministrationService =
             new Lazy<IAppAdministrationService>(() => new AppAdministratorService(repositoryManager, mapper));
+        _appImageParser =
+            new Lazy<IImageParserService>(() => new AppImageParserService(repositoryManager, configuration));
     }
 
     public IAppImageService AppImageService => _appImageService.Value;
     public IAuthorizationService AuthorizationService => _authorizationService.Value;
     public IAppAdministrationService AppAdministrationService => _appAdministrationService.Value;
+    public IImageParserService AppImageParser => _appImageParser.Value;
 }

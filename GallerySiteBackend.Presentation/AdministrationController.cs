@@ -31,5 +31,6 @@ public class AdministrationController : ControllerBase
 
     public async Task<IActionResult> ParseNewImages()
     {
+        return Ok();
     }
 }
