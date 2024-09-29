@@ -2,4 +2,6 @@
 
 public interface IImageParserService
 {
+    public Task CheckUpdates();
+    public Task DownloadAllImages();
 }

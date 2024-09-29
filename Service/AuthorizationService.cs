@@ -52,7 +52,7 @@ public class AuthorizationService : IAuthorizationService
             _configuration["Issuer"],
             _configuration["Issuer"],
             userclaim,
-            expires: DateTime.Now.AddSeconds(30).ToUniversalTime(),
+            expires: DateTime.Now.AddMinutes(5).ToUniversalTime(),
             signingCredentials: creds
         );
 

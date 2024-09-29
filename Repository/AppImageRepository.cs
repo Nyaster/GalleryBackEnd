@@ -60,11 +60,10 @@ public class AppImageRepository(RepositoryContext repositoryContext)
         await repositoryContext.Tags.AddRangeAsync(newTags);
     }
 
-    public async Task<List<AppImage>> FindImageByMediaId(List<AppImage?> images)
+    public async Task<List<AppImage>> FindImageByMediaId(List<AppImage?> images, bool trackChanges)
     {
         var enumerable = images.Select(x => x.MediaId).ToList();
-        return await RepositoryContext.Images
-            .Where(x => enumerable.Contains(x.MediaId))
+        return await FindByCondition(x => enumerable.Contains(x.MediaId), trackChanges).Include(x => x.Tags)
             .ToListAsync();
     }
 

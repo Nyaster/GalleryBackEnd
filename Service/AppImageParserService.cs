@@ -7,6 +7,7 @@ using AngleSharp.Html.Dom;
 using Contracts;
 using Entities.Models;
 using GallerySiteBackend.Models;
+using Microsoft.IdentityModel.Tokens;
 using Service.Contracts;
 using Service.Helpers;
 using IConfiguration = Microsoft.Extensions.Configuration.IConfiguration;
@@ -22,7 +23,7 @@ public class AppImageParserService(IRepositoryManager repositoryManager, IConfig
     private const string GravureSetsUrl = "https://lessonsinlovegame.com/galleries/gravure-sets";
     private const string CookiesFilePath = "cookies.json";
     private const int DefaultPageSize = 20;
-    private const int DefaultCheckUpdatesPages = 5;
+    private const int DefaultCheckUpdatesPages = 2;
 
 
     private async Task<IBrowsingContext> PrepareForScrappingAsync()
@@ -38,28 +39,60 @@ public class AppImageParserService(IRepositoryManager repositoryManager, IConfig
     public async Task CheckUpdates()
     {
         var context = await PrepareForScrappingAsync();
-        var extractedImages = await ExtractImagesAndTagsAsync(context, DefaultCheckUpdatesPages, RequestsUrl);
-        var imagesInDb = await repositoryManager.AppImage.FindImageByMediaId(extractedImages);
+        await ExtractAndHandleContent(context, DefaultCheckUpdatesPages);
+    }
+
+    public async Task DownloadImages()
+    {
+        var context = await PrepareForScrappingAsync();
+        var document = await context.OpenAsync(RequestsUrl);
+        var numberOfPagesToScrap = GetNumberOfPages(document);
+        await ExtractAndHandleContent(context, numberOfPagesToScrap);
+    }
+
+    private async Task ExtractAndHandleContent(IBrowsingContext context, int numberOfPagesToScrap)
+    {
+        var extractedImages = await ExtractImagesAndTagsAsync(context, numberOfPagesToScrap, RequestsUrl);
+        var imagesInDb = await repositoryManager.AppImage.FindImageByMediaId(extractedImages, false);
         var newImages = extractedImages.ExceptBy(imagesInDb.Select(x => x.MediaId), y => y.MediaId).ToList();
         if (newImages.Any()) await ProcessNewImages(context, newImages);
 
         await CheckAndHandleNewTagsOnImages(extractedImages, imagesInDb);
+        var removeNoneYet = await repositoryManager.AppImage.FindImageByMediaId(extractedImages, true);
+        var tagToDelete = removeNoneYet.FirstOrDefault(x => x.Tags.Count > 1).Tags
+            .FirstOrDefault(x => x.Name == "none yet");
+        removeNoneYet.FindAll(x => x.Tags.Any(y => y.Name == "none yet") && x.Tags.Count != 1).ToList()
+            .ForEach(x => x.Tags.Remove(tagToDelete));
+        await repositoryManager.Save();
     }
 
     private async Task CheckAndHandleNewTagsOnImages(List<AppImage> extractedImages, List<AppImage> imagesInDb)
     {
-        var imagesWithoutTags = imagesInDb.FindAll(x => x.Tags.Any(x => x.Name.ToLower().Trim() == "none yet"));
+        var imagesWithoutTags =
+            imagesInDb.FindAll(x => x.Tags.Any(x => x.Name.ToLower().Trim() == "none yet") && x.Tags.Count == 1);
         extractedImages = extractedImages.IntersectBy(imagesWithoutTags.Select(x => x.MediaId), y => y.MediaId)
             .ToList();
+        if (imagesWithoutTags.IsNullOrEmpty())
+        {
+            return;
+        }
+
         var patchedImages = new List<AppImage>();
         foreach (var image in extractedImages)
         {
             var whereReplaceTags = imagesWithoutTags.First(x => x.MediaId == image.MediaId);
+
+            if (whereReplaceTags.Tags.Count == image.Tags.Count &&
+                image.Tags.Any(x => x.Name.ToLower().Trim() == "none yet"))
+            {
+                continue;
+            }
+
             whereReplaceTags.Tags = image.Tags;
             patchedImages.Add(whereReplaceTags);
         }
 
-        var distinctBy = patchedImages.SelectMany(x => x.Tags).DistinctBy(x => x.Name).ToList();
+        var distinctBy = patchedImages.SelectMany(x => x.Tags).DistinctBy(x => x.Name.Trim().ToLower()).ToList();
         var tagsFromDb = await SaveNewTagsToDb(distinctBy);
         ReplaceTagsInImagesFromDb(tagsFromDb, patchedImages);
         await repositoryManager.AppImage.UpdateImagesAsync(patchedImages);
@@ -72,7 +105,7 @@ public class AppImageParserService(IRepositoryManager repositoryManager, IConfig
         var document = await context.OpenAsync(RequestsUrl);
         var numberOfPagesToScrap = GetNumberOfPages(document);
         var imagesAndTags = await ExtractImagesAndTagsAsync(context, numberOfPagesToScrap, RequestsUrl);
-        var imagesInDb = await repositoryManager.AppImage.FindImageByMediaId(imagesAndTags);
+        var imagesInDb = await repositoryManager.AppImage.FindImageByMediaId(imagesAndTags, true);
         var newImages = imagesAndTags.ExceptBy(imagesInDb.Select(x => x.MediaId), y => y.MediaId).ToList();
         if (newImages.Any()) await ProcessNewImages(context, newImages);
     }

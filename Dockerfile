@@ -20,6 +20,8 @@ RUN dotnet restore "GallerySiteBackend/GallerySiteBackend.csproj"
 COPY . .
 WORKDIR "/src/GallerySiteBackend"
 RUN dotnet build "GallerySiteBackend.csproj" -c $BUILD_CONFIGURATION -o /app/build
+RUN dotnet tool restore
+RUN dotnet ef migrations bundle
 
 FROM build AS publish
 ARG BUILD_CONFIGURATION=Release

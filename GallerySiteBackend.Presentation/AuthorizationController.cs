@@ -47,7 +47,7 @@ public class AuthorizationController : ControllerBase
     [HttpGet("test")]
     public async Task<IActionResult> CheckUpdates()
     {
-        ;
-        return Ok();
+        var claims = HttpContext.User.Claims.Select(x=>new {x.Type, x.Value}).ToList();
+        return Ok(claims);
     }
 }
