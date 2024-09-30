@@ -116,10 +116,10 @@ public class Program
         var app = builder.Build();
         app.UseExceptionHandler(opt => { });
         // Configure the HTTP request pipeline.
-        if (app.Environment.IsProduction())
+        /*if (app.Environment.IsProduction())
         {
             app.UseHsts();
-        }
+        }*/
 
         if (app.Environment.IsDevelopment())
         {
