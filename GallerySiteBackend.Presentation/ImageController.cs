@@ -9,6 +9,7 @@ namespace GallerySiteBackend.Presentation;
 
 [ApiController]
 [Route("/api/images")]
+
 public class ImageController : ControllerBase
 {
     private readonly IServiceManager _serviceManager;
@@ -29,15 +30,14 @@ public class ImageController : ControllerBase
         var uploadImageAsync = await _serviceManager.AppImageService.UploadImageAsync(request, value);
         return CreatedAtRoute("GetImageById", new { id = uploadImageAsync.Id }, uploadImageAsync);
     }
-
-
+    [Authorize(Roles = "User,Admin")]
     [HttpGet("{id:int}", Name = "GetImageById")]
     public async Task<IActionResult> GetImageById(int id)
     {
         var image = await _serviceManager.AppImageService.GetImageByIdAsync(id);
         return Ok(image);
     }
-
+    [Authorize(Roles = "User,Admin")]
     [HttpGet("{id:int}/content", Name = "GetImageFileById")]
     public async Task<IActionResult> GetImageById(int id, bool asJpeg = false)
     {

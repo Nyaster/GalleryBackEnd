@@ -1,4 +1,5 @@
 using System.Text;
+using Contracts;
 using GallerySiteBackend.Extensions;
 using GallerySiteBackend.Presentation;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -57,7 +58,7 @@ public class Program
                     new List<string>()
                 }
             });
-        } );
+        });
         builder.Services.ConfigureCors();
         builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 
@@ -74,7 +75,7 @@ public class Program
                 ValidateIssuer = true,
                 ValidateAudience = true,
                 ValidateLifetime = true,
-                ClockSkew = TimeSpan.FromMinutes(2),
+                ClockSkew = TimeSpan.FromMinutes(5),
                 ValidIssuer = builder.Configuration["Issuer"],
                 ValidAudience = builder.Configuration["Issuer"],
                 IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["SecretKey"]))
@@ -113,10 +114,12 @@ public class Program
 
 
         var app = builder.Build();
-        /*var logger = app.Services.GetRequiredService<ILoggerManager>();
-        app.ConfigureExceptionHandler(logger);*/
+        app.UseExceptionHandler(opt => { });
         // Configure the HTTP request pipeline.
-        if (app.Environment.IsProduction()) app.UseHsts();
+        if (app.Environment.IsProduction())
+        {
+            app.UseHsts();
+        }
 
         if (app.Environment.IsDevelopment())
         {

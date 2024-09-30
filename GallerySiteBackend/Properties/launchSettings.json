@@ -19,7 +19,7 @@
         "ASPNETCORE_ENVIRONMENT": "Development"
       }
     },"http-production": {
-      "commandName": "Executable",
+      "commandName": "Project",
       "dotnetRunMessages": true,
       "launchBrowser": false,
       "launchUrl": "swagger",
