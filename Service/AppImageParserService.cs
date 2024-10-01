@@ -21,7 +21,7 @@ public class AppImageParserService(IRepositoryManager repositoryManager, IConfig
     private const string LoginUrl = "https://lessonsinlovegame.com/account/login/";
     private const string RequestsUrl = "https://lessonsinlovegame.com/galleries/requests";
     private const string GravureSetsUrl = "https://lessonsinlovegame.com/galleries/gravure-sets";
-    private const string CookiesFilePath = ".configs/cookies.json";
+    private const string CookiesFilePath = "configs/cookies.json";
     private const int DefaultPageSize = 20;
     private const int DefaultCheckUpdatesPages = 2;
 
@@ -353,6 +353,7 @@ public class AppImageParserService(IRepositoryManager repositoryManager, IConfig
 
     private static async Task SaveCookiesAsync(IBrowsingContext page)
     {
+        Directory.CreateDirectory("configs");
         Console.WriteLine($"Cookies saved. {CookiesFilePath}");
         var cookies = page.GetCookie(new Url(SiteUrl));
         var json = JsonSerializer.Serialize(cookies);
