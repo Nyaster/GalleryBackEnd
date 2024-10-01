@@ -50,9 +50,9 @@ WORKDIR /app
 
 # Копируем файлы из этапа publish
 COPY --from=publish /app/publish .
-
+USER root
 # Убедимся, что пользователь имеет права на запись в рабочую директорию
 RUN chown -R $APP_UID /app
-
+USER  $APP_UID
 # Запускаем приложение
 ENTRYPOINT ["dotnet", "GallerySiteBackend.dll"]
