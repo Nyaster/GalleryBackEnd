@@ -1,12 +1,8 @@
 ﻿FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
 # Устанавливаем пользователя, от имени которого будет запущено приложение
-USER $APP_UID
-
 # Рабочая директория
 WORKDIR /app
 
-# Даём права на рабочую директорию для текущего пользователя
-RUN chown -R $APP_UID /app
 
 EXPOSE 8080
 EXPOSE 8081
@@ -49,10 +45,6 @@ FROM base AS final
 WORKDIR /app
 
 # Копируем файлы из этапа publish
-COPY --from=publish /app/publish .
-USER root
-# Убедимся, что пользователь имеет права на запись в рабочую директорию
-RUN chown -R $APP_UID /app
-USER  $APP_UID
+COPY --from=publish --chmod=775 /app/publish .
 # Запускаем приложение
 ENTRYPOINT ["dotnet", "GallerySiteBackend.dll"]

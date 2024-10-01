@@ -21,7 +21,7 @@ public class AppImageParserService(IRepositoryManager repositoryManager, IConfig
     private const string LoginUrl = "https://lessonsinlovegame.com/account/login/";
     private const string RequestsUrl = "https://lessonsinlovegame.com/galleries/requests";
     private const string GravureSetsUrl = "https://lessonsinlovegame.com/galleries/gravure-sets";
-    private const string CookiesFilePath = "cookies.json";
+    private const string CookiesFilePath = ".cookies.json";
     private const int DefaultPageSize = 20;
     private const int DefaultCheckUpdatesPages = 2;
 
