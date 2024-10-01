@@ -75,7 +75,7 @@ public class Program
                 ValidateIssuer = true,
                 ValidateAudience = true,
                 ValidateLifetime = true,
-                ClockSkew = TimeSpan.FromMinutes(5),
+                ClockSkew = TimeSpan.FromSeconds(30),
                 ValidIssuer = builder.Configuration["Issuer"],
                 ValidAudience = builder.Configuration["Issuer"],
                 IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["SecretKey"]))

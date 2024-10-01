@@ -2,4 +2,4 @@
 
 namespace Shared.DataTransferObjects;
 
-public record CreateUserDto(string Login, [MinLength(8)] string Password);
+public record CreateUserDto([MinLength(4)] string Login, [MinLength(8)] string Password);

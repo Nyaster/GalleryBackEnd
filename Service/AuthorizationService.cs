@@ -1,6 +1,7 @@
 ﻿using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using System.Text.RegularExpressions;
 using AutoMapper;
 using Contracts;
 using Entities.Exceptions;
@@ -32,7 +33,7 @@ public class AuthorizationService : IAuthorizationService
 
     public async Task<JwtTokenResponse> LoginAsync(AppLoginDto loginRequest)
     {
-        var user = await _repositoryManager.AppUser.GetByLoginAsync(loginRequest.Login, false);
+        var user = await _repositoryManager.AppUser.GetByLoginAsync(loginRequest.Login.ToLower().Trim(), false);
         if (user == null) throw new AppUserNotFoundException("User not found");
 
         var passwordHashFromDb = user.Password;
@@ -76,23 +77,29 @@ public class AuthorizationService : IAuthorizationService
 
     public async Task<JwtTokenResponse> RegisterAsync(CreateUserDto registrationRequest)
     {
+        var login = registrationRequest.Login.ToLower().Trim();
+        if (!Regex.IsMatch(login, "^[a-zA-Z0-9]+$"))
+        {
+            throw new InvalidLoginException("Login can contain only alphanumeric characters (letters and digits).");
+        }
         var userByLogin =
-            await _repositoryManager.AppUser.GetByLoginAsync(registrationRequest.Login.ToLower(), false);
+            await _repositoryManager.AppUser.GetByLoginAsync(login, false);
         if (userByLogin != null) throw new UserArleadyExistException($" {registrationRequest.Login} is already exist");
 
         var hashedPasswordAndSalt = SecurityHelpers.GetHashedPasswordAndSalt(registrationRequest.Password);
         var user = new AppUser
         {
-            Login = registrationRequest.Login,
+            Login = login,
             Password = hashedPasswordAndSalt.Item1,
             Salt = hashedPasswordAndSalt.Item2,
             RefreshToken = SecurityHelpers.GenerateRefreshToken(),
             RefreshTokenExp = DateTime.Now.AddDays(1).ToUniversalTime(),
             AppUserRolesList = [AppUserRoles.User]
         };
-        var token = GenerateJwtSecurityToken(user);
+
         await _repositoryManager.AppUser.Create(user);
         await _repositoryManager.Save();
+        var token = GenerateJwtSecurityToken(user);
         return new JwtTokenResponse
         {
             Token = new JwtSecurityTokenHandler().WriteToken(token),
@@ -111,21 +118,7 @@ public class AuthorizationService : IAuthorizationService
 
         if (user.IsRefreshTokenExpired) throw new SecurityTokenException("Refresh token expired");
 
-        var userclaim = new List<Claim>();
-        userclaim.Add(new Claim(ClaimTypes.Name, user.Login));
-        user.AppUserRolesList.ForEach(x => userclaim.Add(new Claim(ClaimTypes.Role, x.ToString())));
-
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["SecretKey"]));
-
-        var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-
-        var jwtToken = new JwtSecurityToken(
-            _configuration["Issuer"],
-            _configuration["Issuer"],
-            userclaim,
-            expires: DateTime.Now.AddMinutes(10).ToUniversalTime(),
-            signingCredentials: creds
-        );
+        var jwtToken = GenerateJwtSecurityToken(user);
         user.RefreshToken = SecurityHelpers.GenerateRefreshToken();
         user.RefreshTokenExp = DateTime.Now.AddDays(1).ToUniversalTime();
         _repositoryManager.AppUser.Update(user);
