@@ -41,6 +41,19 @@ public class AuthorizationService : IAuthorizationService
         if (passwordHashFromDb != curHashedPassword) throw new AppUserUnauthorizedException("Invalid credentials");
 
 
+        var token = GenerateJwtSecurityToken(user);
+        _repositoryManager.AppUser.Update(user);
+        await _repositoryManager.Save();
+
+        return new JwtTokenResponse
+        {
+            Token = new JwtSecurityTokenHandler().WriteToken(token),
+            RefreshToken = user.RefreshToken
+        };
+    }
+
+    private JwtSecurityToken GenerateJwtSecurityToken(AppUser user)
+    {
         var userclaim = new List<Claim>();
         userclaim.Add(new Claim(ClaimTypes.Name, user.Login));
         user.AppUserRolesList.ForEach(x => userclaim.Add(new Claim(ClaimTypes.Role, x.ToString())));
@@ -58,17 +71,10 @@ public class AuthorizationService : IAuthorizationService
 
         user.RefreshToken = SecurityHelpers.GenerateRefreshToken();
         user.RefreshTokenExp = DateTime.Now.AddDays(1).ToUniversalTime();
-        _repositoryManager.AppUser.Update(user);
-        await _repositoryManager.Save();
-
-        return new JwtTokenResponse
-        {
-            Token = new JwtSecurityTokenHandler().WriteToken(token),
-            RefreshToken = user.RefreshToken
-        };
+        return token;
     }
 
-    public async Task RegisterAsync(CreateUserDto registrationRequest)
+    public async Task<JwtTokenResponse> RegisterAsync(CreateUserDto registrationRequest)
     {
         var userByLogin =
             await _repositoryManager.AppUser.GetByLoginAsync(registrationRequest.Login.ToLower(), false);
@@ -84,9 +90,14 @@ public class AuthorizationService : IAuthorizationService
             RefreshTokenExp = DateTime.Now.AddDays(1).ToUniversalTime(),
             AppUserRolesList = [AppUserRoles.User]
         };
-
+        var token = GenerateJwtSecurityToken(user);
         await _repositoryManager.AppUser.Create(user);
         await _repositoryManager.Save();
+        return new JwtTokenResponse
+        {
+            Token = new JwtSecurityTokenHandler().WriteToken(token),
+            RefreshToken = user.RefreshToken
+        };
     }
 
     public async Task<JwtTokenResponse> RefreshJwtTokenAsync(AppRefreshhTokenResetDto refreshRequest,

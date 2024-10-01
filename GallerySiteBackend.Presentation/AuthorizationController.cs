@@ -30,8 +30,8 @@ public class AuthorizationController : ControllerBase
     public async Task<IActionResult> Registration(CreateUserDto registrationRequest)
     {
         if (!ModelState.IsValid) return BadRequest(ModelState);
-        await _serviceManager.AuthorizationService.RegisterAsync(registrationRequest);
-        return Created();
+        var registerAsync = await _serviceManager.AuthorizationService.RegisterAsync(registrationRequest);
+        return Ok(registerAsync);
     }
 
     [Authorize(AuthenticationSchemes = "IgnoreTokenExpirationScheme")]
