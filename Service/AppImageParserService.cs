@@ -49,7 +49,6 @@ public class AppImageParserService(IRepositoryManager repositoryManager, IConfig
         var numberOfPagesToScrap = GetNumberOfPages(document);
         await ExtractAndHandleContent(context, numberOfPagesToScrap);
     }
-
     private async Task ExtractAndHandleContent(IBrowsingContext context, int numberOfPagesToScrap)
     {
         var extractedImages = await ExtractImagesAndTagsAsync(context, numberOfPagesToScrap, RequestsUrl);
@@ -354,6 +353,7 @@ public class AppImageParserService(IRepositoryManager repositoryManager, IConfig
 
     private static async Task SaveCookiesAsync(IBrowsingContext page)
     {
+        Console.WriteLine($"Cookies saved. {CookiesFilePath}");
         var cookies = page.GetCookie(new Url(SiteUrl));
         var json = JsonSerializer.Serialize(cookies);
         await File.WriteAllTextAsync(CookiesFilePath, json);
@@ -362,6 +362,7 @@ public class AppImageParserService(IRepositoryManager repositoryManager, IConfig
 
     private static async Task LoadCookiesAsync(IBrowsingContext page)
     {
+        Console.WriteLine($"Cookies try load loaded. {CookiesFilePath}");
         var cookiesJson = await File.ReadAllTextAsync(CookiesFilePath);
         var cookies = JsonSerializer.Deserialize<string>(cookiesJson);
         var strings = cookies.Split(";", StringSplitOptions.RemoveEmptyEntries);
