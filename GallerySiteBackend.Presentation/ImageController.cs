@@ -46,7 +46,7 @@ public class ImageController : ControllerBase
     }
 
     [Authorize(Roles = "User,Admin")]
-    [HttpGet("search", Name = "search")]
+    [HttpGet("/api/search", Name = "search")]
     public async Task<IActionResult> GetImagesBySearch([FromQuery] List<string> tags, string orderBy, int page,
         int pageSize)
     {
