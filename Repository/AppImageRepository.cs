@@ -116,7 +116,7 @@ public class AppImageRepository(RepositoryContext repositoryContext)
     {
         return orderBy switch
         {
-            OrderBy.Id => queryable.OrderBy(a => a.MediaId).ThenBy(x => x.UploadedDate).AsQueryable(),
+            OrderBy.Id => queryable.OrderByDescending(a => a.MediaId).ThenBy(x => x.UploadedDate).AsQueryable(),
             OrderBy.UploadDate => queryable.OrderBy(a => a.UploadedDate).AsQueryable(),
             _ => queryable.OrderBy(a => a.MediaId).ThenBy(x => x.UploadedDate).AsQueryable()
         };
