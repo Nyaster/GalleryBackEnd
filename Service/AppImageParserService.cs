@@ -23,7 +23,7 @@ public class AppImageParserService(IRepositoryManager repositoryManager, IConfig
     private const string GravureSetsUrl = "https://lessonsinlovegame.com/galleries/gravure-sets";
     private const string CookiesFilePath = "configs/cookies.json";
     private const int DefaultPageSize = 20;
-    private const int DefaultCheckUpdatesPages = 2;
+    private const int DefaultCheckUpdatesPages = 5;
 
 
     private async Task<IBrowsingContext> PrepareForScrappingAsync()
