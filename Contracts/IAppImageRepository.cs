@@ -21,6 +21,7 @@ public interface IAppImageRepository
     public Task<List<AppImage>> GetNotApprovedImagesAsync();
     public Task AttachImagesAsync(List<AppImage> images);
     public Task UpdateImagesAsync(List<AppImage> images);
+    public Task<List<AppImage>> GetImagesByUser(int userId, bool trackChanges);
 }
 
 public enum OrderBy

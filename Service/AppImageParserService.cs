@@ -58,8 +58,7 @@ public class AppImageParserService(IRepositoryManager repositoryManager, IConfig
 
         await CheckAndHandleNewTagsOnImages(extractedImages, imagesInDb);
         var removeNoneYet = await repositoryManager.AppImage.FindImageByMediaId(extractedImages, true);
-        var tagToDelete = removeNoneYet.FirstOrDefault(x => x.Tags.Count > 1).Tags
-            .FirstOrDefault(x => x.Name == "none yet");
+        var tagToDelete = removeNoneYet.SelectMany(x=>x.Tags).FirstOrDefault(x=>x.Name=="none yet");
         removeNoneYet.FindAll(x => x.Tags.Any(y => y.Name == "none yet") && x.Tags.Count != 1).ToList()
             .ForEach(x => x.Tags.Remove(tagToDelete));
         await repositoryManager.Save();

@@ -96,6 +96,12 @@ public class AppImageRepository(RepositoryContext repositoryContext)
         RepositoryContext.Images.UpdateRange(images);
     }
 
+    public async Task<List<AppImage>> GetImagesByUser(int userId, bool trackChanges)
+    {
+        return await FindByCondition(x => x.UploadedById == userId, trackChanges)
+            .Include(x => x.Tags).Include(x => x.UploadedBy).ToListAsync();
+    }
+
     private IQueryable<AppImage> IncludeStandardProperties(IQueryable<AppImage> queryable)
     {
         return queryable.Include(x => x.Tags)
