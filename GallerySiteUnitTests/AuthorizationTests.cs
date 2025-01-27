@@ -1,11 +1,3 @@
-using Contracts;
-using GallerySiteBackend.Models;
-using Microsoft.Extensions.Configuration;
-using Microsoft.IdentityModel.Tokens;
-using Moq;
-using Service;
-using Service.Helpers;
-
 namespace GallerySiteUnitTests;
 
 public class AuthorizationTests

@@ -1,8 +1,11 @@
 using System.Text;
+using Contracts;
 using GallerySiteBackend.Extensions;
+using GallerySiteBackend.Presentation;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
 using NLog;
 using Service;
 
@@ -16,7 +19,7 @@ public class Program
         LogManager.Setup().LoadConfigurationFromFile(string.Concat(Directory.GetCurrentDirectory(),
             "/nlog.config"));
         IConfiguration configuration = new ConfigurationBuilder()
-            .AddJsonFile("secrets.json", optional: true, reloadOnChange: true).Build();
+            .AddJsonFile("secrets.json", true, true).Build();
         builder.Configuration.AddConfiguration(configuration);
         builder.Services.ConfigureNpsqlContext(builder.Configuration);
         builder.Services.ConfigureLoggerService();
@@ -25,13 +28,38 @@ public class Program
         // Add services to the container.
         builder.Services.AddAutoMapper(typeof(Program));
         builder.Services.AddControllers()
-            .AddApplicationPart(typeof(Presentation.AssemblyReference).Assembly);
+            .AddApplicationPart(typeof(AssemblyReference).Assembly);
         builder.Services.Configure<ApiBehaviorOptions>(options => options.SuppressModelStateInvalidFilter = true);
         // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
         builder.Services.AddEndpointsApiExplorer();
-        builder.Services.AddSwaggerGen();
+        builder.Services.AddSwaggerGen(options =>
+        {
+            options.AddSecurityDefinition(name: "Bearer", securityScheme: new OpenApiSecurityScheme
+            {
+                Name = "Authorization",
+                Description = "Enter the Bearer Authorization string as following: `Bearer Generated-JWT-Token`",
+                In = ParameterLocation.Header,
+                Type = SecuritySchemeType.ApiKey,
+                Scheme = "Bearer"
+            });
+            options.AddSecurityRequirement(new OpenApiSecurityRequirement
+            {
+                {
+                    new OpenApiSecurityScheme
+                    {
+                        Name = "Bearer",
+                        In = ParameterLocation.Header,
+                        Reference = new OpenApiReference
+                        {
+                            Id = "Bearer",
+                            Type = ReferenceType.SecurityScheme
+                        }
+                    },
+                    new List<string>()
+                }
+            });
+        });
         builder.Services.ConfigureCors();
-        builder.Services.AddScoped<AppImageParserService>();
         builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 
         #region JwtConfiguration
@@ -47,22 +75,20 @@ public class Program
                 ValidateIssuer = true,
                 ValidateAudience = true,
                 ValidateLifetime = true,
-                ClockSkew = TimeSpan.FromMinutes(2),
+                ClockSkew = TimeSpan.FromSeconds(30),
                 ValidIssuer = builder.Configuration["Issuer"],
                 ValidAudience = builder.Configuration["Issuer"],
                 IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["SecretKey"]))
             };
-            opt.Events = new JwtBearerEvents()
+            opt.Events = new JwtBearerEvents
             {
                 OnAuthenticationFailed = context =>
                 {
                     if (context.Exception.GetType() == typeof(SecurityTokenExpiredException))
-                    {
                         context.Response.Headers["Token-expired"] = "true";
-                    }
 
                     return Task.CompletedTask;
-                },
+                }
             };
         }).AddJwtBearer("IgnoreTokenExpirationScheme", opt =>
         {
@@ -88,13 +114,12 @@ public class Program
 
 
         var app = builder.Build();
-        /*var logger = app.Services.GetRequiredService<ILoggerManager>();
-        app.ConfigureExceptionHandler(logger);*/
+        app.UseExceptionHandler(opt => { });
         // Configure the HTTP request pipeline.
-        if (app.Environment.IsProduction())
+        /*if (app.Environment.IsProduction())
         {
             app.UseHsts();
-        }
+        }*/
 
         if (app.Environment.IsDevelopment())
         {

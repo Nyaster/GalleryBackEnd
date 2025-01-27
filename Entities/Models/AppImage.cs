@@ -4,10 +4,6 @@ namespace Entities.Models;
 
 public class AppImage
 {
-    public AppImage()
-    {
-    }
-
     public int Id { get; set; }
     public int MediaId { get; set; }
     public AppUser UploadedBy { get; set; }

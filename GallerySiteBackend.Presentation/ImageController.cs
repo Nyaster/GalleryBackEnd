@@ -1,25 +1,22 @@
 ﻿using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Service;
 using Service.Contracts;
-using Shared;
 using Shared.DataTransferObjects;
 
 namespace GallerySiteBackend.Presentation;
 
 [ApiController]
 [Route("/api/images")]
+
 public class ImageController : ControllerBase
 {
-    private IServiceManager _serviceManager;
-    private AppImageParserService _imageParserService;
+    private readonly IServiceManager _serviceManager;
 
-    public ImageController(IServiceManager serviceManager, AppImageParserService imageParserService)
+    public ImageController(IServiceManager serviceManager)
     {
         _serviceManager = serviceManager;
-        _imageParserService = imageParserService;
     }
 
     [Authorize(Roles = "User,Admin")]
@@ -28,22 +25,19 @@ public class ImageController : ControllerBase
     {
         var value = "admin";
         if (HttpContext.User.Identity.IsAuthenticated)
-        {
             value = HttpContext.User.Claims.First(x => x.Type == ClaimTypes.Name).Value;
-        }
 
         var uploadImageAsync = await _serviceManager.AppImageService.UploadImageAsync(request, value);
         return CreatedAtRoute("GetImageById", new { id = uploadImageAsync.Id }, uploadImageAsync);
     }
-
-
+    [Authorize(Roles = "User,Admin")]
     [HttpGet("{id:int}", Name = "GetImageById")]
     public async Task<IActionResult> GetImageById(int id)
     {
         var image = await _serviceManager.AppImageService.GetImageByIdAsync(id);
         return Ok(image);
     }
-
+    [Authorize(Roles = "User,Admin")]
     [HttpGet("{id:int}/content", Name = "GetImageFileById")]
     public async Task<IActionResult> GetImageById(int id, bool asJpeg = false)
     {
@@ -52,7 +46,7 @@ public class ImageController : ControllerBase
     }
 
     [Authorize(Roles = "User,Admin")]
-    [HttpGet("search", Name = "search")]
+    [HttpGet("/api/search", Name = "search")]
     public async Task<IActionResult> GetImagesBySearch([FromQuery] List<string> tags, string orderBy, int page,
         int pageSize)
     {
@@ -62,13 +56,7 @@ public class ImageController : ControllerBase
         return Ok(imagesBySearchConditions);
     }
 
-    [Authorize(Roles = "User,Admin")]
-    [HttpGet("test")]
-    public async Task<IActionResult> CheckUpdates()
-    {
-        await _imageParserService.CheckUpdates();
-        return Ok();
-    }
+
 
     [Authorize(Roles = "User,Admin")]
     [HttpGet("/api/tags/suggestions")]

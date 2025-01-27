@@ -15,9 +15,13 @@ public interface IAppImageRepository
     public void AttachTags(List<ImageTag> tags);
     Task<List<ImageTag>> GetExistingTagsFromDb(List<string> tagsList);
     Task AddTags(List<ImageTag> newTags);
-    Task<List<AppImage>> FindImageByMediaId(List<AppImage> images);
+    Task<List<AppImage>> FindImageByMediaId(List<AppImage?> images, bool trackChanges);
     Task AddImagesAsync(List<AppImage> list);
     Task<List<ImageTag>> GetTagsSuggestion(string tags);
+    public Task<List<AppImage>> GetNotApprovedImagesAsync();
+    public Task AttachImagesAsync(List<AppImage> images);
+    public Task UpdateImagesAsync(List<AppImage> images);
+    public Task<List<AppImage>> GetImagesByUser(int userId, bool trackChanges);
 }
 
 public enum OrderBy

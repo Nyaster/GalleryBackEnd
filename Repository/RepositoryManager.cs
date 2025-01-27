@@ -4,9 +4,9 @@ namespace Repository;
 
 public class RepositoryManager : IRepositoryManager
 {
-    private readonly RepositoryContext _repositoryContext;
     private readonly Lazy<IAppImageRepository> _appImageRepository;
     private readonly Lazy<IAppUserRepository> _appUserRepository;
+    private readonly RepositoryContext _repositoryContext;
 
     public RepositoryManager(RepositoryContext repositoryContext)
     {

@@ -6,21 +6,20 @@ using GallerySiteBackend.Models;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Service.Contracts;
-using Shared;
+using Service.Helpers;
 using Shared.DataTransferObjects;
 
 namespace Service;
 
 public class AppImageService : IAppImageService
 {
-    private readonly IRepositoryManager _repositoryManager;
+    private readonly List<string>
+        _acceptedFileTypes = new() { ".jpg", ".jpeg", ".png", ".webp" }; //todo:Make this read from configuration
+
     private readonly long _fileSizeLimit = 5 * 1024 * 1024; //todo: Make this read from configuration
     private readonly ILoggerManager _logger;
     private readonly IMapper _mapper;
-
-    private readonly List<string>
-        _acceptedFileTypes = new List<string>
-            { ".jpg", ".jpeg", ".png", ".webp" }; //todo:Make this read from configuration
+    private readonly IRepositoryManager _repositoryManager;
 
 
     public AppImageService(IRepositoryManager repositoryManager, ILoggerManager logger, IMapper mapper)
@@ -33,23 +32,17 @@ public class AppImageService : IAppImageService
     public async Task<AppImageDto> UploadImageAsync(AppImageCreationDto dto, string uploadedBy)
     {
         await ValidateImage(dto.ImageFile);
-        var user = await _repositoryManager.AppUser.GetByLoginAsync(uploadedBy, trackChanges: false);
-        if (user == null)
-        {
-            throw new AppUserNotFoundException($"{uploadedBy} this user can't found, please try again");
-        }
+        var user = await _repositoryManager.AppUser.GetByLoginAsync(uploadedBy, false);
+        if (user == null) throw new AppUserNotFoundException($"{uploadedBy} this user can't found, please try again");
 
-        if (dto.Tags == null)
-        {
-            dto = dto with { Tags = new List<string>() };
-        }
+        if (dto.Tags == null) dto = dto with { Tags = new List<string>() };
 
         List<ImageTag> tags = await _repositoryManager.AppImage.GetTagsByNames(dto.Tags);
         _repositoryManager.AppImage.AttachTags(tags);
         var imagePath = await SaveFileToDisk(dto.ImageFile, user.Login);
-        var returnedImage = await Helpers.ImageHelpers.GetImageDimensionsAsync(imagePath);
+        var returnedImage = await ImageHelpers.GetImageDimensionsAsync(imagePath);
 
-        var image = new AppImage()
+        var image = new AppImage
         {
             UploadedById = user.Id,
             UploadedDate = DateTime.Now.ToUniversalTime(),
@@ -57,7 +50,7 @@ public class AppImageService : IAppImageService
             Tags = tags,
             PathToFileOnDisc = imagePath,
             Width = returnedImage.Width,
-            Height = returnedImage.Height,
+            Height = returnedImage.Height
         };
         await _repositoryManager.AppImage.Create(image);
         await _repositoryManager.Save();
@@ -74,7 +67,7 @@ public class AppImageService : IAppImageService
         string contentType;
         if (asJpeg)
         {
-            fileBytes = await Helpers.ImageHelpers.ConvertImageToJpeg(filePath);
+            fileBytes = await ImageHelpers.ConvertImageToJpeg(filePath);
             contentType = "image/jpeg";
         }
         else
@@ -90,31 +83,21 @@ public class AppImageService : IAppImageService
     {
         List<ImageTag> list;
         if (getImageRequest.Tags == null)
-        {
             list = new List<ImageTag>();
-        }
         else
-        {
             list = await _repositoryManager.AppImage.GetTagsByNames(getImageRequest.Tags);
-        }
 
 
         var pageNumber = getImageRequest.Page;
-        if (getImageRequest.Page < 1)
-        {
-            pageNumber = 1;
-        }
+        if (getImageRequest.Page < 1) pageNumber = 1;
 
         var pageSize = getImageRequest.PageSize;
-        if (getImageRequest.PageSize is < 1 or > 20)
-        {
-            pageSize = 10;
-        }
+        if (getImageRequest.PageSize is < 1 or > 20) pageSize = 10;
 
         pageNumber -= 1;
         var searchImagesByTags =
             await _repositoryManager.AppImage.SearchImagesByTags(list, OrderBy.Id, pageNumber, pageSize);
-        var page = new PageableImagesDto()
+        var page = new PageableImagesDto
         {
             Images = searchImagesByTags.images.Select(x => _mapper.Map<AppImage, AppImageDto>(x)).ToList(),
             OrderBy = OrderBy.Id.ToString(),
@@ -148,7 +131,7 @@ public class AppImageService : IAppImageService
             ".jpeg" => "image/jpeg",
             ".png" => "image/png",
             ".webp" => "image/webp",
-            _ => "application/octet-stream",
+            _ => "application/octet-stream"
         };
     }
 
@@ -175,7 +158,7 @@ public class AppImageService : IAppImageService
     {
         var uploadsFolder = Path.Combine("upload", "images", userLogin);
         Directory.CreateDirectory(uploadsFolder);
-        var filePath = Path.Combine(uploadsFolder, Guid.NewGuid().ToString() + Path.GetExtension(file.FileName));
+        var filePath = Path.Combine(uploadsFolder, Guid.NewGuid() + Path.GetExtension(file.FileName));
         await using var filestream = new FileStream(filePath, FileMode.Create);
         await file.CopyToAsync(filestream);
 

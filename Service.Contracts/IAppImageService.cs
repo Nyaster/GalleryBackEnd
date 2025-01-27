@@ -1,5 +1,4 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using Shared;
 using Shared.DataTransferObjects;
 
 namespace Service.Contracts;

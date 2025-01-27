@@ -11,5 +11,5 @@ public class ImageTag
     public AppUser CreatedBy { get; set; }
     public int CreatedById { get; set; }
     public int AppImageTagCount { get; set; }
-    public List<AppImage> AppImages { get; set; } = new List<AppImage>();
+    public List<AppImage> AppImages { get; set; } = new();
 }

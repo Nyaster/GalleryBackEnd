@@ -1,6 +1,7 @@
 ﻿using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using System.Text.RegularExpressions;
 using AutoMapper;
 using Contracts;
 using Entities.Exceptions;
@@ -15,10 +16,10 @@ namespace Service;
 
 public class AuthorizationService : IAuthorizationService
 {
-    private IRepositoryManager _repositoryManager;
-    private IConfiguration _configuration;
+    private readonly IConfiguration _configuration;
     private readonly ILoggerManager _logger;
     private readonly IMapper _mapper;
+    private readonly IRepositoryManager _repositoryManager;
 
 
     public AuthorizationService(IRepositoryManager repositoryManager, IConfiguration configuration,
@@ -32,112 +33,97 @@ public class AuthorizationService : IAuthorizationService
 
     public async Task<JwtTokenResponse> LoginAsync(AppLoginDto loginRequest)
     {
-        AppUser? user = await _repositoryManager.AppUser.GetByLoginAsync(loginRequest.Login, trackChanges: false);
-        if (user == null)
-        {
-            throw new AppUserNotFoundException("User not found");
-        }
+        var user = await _repositoryManager.AppUser.GetByLoginAsync(loginRequest.Login.ToLower().Trim(), false);
+        if (user == null) throw new AppUserNotFoundException("User not found");
 
-        string passwordHashFromDb = user.Password;
-        string curHashedPassword = SecurityHelpers.GetHashedPasswordWithSalt(loginRequest.Password, user.Salt);
+        var passwordHashFromDb = user.Password;
+        var curHashedPassword = SecurityHelpers.GetHashedPasswordWithSalt(loginRequest.Password, user.Salt);
 
-        if (passwordHashFromDb != curHashedPassword)
-        {
-            throw new AppUserUnauthorizedException("Invalid credentials");
-        }
+        if (passwordHashFromDb != curHashedPassword) throw new AppUserUnauthorizedException("Invalid credentials");
 
 
-        List<Claim> userclaim = new List<Claim>();
-        userclaim.Add(new Claim(ClaimTypes.Name, user.Login));
-        user.AppUserRolesList.ForEach(x => userclaim.Add(new Claim(ClaimTypes.Role, x.ToString())));
-        SymmetricSecurityKey key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["SecretKey"]));
-
-        SigningCredentials creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-
-        JwtSecurityToken token = new JwtSecurityToken(
-            issuer: _configuration["Issuer"],
-            audience: _configuration["Issuer"],
-            claims: userclaim,
-            expires: DateTime.Now.AddSeconds(30).ToUniversalTime(),
-            signingCredentials: creds
-        );
-
-        user.RefreshToken = SecurityHelpers.GenerateRefreshToken();
-        user.RefreshTokenExp = DateTime.Now.AddDays(1).ToUniversalTime();
+        var token = GenerateJwtSecurityToken(user);
         _repositoryManager.AppUser.Update(user);
         await _repositoryManager.Save();
 
-        return new JwtTokenResponse()
+        return new JwtTokenResponse
         {
             Token = new JwtSecurityTokenHandler().WriteToken(token),
             RefreshToken = user.RefreshToken
         };
     }
 
-    public async Task RegisterAsync(CreateUserDto registrationRequest)
+    private JwtSecurityToken GenerateJwtSecurityToken(AppUser user)
     {
-        var userByLogin =
-            await _repositoryManager.AppUser.GetByLoginAsync(registrationRequest.Login.ToLower(), trackChanges: false);
-        if (userByLogin != null)
+        var userclaim = new List<Claim>();
+        userclaim.Add(new Claim(ClaimTypes.Name, user.Login));
+        user.AppUserRolesList.ForEach(x => userclaim.Add(new Claim(ClaimTypes.Role, x.ToString())));
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["SecretKey"]));
+
+        var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+
+        var token = new JwtSecurityToken(
+            _configuration["Issuer"],
+            _configuration["Issuer"],
+            userclaim,
+            expires: DateTime.Now.AddMinutes(5).ToUniversalTime(),
+            signingCredentials: creds
+        );
+
+        user.RefreshToken = SecurityHelpers.GenerateRefreshToken();
+        user.RefreshTokenExp = DateTime.Now.AddDays(1).ToUniversalTime();
+        return token;
+    }
+
+    public async Task<JwtTokenResponse> RegisterAsync(CreateUserDto registrationRequest)
+    {
+        var login = registrationRequest.Login.ToLower().Trim();
+        if (!Regex.IsMatch(login, "^[a-zA-Z0-9]+$"))
         {
-            throw new UserArleadyExistException($" {registrationRequest.Login} is already exist");
+            throw new InvalidLoginException("Login can contain only alphanumeric characters (letters and digits).");
         }
+        var userByLogin =
+            await _repositoryManager.AppUser.GetByLoginAsync(login, false);
+        if (userByLogin != null) throw new UserArleadyExistException($" {registrationRequest.Login} is already exist");
 
         var hashedPasswordAndSalt = SecurityHelpers.GetHashedPasswordAndSalt(registrationRequest.Password);
-        var user = new AppUser()
+        var user = new AppUser
         {
-            Login = registrationRequest.Login,
+            Login = login,
             Password = hashedPasswordAndSalt.Item1,
             Salt = hashedPasswordAndSalt.Item2,
             RefreshToken = SecurityHelpers.GenerateRefreshToken(),
             RefreshTokenExp = DateTime.Now.AddDays(1).ToUniversalTime(),
-            AppUserRolesList = [AppUserRoles.User],
+            AppUserRolesList = [AppUserRoles.User]
         };
 
         await _repositoryManager.AppUser.Create(user);
         await _repositoryManager.Save();
+        var token = GenerateJwtSecurityToken(user);
+        return new JwtTokenResponse
+        {
+            Token = new JwtSecurityTokenHandler().WriteToken(token),
+            RefreshToken = user.RefreshToken
+        };
     }
 
     public async Task<JwtTokenResponse> RefreshJwtTokenAsync(AppRefreshhTokenResetDto refreshRequest,
         string accessToken)
     {
         var userLogin = SecurityHelpers.GetUserIdFromAccessToken(accessToken, _configuration["SecretKey"]);
-        AppUser? user = await _repositoryManager.AppUser.GetByLoginAsync(userLogin, trackChanges: false);
-        if (user == null)
-        {
-            throw new SecurityTokenException("Invalid refresh token");
-        }
+        var user = await _repositoryManager.AppUser.GetByLoginAsync(userLogin, false);
+        if (user == null) throw new SecurityTokenException("Invalid refresh token");
 
-        if (user.RefreshToken != refreshRequest.RefreshToken)
-        {
-            throw new SecurityTokenException("Invalid refresh token");
-        }
+        if (user.RefreshToken != refreshRequest.RefreshToken) throw new SecurityTokenException("Invalid refresh token");
 
-        if (user.IsRefreshTokenExpired)
-        {
-            throw new SecurityTokenException("Refresh token expired");
-        }
+        if (user.IsRefreshTokenExpired) throw new SecurityTokenException("Refresh token expired");
 
-        List<Claim> userclaim = new List<Claim>();
-        userclaim.Add(new Claim(ClaimTypes.Name, user.Login));
-        user.AppUserRolesList.ForEach(x => userclaim.Add(new Claim(ClaimTypes.Role, x.ToString())));
-
-        SymmetricSecurityKey key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["SecretKey"]));
-
-        SigningCredentials creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-
-        JwtSecurityToken jwtToken = new JwtSecurityToken(
-            issuer: _configuration["Issuer"],
-            audience: _configuration["Issuer"],
-            claims: userclaim,
-            expires: DateTime.Now.AddMinutes(10).ToUniversalTime(),
-            signingCredentials: creds
-        );
+        var jwtToken = GenerateJwtSecurityToken(user);
         user.RefreshToken = SecurityHelpers.GenerateRefreshToken();
         user.RefreshTokenExp = DateTime.Now.AddDays(1).ToUniversalTime();
         _repositoryManager.AppUser.Update(user);
         await _repositoryManager.Save();
-        return new JwtTokenResponse()
+        return new JwtTokenResponse
         {
             Token = new JwtSecurityTokenHandler().WriteToken(jwtToken),
             RefreshToken = user.RefreshToken
