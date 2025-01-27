@@ -75,7 +75,7 @@ public class AppImageRepository(RepositoryContext repositoryContext)
     public async Task<List<ImageTag>> GetTagsSuggestion(string tag)
     {
         var imageTags = await RepositoryContext.Tags.Where(x => EF.Functions.Like(x.Name, $"%{tag.ToLower()}%"))
-            .Take(10)
+            .Take(50)
             .ToListAsync();
         return imageTags;
     }
@@ -122,8 +122,10 @@ public class AppImageRepository(RepositoryContext repositoryContext)
     {
         return orderBy switch
         {
-            OrderBy.Id => queryable.OrderByDescending(a => a.MediaId).ThenBy(x => x.UploadedDate).AsQueryable(),
-            OrderBy.UploadDate => queryable.OrderBy(a => a.UploadedDate).AsQueryable(),
+            OrderBy.Id => queryable.OrderByDescending(a => a.MediaId).ThenBy(x => x.UploadedDate).ThenBy(x => x.Id)
+                .AsQueryable(),
+            OrderBy.UploadDate => queryable.OrderByDescending(a => a.UploadedDate).ThenBy(a => a.MediaId).ThenBy(x => x.Id)
+                .AsQueryable(),
             _ => queryable.OrderBy(a => a.MediaId).ThenBy(x => x.UploadedDate).AsQueryable()
         };
     }

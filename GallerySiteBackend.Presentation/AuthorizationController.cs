@@ -36,7 +36,7 @@ public class AuthorizationController : ControllerBase
 
     [Authorize(AuthenticationSchemes = "IgnoreTokenExpirationScheme")]
     [HttpPost("refresh")]
-    public async Task<IActionResult> Refresh(AppRefreshhTokenResetDto refreshTokenRequest)
+    public async Task<IActionResult>  Refresh(AppRefreshhTokenResetDto refreshTokenRequest)
     {
         var token = HttpContext.Request.Headers["Authorization"].ToString().Replace("Bearer ", "");
         var refreshJwtTokenAsync =
