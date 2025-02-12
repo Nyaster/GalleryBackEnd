@@ -1,5 +1,6 @@
 using System.Text;
 using Contracts;
+using GallerySiteBackend.Configuration;
 using GallerySiteBackend.Extensions;
 using GallerySiteBackend.Presentation;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -20,7 +21,10 @@ public class Program
             "/nlog.config"));
         IConfiguration configuration = new ConfigurationBuilder()
             .AddJsonFile("secrets.json", true, true).Build();
+
         builder.Configuration.AddConfiguration(configuration);
+        builder.Services.AddOptions<JwtConfiguration>().Bind(builder.Configuration.GetSection("JwtConfig")).ValidateDataAnnotations().ValidateOnStart();
+        var jwtConfiguration = builder.Configuration.GetSection("JwtConfig1").Get<JwtConfiguration>(); ;
         builder.Services.ConfigureNpsqlContext(builder.Configuration);
         builder.Services.ConfigureLoggerService();
         builder.Services.ConfigureRepositoryManager();
@@ -61,56 +65,14 @@ public class Program
         });
         builder.Services.ConfigureCors();
         builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
-
-        #region JwtConfiguration
-
-        builder.Services.AddAuthentication(option =>
-        {
-            option.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-            option.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-        }).AddJwtBearer(opt =>
-        {
-            opt.TokenValidationParameters = new TokenValidationParameters
-            {
-                ValidateIssuer = true,
-                ValidateAudience = true,
-                ValidateLifetime = true,
-                ClockSkew = TimeSpan.FromSeconds(30),
-                ValidIssuer = builder.Configuration["Issuer"],
-                ValidAudience = builder.Configuration["Issuer"],
-                IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["SecretKey"]))
-            };
-            opt.Events = new JwtBearerEvents
-            {
-                OnAuthenticationFailed = context =>
-                {
-                    if (context.Exception.GetType() == typeof(SecurityTokenExpiredException))
-                        context.Response.Headers["Token-expired"] = "true";
-
-                    return Task.CompletedTask;
-                }
-            };
-        }).AddJwtBearer("IgnoreTokenExpirationScheme", opt =>
-        {
-            opt.TokenValidationParameters = new TokenValidationParameters
-            {
-                ValidateIssuer = true, //by who
-                ValidateAudience = true, //for whom
-                ValidateLifetime = false,
-                ClockSkew = TimeSpan.FromMinutes(2),
-                ValidIssuer = builder.Configuration["Issuer"], //should come from configuration
-                ValidAudience = builder.Configuration["Issuer"], //should come from configuration
-                IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["SecretKey"]))
-            };
-        });
+        builder.Services.ConfigureJwtToken(configuration);
         builder.Services.AddAuthorization(options =>
         {
             options.AddPolicy("RequireAdminRole", policy => policy.RequireRole("Admin"));
             options.AddPolicy("RequireUserRole", policy => policy.RequireRole("User"));
             options.AddPolicy("RequireModeratorRole", policy => policy.RequireRole("Moderator"));
         });
-
-        #endregion
+        
 
 
         var app = builder.Build();

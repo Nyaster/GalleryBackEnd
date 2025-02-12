@@ -14,7 +14,7 @@ namespace Service;
 public class AppImageService : IAppImageService
 {
     private readonly List<string>
-        _acceptedFileTypes = new() { ".jpg", ".jpeg", ".png", ".webp" }; //todo:Make this read from configuration
+        _acceptedFileTypes = [".jpg", ".jpeg", ".png", ".webp"]; //todo:Make this read from configuration
 
     private readonly long _fileSizeLimit = 5 * 1024 * 1024; //todo: Make this read from configuration
     private readonly ILoggerManager _logger;
@@ -37,7 +37,7 @@ public class AppImageService : IAppImageService
 
         if (dto.Tags == null) dto = dto with { Tags = new List<string>() };
 
-        List<ImageTag> tags = await _repositoryManager.AppImage.GetTagsByNames(dto.Tags);
+        List<ImageTag?> tags = await _repositoryManager.AppImage.GetTagsByNames(dto.Tags);
         _repositoryManager.AppImage.AttachTags(tags);
         var imagePath = await SaveFileToDisk(dto.ImageFile, user.Login);
         var returnedImage = await ImageHelpers.GetImageDimensionsAsync(imagePath);
