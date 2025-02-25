@@ -19,8 +19,8 @@ public interface IAppImageRepository
     Task AddImagesAsync(List<AppImage> list);
     Task<List<ImageTag>> GetTagsSuggestion(string tags);
     public Task<List<AppImage>> GetNotApprovedImagesAsync();
-    public Task AttachImagesAsync(List<AppImage> images);
-    public Task UpdateImagesAsync(List<AppImage> images);
+    public void AttachImages(List<AppImage> images);
+    public void UpdateImages(List<AppImage> images);
     public Task<List<AppImage>> GetImagesByUser(int userId, bool trackChanges);
 }
 

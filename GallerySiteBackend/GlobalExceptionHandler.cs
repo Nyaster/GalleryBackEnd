@@ -6,15 +6,8 @@ using Microsoft.AspNetCore.Diagnostics;
 
 namespace GallerySiteBackend;
 
-public class GlobalExceptionHandler : IExceptionHandler
+public class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logger) : IExceptionHandler
 {
-    private readonly ILoggerManager _logger;
-
-    public GlobalExceptionHandler(ILoggerManager logger)
-    {
-        _logger = logger;
-    }
-
     public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception,
         CancellationToken cancellationToken)
     {
@@ -29,7 +22,7 @@ public class GlobalExceptionHandler : IExceptionHandler
                 AppUserUnauthorizedException _ => StatusCodes.Status401Unauthorized,
                 _ => StatusCodes.Status500InternalServerError
             };
-            _logger.LogError($"Something went wrong: {contextFeature.Error}");
+            logger.LogError($"Something went wrong: {contextFeature.Error}");
             await httpContext.Response.WriteAsync(new ErrorDetails
             {
                 StatusCode = httpContext.Response.StatusCode,

@@ -5,6 +5,7 @@ using Entities.Models;
 using GallerySiteBackend.Models;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using Service.Contracts;
 using Service.Helpers;
 using Shared.DataTransferObjects;
@@ -17,12 +18,12 @@ public class AppImageService : IAppImageService
         _acceptedFileTypes = [".jpg", ".jpeg", ".png", ".webp"]; //todo:Make this read from configuration
 
     private readonly long _fileSizeLimit = 5 * 1024 * 1024; //todo: Make this read from configuration
-    private readonly ILoggerManager _logger;
+    private readonly ILogger<AppImageService> _logger;
     private readonly IMapper _mapper;
     private readonly IRepositoryManager _repositoryManager;
 
 
-    public AppImageService(IRepositoryManager repositoryManager, ILoggerManager logger, IMapper mapper)
+    public AppImageService(IRepositoryManager repositoryManager, ILogger<AppImageService> logger, IMapper mapper)
     {
         _repositoryManager = repositoryManager;
         _logger = logger;
@@ -59,7 +60,7 @@ public class AppImageService : IAppImageService
         return appImageDto;
     }
 
-    public async Task<FileContentResult> GetFileBytesAsync(int id, bool asJpeg)
+    public async Task<FileContentResult> GetFileBytesAsync(int id, bool asJpeg) //realizaed
     {
         var byId = await _repositoryManager.AppImage.GetById(id);
         var filePath = byId.PathToFileOnDisc;
@@ -78,7 +79,18 @@ public class AppImageService : IAppImageService
 
         return new FileContentResult(fileBytes, contentType);
     }
-
+    private string GetFileType(string path)
+    {
+        var extension = Path.GetExtension(path).ToLowerInvariant();
+        return extension switch
+        {
+            ".jpg" => "image/jpeg",
+            ".jpeg" => "image/jpeg",
+            ".png" => "image/png",
+            ".webp" => "image/webp",
+            _ => "application/octet-stream"
+        };
+    }
     public async Task<PageableImagesDto> GetImagesBySearchConditions(SearchImageDto getImageRequest)
     {
         List<ImageTag> list;
@@ -122,18 +134,7 @@ public class AppImageService : IAppImageService
         return appImageDto;
     }
 
-    public string GetFileType(string path)
-    {
-        var extension = Path.GetExtension(path).ToLowerInvariant();
-        return extension switch
-        {
-            ".jpg" => "image/jpeg",
-            ".jpeg" => "image/jpeg",
-            ".png" => "image/png",
-            ".webp" => "image/webp",
-            _ => "application/octet-stream"
-        };
-    }
+    
 
 
     private async Task ValidateImage(IFormFile file)

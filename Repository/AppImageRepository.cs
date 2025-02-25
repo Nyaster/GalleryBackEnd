@@ -86,12 +86,12 @@ public class AppImageRepository(RepositoryContext repositoryContext)
         return notApprovedImages;
     }
 
-    public async Task AttachImagesAsync(List<AppImage> images)
+    public void AttachImages(List<AppImage> images)
     {
         RepositoryContext.Images.AttachRange(images);
     }
 
-    public async Task UpdateImagesAsync(List<AppImage> images)
+    public void UpdateImages(List<AppImage> images)
     {
         RepositoryContext.Images.UpdateRange(images);
     }

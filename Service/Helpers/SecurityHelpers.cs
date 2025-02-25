@@ -2,7 +2,9 @@
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using GallerySiteBackend.Models;
 using Microsoft.AspNetCore.Cryptography.KeyDerivation;
+using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 
 namespace Service.Helpers;
@@ -50,6 +52,8 @@ public class SecurityHelpers
         rng.GetBytes(randomNumber);
         return Convert.ToBase64String(randomNumber);
     }
+
+
 
     public static string GetUserIdFromAccessToken(string accessToken, string secret)
     {

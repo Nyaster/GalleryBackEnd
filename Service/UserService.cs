@@ -1,6 +1,7 @@
 ﻿using AutoMapper;
 using Contracts;
 using Entities.Exceptions;
+using Microsoft.Extensions.Logging;
 using Service.Contracts;
 using Shared.DataTransferObjects;
 
@@ -9,10 +10,10 @@ namespace Service;
 public class UserService : IUserService
 {
     private IRepositoryManager _repositoryManager;
-    private ILoggerManager _logger;
+    private ILogger<UserService> _logger;
     private IMapper _mapper;
 
-    public UserService(IRepositoryManager repositoryManager, ILoggerManager logger, IMapper mapper)
+    public UserService(IRepositoryManager repositoryManager, ILogger<UserService> logger, IMapper mapper)
     {
         _repositoryManager = repositoryManager;
         _logger = logger;

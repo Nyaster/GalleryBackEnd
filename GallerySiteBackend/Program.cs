@@ -23,12 +23,15 @@ public class Program
             .AddJsonFile("secrets.json", true, true).Build();
 
         builder.Configuration.AddConfiguration(configuration);
-        builder.Services.AddOptions<JwtConfiguration>().Bind(builder.Configuration.GetSection("JwtConfig")).ValidateDataAnnotations().ValidateOnStart();
-        var jwtConfiguration = builder.Configuration.GetSection("JwtConfig1").Get<JwtConfiguration>(); ;
+        builder.Services.AddOptions<JwtConfiguration>().Bind(builder.Configuration.GetSection("JwtConfig"))
+            .ValidateDataAnnotations().ValidateOnStart();
+        builder.Services.AddOptions<ParserSettings>().Bind(builder.Configuration.GetSection("ParserSettings"));
+        var jwtConfiguration = builder.Configuration.GetSection("JwtConfig1").Get<JwtConfiguration>();
+        ;
         builder.Services.ConfigureNpsqlContext(builder.Configuration);
         builder.Services.ConfigureLoggerService();
         builder.Services.ConfigureRepositoryManager();
-        builder.Services.ConfigureServiceManager();
+        builder.Services.ConfigureServicesInjection();
         // Add services to the container.
         builder.Services.AddAutoMapper(typeof(Program));
         builder.Services.AddControllers()
@@ -66,15 +69,10 @@ public class Program
         builder.Services.ConfigureCors();
         builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
         builder.Services.ConfigureJwtToken(configuration);
-        builder.Services.AddAuthorization(options =>
-        {
-            options.AddPolicy("RequireAdminRole", policy => policy.RequireRole("Admin"));
-            options.AddPolicy("RequireUserRole", policy => policy.RequireRole("User"));
-            options.AddPolicy("RequireModeratorRole", policy => policy.RequireRole("Moderator"));
-        });
-        
+        builder.Services.ConfigureAuthorizationPoliicies();
 
-
+        builder.Services.AddMediatR(options =>
+            options.RegisterServicesFromAssembly(typeof(Application.AssemblyApplication).Assembly));
         var app = builder.Build();
         app.UseExceptionHandler(opt => { });
         // Configure the HTTP request pipeline.

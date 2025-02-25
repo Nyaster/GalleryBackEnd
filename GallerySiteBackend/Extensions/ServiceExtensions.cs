@@ -23,17 +23,12 @@ public static class ServiceExtensions
 
     public static void ConfigureLoggerService(this IServiceCollection services)
     {
-        services.AddSingleton<ILoggerManager, LoggerManager>();
+        services.AddLogging(options => options.AddConsole());
     }
 
     public static void ConfigureRepositoryManager(this IServiceCollection services)
     {
         services.AddScoped<IRepositoryManager, RepositoryManager>();
-    }
-
-    public static void ConfigureServiceManager(this IServiceCollection services)
-    {
-        services.AddScoped<IServiceManager, ServiceManager>();
     }
 
     public static void ConfigureNpsqlContext(this IServiceCollection services, IConfiguration configuration)
@@ -83,6 +78,15 @@ public static class ServiceExtensions
                 ValidAudience = config.ValidAudience, //should come from configuration
                 IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(config.SecretKey))
             };
+        });
+    }
+
+    public static void ConfigureAuthorizationPoliicies(this IServiceCollection services)
+    {
+        services.AddAuthorization(options =>
+        {
+            options.AddPolicy("AdminOnly", policy => policy.RequireRole("Admin"));
+            options.AddPolicy("UserOnly", policy => policy.RequireAssertion(context => context.User.IsInRole("Admin") || context.User.IsInRole("User")));
         });
     }
 }

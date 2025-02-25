@@ -9,18 +9,18 @@ namespace GallerySiteBackend.Presentation;
 [Authorize]
 public class UserController : ControllerBase
 {
-    private readonly IServiceManager _serviceManager;
+    private readonly IUserService _userService;
 
-    public UserController(IServiceManager serviceManager)
+    public UserController(IUserService userService)
     {
-        _serviceManager = serviceManager;
+        _userService = userService;
     }
 
     [HttpGet("images")]
     public async Task<IActionResult> GetUploadedImages()
     {
         var identityName = HttpContext.User.Identity.Name;
-        var uploadedImagesAsync = await _serviceManager.UserService.GetUploadedImagesAsync(identityName);
+        var uploadedImagesAsync = await _userService.GetUploadedImagesAsync(identityName);
         return Ok(uploadedImagesAsync);
     }
 }

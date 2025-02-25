@@ -4,8 +4,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GallerySiteBackend", "Galle
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GallerySiteUnitTests", "GallerySiteUnitTests\GallerySiteUnitTests.csproj", "{6CAC231A-25A4-4F76-8C9C-C69A03203F90}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LoggerService", "LoggerService\LoggerService.csproj", "{21F06CFE-46F2-49A2-9F94-464E3CB7D7CE}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Contracts", "Contracts\Contracts.csproj", "{38C64FF8-3CC7-41CB-98C6-50FF8B5B2FAA}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Entities", "Entities\Entities.csproj", "{58B9AB78-9B5F-4F84-A1FE-E6D5E09D7959}"
@@ -27,6 +25,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		.dockerignore = .dockerignore
 	EndProjectSection
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Application", "Application\Application.csproj", "{7BA74AD4-497A-4998-89AD-E1A9C447B703}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -41,10 +41,6 @@ Global
 		{6CAC231A-25A4-4F76-8C9C-C69A03203F90}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{6CAC231A-25A4-4F76-8C9C-C69A03203F90}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{6CAC231A-25A4-4F76-8C9C-C69A03203F90}.Release|Any CPU.Build.0 = Release|Any CPU
-		{21F06CFE-46F2-49A2-9F94-464E3CB7D7CE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{21F06CFE-46F2-49A2-9F94-464E3CB7D7CE}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{21F06CFE-46F2-49A2-9F94-464E3CB7D7CE}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{21F06CFE-46F2-49A2-9F94-464E3CB7D7CE}.Release|Any CPU.Build.0 = Release|Any CPU
 		{38C64FF8-3CC7-41CB-98C6-50FF8B5B2FAA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{38C64FF8-3CC7-41CB-98C6-50FF8B5B2FAA}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{38C64FF8-3CC7-41CB-98C6-50FF8B5B2FAA}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -73,5 +69,9 @@ Global
 		{6B500834-D256-4DEB-98A0-7AA38E67D4E7}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{6B500834-D256-4DEB-98A0-7AA38E67D4E7}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{6B500834-D256-4DEB-98A0-7AA38E67D4E7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7BA74AD4-497A-4998-89AD-E1A9C447B703}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7BA74AD4-497A-4998-89AD-E1A9C447B703}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7BA74AD4-497A-4998-89AD-E1A9C447B703}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7BA74AD4-497A-4998-89AD-E1A9C447B703}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
