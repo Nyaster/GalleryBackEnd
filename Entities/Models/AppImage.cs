@@ -16,7 +16,8 @@ public class AppImage
     public bool IsHidden { get; set; }
     public bool IsDeleted { get; set; }
     public List<ImageTag> Tags { get; set; }
-    public string PathToFileOnDisc { get; set; }
+    public required string PathToFileOnDisc { get; set; }
     public int Width { get; set; }
     public int Height { get; set; }
+    
 }

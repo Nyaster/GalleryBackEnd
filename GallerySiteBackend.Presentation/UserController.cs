@@ -19,7 +19,7 @@ public class UserController : ControllerBase
     [HttpGet("images")]
     public async Task<IActionResult> GetUploadedImages()
     {
-        var identityName = HttpContext.User.Identity.Name;
+        var identityName = HttpContext.User.Identity?.Name;
         var uploadedImagesAsync = await _userService.GetUploadedImagesAsync(identityName);
         return Ok(uploadedImagesAsync);
     }

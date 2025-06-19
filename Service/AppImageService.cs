@@ -79,6 +79,7 @@ public class AppImageService : IAppImageService
 
         return new FileContentResult(fileBytes, contentType);
     }
+
     private string GetFileType(string path)
     {
         var extension = Path.GetExtension(path).ToLowerInvariant();
@@ -91,6 +92,7 @@ public class AppImageService : IAppImageService
             _ => "application/octet-stream"
         };
     }
+
     public async Task<PageableImagesDto> GetImagesBySearchConditions(SearchImageDto getImageRequest)
     {
         List<ImageTag> list;
@@ -134,8 +136,6 @@ public class AppImageService : IAppImageService
         return appImageDto;
     }
 
-    
-
 
     private async Task ValidateImage(IFormFile file)
     {
@@ -145,24 +145,35 @@ public class AppImageService : IAppImageService
             var validationError = "File size exceeds the maximum limit of 5 MB.";
             throw new ImageUploadValidationError(validationError);
         }
-
-        // Check file format
-        var fileExtension = Path.GetExtension(file.FileName).ToLowerInvariant();
-        if (!_acceptedFileTypes.Contains(fileExtension))
+        var allowedSignatures = new Dictionary<string, byte[]>
         {
-            var validationError = "Invalid file format. Only .jpg, .jpeg, .png, and .gif are allowed.";
-            throw new ImageUploadValidationError(validationError);
+            { ".jpeg", new byte[] { 0xFF, 0xD8, 0xFF, 0xE0 } },
+            { ".png", new byte[] { 0x89, 0x50, 0x4E, 0x47 } },
+            { ".webp", new byte[] { 0x52, 0x49, 0x46, 0x46 } } // "RIFF"
+        };
+        await using var stream = file.OpenReadStream();
+        var header = new byte[4];
+        await stream.ReadExactlyAsync(header, 0, 4);
+        var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+        if (!allowedSignatures.ContainsKey(extension) || !header.SequenceEqual(allowedSignatures[extension]))
+        {
+            throw new ArgumentException("Invalid file type.");
         }
+
     }
 
     private async Task<string> SaveFileToDisk(IFormFile file, string userLogin)
     {
-        var uploadsFolder = Path.Combine("upload", "images", userLogin);
+        var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+        var randomFileName = $"{Guid.NewGuid()}{extension}";
+        var safeSubfolder =
+            Path.GetInvalidFileNameChars().Aggregate(userLogin, (current, c) => current.Replace(c, '_'));
+
+        var uploadsFolder = Path.Combine("upload", "images", safeSubfolder);
         Directory.CreateDirectory(uploadsFolder);
-        var filePath = Path.Combine(uploadsFolder, Guid.NewGuid() + Path.GetExtension(file.FileName));
+        var filePath = Path.Combine(uploadsFolder, randomFileName);
         await using var filestream = new FileStream(filePath, FileMode.Create);
         await file.CopyToAsync(filestream);
-
         return filePath;
     }
 }

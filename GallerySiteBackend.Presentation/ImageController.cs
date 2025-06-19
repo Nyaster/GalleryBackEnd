@@ -17,11 +17,12 @@ public class ImageController(IServiceManager serviceManager, IMediator mediator)
     [HttpPost]
     public async Task<IActionResult> Upload([FromForm] AppImageCreationDto request)
     {
-        var value = "admin";
-        if (HttpContext.User.Identity!.IsAuthenticated)
-            value = HttpContext.User.Claims.First(x => x.Type == ClaimTypes.Name).Value;
-
-        var uploadImageAsync = await serviceManager.AppImageService.UploadImageAsync(request, value);
+        var userClaim = HttpContext.User.Claims.FirstOrDefault(x => x.Type == ClaimTypes.Name);
+        if (userClaim == null)
+        {
+            return Unauthorized();
+        }
+        var uploadImageAsync = await serviceManager.AppImageService.UploadImageAsync(request, userClaim.Value);
         return CreatedAtRoute("GetImageById", new { id = uploadImageAsync.Id }, uploadImageAsync);
     }
 
