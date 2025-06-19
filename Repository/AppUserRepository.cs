@@ -4,12 +4,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Repository;
 
-public class AppUserRepository : RepositoryBase<AppUser>, IAppUserRepository
+public class AppUserRepository(RepositoryContext context) : RepositoryBase<AppUser>(context), IAppUserRepository
 {
-    public AppUserRepository(RepositoryContext context) : base(context)
-    {
-    }
-
     public async Task<AppUser?> GetByLoginAsync(string login, bool trackChanges)
     {
         var appUser = await FindByCondition(x => x.Login == login, trackChanges).SingleOrDefaultAsync();

@@ -327,7 +327,7 @@ public class AppImageParserService(IRepositoryManager repositoryManager, IConfig
             Name = x.Trim(),
             CreatDateTime = DateTime.Now.ToUniversalTime()
         }).ToList();
-        var appImage = new AppImage
+        var appImage = new SelebusImage()
         {
             MediaId = mediaId,
             Tags = tags,

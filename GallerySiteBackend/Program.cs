@@ -7,7 +7,6 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
-using NLog;
 using Service;
 
 namespace GallerySiteBackend;
@@ -17,8 +16,6 @@ public class Program
     public static void Main(string[] args)
     {
         var builder = WebApplication.CreateBuilder(args);
-        LogManager.Setup().LoadConfigurationFromFile(string.Concat(Directory.GetCurrentDirectory(),
-            "/nlog.config"));
         IConfiguration configuration = new ConfigurationBuilder()
             .AddJsonFile("secrets.json", true, true).Build();
 
@@ -69,7 +66,7 @@ public class Program
         builder.Services.ConfigureCors();
         builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
         builder.Services.ConfigureJwtToken(configuration);
-        builder.Services.ConfigureAuthorizationPoliicies();
+        builder.Services.ConfigureAuthorizationPolicies();
 
         builder.Services.AddMediatR(options =>
             options.RegisterServicesFromAssembly(typeof(Application.AssemblyApplication).Assembly));

@@ -43,7 +43,7 @@ public class AppImageService : IAppImageService
         var imagePath = await SaveFileToDisk(dto.ImageFile, user.Login);
         var returnedImage = await ImageHelpers.GetImageDimensionsAsync(imagePath);
 
-        var image = new AppImage
+        var image = new UserMadeImage()
         {
             UploadedById = user.Id,
             UploadedDate = DateTime.Now.ToUniversalTime(),

@@ -2,7 +2,7 @@
 
 namespace Entities.Models;
 
-public class AppImage
+public abstract class AppImage
 {
     public int Id { get; set; }
     public int MediaId { get; set; }
@@ -19,5 +19,4 @@ public class AppImage
     public required string PathToFileOnDisc { get; set; }
     public int Width { get; set; }
     public int Height { get; set; }
-    
 }

@@ -1,7 +1,6 @@
 ﻿using System.Text;
 using Contracts;
 using GallerySiteBackend.Configuration;
-using LoggerService;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -81,7 +80,7 @@ public static class ServiceExtensions
         });
     }
 
-    public static void ConfigureAuthorizationPoliicies(this IServiceCollection services)
+    public static void ConfigureAuthorizationPolicies(this IServiceCollection services)
     {
         services.AddAuthorization(options =>
         {

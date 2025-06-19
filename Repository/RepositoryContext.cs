@@ -18,6 +18,8 @@ public class RepositoryContext : DbContext
     public DbSet<ImageTag> Tags { get; init; }
     public DbSet<AppImage> Images { get; init; }
     public DbSet<AppUser> AppUsers { get; init; }
+    public DbSet<SelebusImage> SelebusImages { get; init; }
+    public DbSet<UserMadeImage> UserMadeImages { get; init; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
