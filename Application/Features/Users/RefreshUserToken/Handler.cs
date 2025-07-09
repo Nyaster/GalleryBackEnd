@@ -8,12 +8,12 @@ using Microsoft.IdentityModel.Tokens;
 using Service.Helpers;
 using Shared.DataTransferObjects;
 
-namespace Application.Features.Users.Commands;
+namespace Application.Features.Users.RefreshUserToken;
 
-public class RefreshTokenCommandHandler(IRepositoryManager repositoryManager, IOptions<JwtConfiguration> jwtConfig)
-    : IRequestHandler<RefreshTokenCommand, JwtTokenResponse>
+public class Handler(IRepositoryManager repositoryManager, IOptions<JwtConfiguration> jwtConfig)
+    : IRequestHandler<Command, JwtTokenResponse>
 {
-    public async Task<JwtTokenResponse> Handle(RefreshTokenCommand request, CancellationToken cancellationToken)
+    public async Task<JwtTokenResponse> Handle(Command request, CancellationToken cancellationToken)
     {
         var accessToken = request.Token;
         var jwtConfiguration = jwtConfig.Value;

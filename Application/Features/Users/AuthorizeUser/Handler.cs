@@ -8,12 +8,12 @@ using Microsoft.Extensions.Options;
 using Service.Helpers;
 using Shared.DataTransferObjects;
 
-namespace Application.Features.Users.Commands;
+namespace Application.Features.Users.AuthorizeUser;
 
-public class AuthorizeUserCommandHandler(IRepositoryManager repositoryManager, IOptions<JwtConfiguration> jwtConfig)
-    : IRequestHandler<AuthorizeUserCommand, JwtTokenResponse>
+public class Handler(IRepositoryManager repositoryManager, IOptions<JwtConfiguration> jwtConfig)
+    : IRequestHandler<Command, JwtTokenResponse>
 {
-    public async Task<JwtTokenResponse> Handle(AuthorizeUserCommand request, CancellationToken cancellationToken)
+    public async Task<JwtTokenResponse> Handle(Command request, CancellationToken cancellationToken)
     {
         var loginRequest = request.AppLoginDto;
         var user = await repositoryManager.AppUser.GetByLoginAsync(loginRequest.Login.ToLower().Trim(), false);

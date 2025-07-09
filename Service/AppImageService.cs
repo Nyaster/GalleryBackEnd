@@ -110,7 +110,7 @@ public class AppImageService : IAppImageService
 
         pageNumber -= 1;
         var searchImagesByTags =
-            await _repositoryManager.AppImage.SearchImagesByTags(list, OrderBy.Id, pageNumber, pageSize);
+            await _repositoryManager.AppImage.SearchImagesByTags(list, OrderBy.Id, pageNumber, pageSize ,false);
         var page = new PageableImagesDto
         {
             Images = searchImagesByTags.images.Select(x => _mapper.Map<AppImage, AppImageDto>(x)).ToList(),

@@ -1,5 +1,4 @@
-﻿using Application.Features.Users.Commands;
-using MediatR;
+﻿using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Service.Contracts;
@@ -18,7 +17,7 @@ public class AuthorizationController(IServiceManager serviceManager, IMediator m
     public async Task<IActionResult> Login(AppLoginDto loginRequest)
     {
         if (!ModelState.IsValid) return BadRequest(ModelState);
-        var request = new AuthorizeUserCommand(loginRequest);
+        var request = new Application.Features.Users.AuthorizeUser.Command(loginRequest);
         var result = await mediator.Send(request);
         return Ok(result);
     }
@@ -27,7 +26,7 @@ public class AuthorizationController(IServiceManager serviceManager, IMediator m
     public async Task<IActionResult> Registration(CreateUserDto registrationRequest)
     {
         if (!ModelState.IsValid) return BadRequest(ModelState);
-        var command = new RegisterUserCommand(registrationRequest);
+        var command = new Application.Features.Users.RegisterNewUser.Command(registrationRequest);
         var response = await mediator.Send(command);
         return Ok(response);
     }
@@ -37,7 +36,7 @@ public class AuthorizationController(IServiceManager serviceManager, IMediator m
     public async Task<IActionResult> Refresh(AppRefreshhTokenResetDto refreshTokenRequest)
     {
         var token = HttpContext.Request.Headers["Authorization"].ToString().Replace("Bearer ", "");
-        var command = new RefreshTokenCommand(refreshTokenRequest, token);
+        var command = new Application.Features.Users.RefreshUserToken.Command(refreshTokenRequest, token);
         var result = await mediator.Send(command);
         return Ok(result);
     }

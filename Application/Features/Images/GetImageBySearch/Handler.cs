@@ -5,12 +5,12 @@ using GallerySiteBackend.Models;
 using MediatR;
 using Shared.DataTransferObjects;
 
-namespace Application.Features.Images.Queries;
+namespace Application.Features.Images.GetImageBySearch;
 
-public class GetImageBySearchHandler(IRepositoryManager repositoryManager, IMapper mapper)
-    : IRequestHandler<GetImagesBySearchQuery, PageableImagesDto>
+public class Handler(IRepositoryManager repositoryManager, IMapper mapper)
+    : IRequestHandler<Command, PageableImagesDto>
 {
-    public async Task<PageableImagesDto> Handle(GetImagesBySearchQuery request, CancellationToken cancellationToken)
+    public async Task<PageableImagesDto> Handle(Command request, CancellationToken cancellationToken)
     {
         var getImageRequest = request.SearchImageDto;
         List<ImageTag> list;
@@ -28,7 +28,7 @@ public class GetImageBySearchHandler(IRepositoryManager repositoryManager, IMapp
 
         pageNumber -= 1;
         var searchImagesByTags =
-            await repositoryManager.AppImage.SearchImagesByTags(list, OrderBy.Id, pageNumber, pageSize);
+            await repositoryManager.AppImage.SearchImagesByTags(list, OrderBy.Id, pageNumber, pageSize, getImageRequest.FanImages);
         var page = new PageableImagesDto
         {
             Images = searchImagesByTags.images.Select(mapper.Map<AppImage, AppImageDto>).ToList(),

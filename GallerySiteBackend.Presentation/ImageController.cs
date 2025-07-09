@@ -1,5 +1,5 @@
 ﻿using System.Security.Claims;
-using Application.Features.Images.Queries;
+using Application.Features.Images.GetImageBySearch;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -30,7 +30,7 @@ public class ImageController(IServiceManager serviceManager, IMediator mediator)
     [HttpGet("{id:int}", Name = "GetImageById")]
     public async Task<IActionResult> GetImageById(int id)
     {
-        var request = new GetImageByIdQuery(id);
+        var request = new Application.Features.Images.GetImageById.Command(id);
         var result = await mediator.Send(request);
         return Ok(result);
     }
@@ -39,28 +39,37 @@ public class ImageController(IServiceManager serviceManager, IMediator mediator)
     [HttpGet("{id:int}/content", Name = "GetImageFileById")]
     public async Task<IActionResult> GetImageById(int id, bool asJpeg = false)
     {
-        var request = new GetImageContentQuery(id, asJpeg);
+        var request = new Application.Features.Images.GetImageContent.Command(id, asJpeg);
         var result = await mediator.Send(request);
         return result;
     }
 
     [Authorize(Roles = "User,Admin")]
-    [HttpGet("/api/search", Name = "search")]
-    public async Task<IActionResult> GetImagesBySearch([FromQuery] List<string> tags, string orderBy, int page,
+    [HttpGet("/api/images/search")]
+    public async Task<IActionResult> GetOfficialImagesBySearch([FromQuery] List<string> tags, string orderBy, int page,
         int pageSize)
     {
-        var searchImageDto = new SearchImageDto(tags, orderBy, page, pageSize);
-        var request = new GetImagesBySearchQuery(searchImageDto); 
+        var searchImageDto = new SearchImageDto(tags, orderBy, page, pageSize, false);
+        var request = new Command(searchImageDto); 
         var result = await mediator.Send(request);
         return Ok(result);
     }
-
+    [Authorize(Roles = "User,Admin")]
+    [HttpGet("/api/fan/search")]
+    public async Task<IActionResult> GetUserMadeImagesBySearch([FromQuery] List<string> tags, string orderBy, int page,
+        int pageSize)
+    {
+        var searchImageDto = new SearchImageDto(tags, orderBy, page, pageSize, true);
+        var request = new Command(searchImageDto); 
+        var result = await mediator.Send(request);
+        return Ok(result);
+    }
 
     [Authorize(Roles = "User,Admin")]
     [HttpGet("/api/tags/suggestions")]
     public async Task<IActionResult> GetTagsSuggestions(string tag)
     {
-        var request = new GetTagsSuggestionQuery(tag);
+        var request = new Application.Features.Images.GetTagSuggestion.Command(tag);
         var result = await mediator.Send(request);
         return Ok(result);
     }

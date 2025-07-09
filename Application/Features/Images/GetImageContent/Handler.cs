@@ -2,15 +2,14 @@
 using Entities.Exceptions;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
-using Service.Helpers;
 using ImageHelpers = Application.Features.Images.Helpers.ImageHelpers;
 
-namespace Application.Features.Images.Queries;
+namespace Application.Features.Images.GetImageContent;
 
-public class GetImageContentHandler(IRepositoryManager repository)
-    : IRequestHandler<GetImageContentQuery, IActionResult>
+public class Handler(IRepositoryManager repository)
+    : IRequestHandler<Command, IActionResult>
 {
-    public async Task<IActionResult> Handle(GetImageContentQuery request, CancellationToken cancellationToken)
+    public async Task<IActionResult> Handle(Command request, CancellationToken cancellationToken)
     {
         var id = request.Id;
         var asJpeg = request.AsJpeg;

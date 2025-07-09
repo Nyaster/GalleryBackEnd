@@ -10,14 +10,14 @@ using Microsoft.Extensions.Options;
 using Service.Helpers;
 using Shared.DataTransferObjects;
 
-namespace Application.Features.Users.Commands;
+namespace Application.Features.Users.RegisterNewUser;
 
-public class RegisterUserCommandHandler(IRepositoryManager repositoryManager, IOptions<JwtConfiguration> jwtConfig)
-    : IRequestHandler<RegisterUserCommand, JwtTokenResponse>
+public class Handler(IRepositoryManager repositoryManager, IOptions<JwtConfiguration> jwtConfig)
+    : IRequestHandler<Command, JwtTokenResponse>
 {
     IOptions<JwtConfiguration> JwtConfig { get; } = jwtConfig;
 
-    public async Task<JwtTokenResponse> Handle(RegisterUserCommand request, CancellationToken cancellationToken)
+    public async Task<JwtTokenResponse> Handle(Command request, CancellationToken cancellationToken)
     {
         var registrationRequest = request.RegistrationRequest;
         var login = registrationRequest.Login.ToLower().Trim();

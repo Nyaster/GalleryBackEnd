@@ -8,7 +8,7 @@ public interface IAppImageRepository
     public Task<List<ImageTag?>> GetTagsByNames(IEnumerable<string> tags);
 
     public Task<(List<AppImage> images, int total)> SearchImagesByTags(List<ImageTag> tags, OrderBy orderBy,
-        int page, int pageSize);
+        int page, int pageSize,bool fanImages);
 
     public Task Create(AppImage image);
     public Task<AppImage?> GetById(int id);

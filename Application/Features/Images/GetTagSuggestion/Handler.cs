@@ -2,12 +2,12 @@
 using MediatR;
 using Shared.DataTransferObjects;
 
-namespace Application.Features.Images.Queries;
+namespace Application.Features.Images.GetTagSuggestion;
 
-public class GetTagsSuggestionHandler(IRepositoryManager repositoryManager)
-    : IRequestHandler<GetTagsSuggestionQuery, List<TagsDto>>
+public class Handler(IRepositoryManager repositoryManager)
+    : IRequestHandler<Command, List<TagsDto>>
 {
-    public async Task<List<TagsDto>> Handle(GetTagsSuggestionQuery request, CancellationToken cancellationToken)
+    public async Task<List<TagsDto>> Handle(Command request, CancellationToken cancellationToken)
     {
         var tag = request.Tag;
         var tagsSuggestion = await repositoryManager.AppImage.GetTagsSuggestion(tag);

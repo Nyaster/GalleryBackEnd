@@ -16,15 +16,35 @@ public class AppImageRepository(RepositoryContext repositoryContext)
         return listAsync;
     }
 
-
-    public async Task<(List<AppImage> images, int total)> SearchImagesByTags(List<ImageTag> tags, OrderBy orderBy,
-        int page, int pageSize)
+    public async Task<(List<AppImage> images, int total)> SearchImagesByTags(
+        List<ImageTag> tags,
+        OrderBy orderBy,
+        int page,
+        int pageSize,
+        bool fanImages)
     {
-        var queryable = RepositoryContext.Images.AsQueryable();
+        if (fanImages)
+        {
+            var queryable = RepositoryContext.UserMadeImages.AsQueryable();
+            return await SearchInternal<UserMadeImage>(queryable, tags, orderBy, page, pageSize);
+        }
+        else
+        {
+            var queryable = RepositoryContext.SelebusImages.AsQueryable();
+            return await SearchInternal<SelebusImage>(queryable, tags, orderBy, page, pageSize);
+        }
+    }
 
-        queryable = tags.Count == 0
+    private async Task<(List<AppImage> images, int total)> SearchInternal<T>(
+        IQueryable<T> queryable,
+        List<ImageTag> tags,
+        OrderBy orderBy,
+        int page,
+        int pageSize) where T : AppImage
+    {
+        queryable = (tags.Count == 0
             ? IncludeStandardProperties(queryable)
-            : IncludeAndFilterByTags(queryable, tags);
+            : IncludeAndFilterByTags(queryable, tags));
 
         queryable = ApplyOrdering(queryable, orderBy);
 
@@ -32,8 +52,10 @@ public class AppImageRepository(RepositoryContext repositoryContext)
         var skip = page * pageSize;
         var images = await queryable.Skip(skip).Take(pageSize).ToListAsync();
 
-        return (images, total);
+        // Upcast to AppImage if needed for return type
+        return (images.Cast<AppImage>().ToList(), total);
     }
+
 
     public new async Task Create(AppImage image)
     {
@@ -102,14 +124,14 @@ public class AppImageRepository(RepositoryContext repositoryContext)
             .Include(x => x.Tags).Include(x => x.UploadedBy).ToListAsync();
     }
 
-    private IQueryable<AppImage> IncludeStandardProperties(IQueryable<AppImage> queryable)
-    {
+    private IQueryable<T> IncludeStandardProperties<T>(IQueryable<T> queryable) where T : AppImage
+     {
         return queryable.Include(x => x.Tags)
             .Include(x => x.UploadedBy)
             .AsQueryable();
     }
 
-    private IQueryable<AppImage> IncludeAndFilterByTags(IQueryable<AppImage> queryable, List<ImageTag> tags)
+    private IQueryable<T> IncludeAndFilterByTags<T>(IQueryable<T> queryable, List<ImageTag> tags) where T : AppImage 
     {
         var tagIds = tags.Select(t => t.Id).ToList();
 
@@ -118,7 +140,7 @@ public class AppImageRepository(RepositoryContext repositoryContext)
             .Where(image => tagIds.All(tagId => image.Tags.Any(tag => tag.Id == tagId)));
     }
 
-    private IQueryable<AppImage> ApplyOrdering(IQueryable<AppImage> queryable, OrderBy orderBy)
+    private IQueryable<T> ApplyOrdering<T>(IQueryable<T> queryable, OrderBy orderBy) where T : AppImage
     {
         return orderBy switch
         {

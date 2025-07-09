@@ -5,11 +5,11 @@ using Entities.Models;
 using MediatR;
 using Shared.DataTransferObjects;
 
-namespace Application.Features.Images.Queries;
+namespace Application.Features.Images.GetImageById;
 
-public class GetImageByIdHandler(IRepositoryManager repositoryManager, IMapper mapper) : IRequestHandler<GetImageByIdQuery, AppImageDto>
+public class Handler(IRepositoryManager repositoryManager, IMapper mapper) : IRequestHandler<Command, AppImageDto>
 {
-    public async Task<AppImageDto> Handle(GetImageByIdQuery request, CancellationToken cancellationToken)
+    public async Task<AppImageDto> Handle(Command request, CancellationToken cancellationToken)
     {
         var id = request.Id;
         var byId = await repositoryManager.AppImage.GetById(id);
