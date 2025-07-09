@@ -6,7 +6,7 @@ namespace GallerySiteBackend.Presentation;
 
 [ApiController]
 [Route("api/admin/")]
-[Authorize(Roles = "Admin")]
+[Authorize(Policy = "AdminOnly")]
 public class AdministrationController : ControllerBase
 {
     public static bool IsScraping = false;

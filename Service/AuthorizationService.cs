@@ -7,6 +7,7 @@ using Contracts;
 using Entities.Exceptions;
 using GallerySiteBackend.Models;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using Service.Contracts;
 using Service.Helpers;
@@ -17,13 +18,13 @@ namespace Service;
 public class AuthorizationService : IAuthorizationService
 {
     private readonly IConfiguration _configuration;
-    private readonly ILoggerManager _logger;
+    private readonly ILogger<AuthorizationService> _logger;
     private readonly IMapper _mapper;
     private readonly IRepositoryManager _repositoryManager;
 
 
     public AuthorizationService(IRepositoryManager repositoryManager, IConfiguration configuration,
-        ILoggerManager logger, IMapper mapper)
+        ILogger<AuthorizationService> logger, IMapper mapper)
     {
         _repositoryManager = repositoryManager;
         _configuration = configuration;

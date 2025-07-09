@@ -7,14 +7,17 @@ using AngleSharp.Html.Dom;
 using Contracts;
 using Entities.Models;
 using GallerySiteBackend.Models;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Service.Contracts;
 using Service.Helpers;
+using SixLabors.ImageSharp;
+using Configuration = AngleSharp.Configuration;
 using IConfiguration = Microsoft.Extensions.Configuration.IConfiguration;
 
 namespace Service;
 
-public class AppImageParserService(IRepositoryManager repositoryManager, IConfiguration configuration)
+public class AppImageParserService(IRepositoryManager repositoryManager, IConfiguration configuration, IOptions<ParserSettings> options)
     : IImageParserService
 {
     private const string SiteUrl = "https://lessonsinlovegame.com";
@@ -24,6 +27,7 @@ public class AppImageParserService(IRepositoryManager repositoryManager, IConfig
     private const string CookiesFilePath = "configs/cookies.json";
     private const int DefaultPageSize = 20;
     private const int DefaultCheckUpdatesPages = 5;
+    private IOptions<ParserSettings> _options = options;
 
 
     private async Task<IBrowsingContext> PrepareForScrappingAsync()
@@ -49,6 +53,7 @@ public class AppImageParserService(IRepositoryManager repositoryManager, IConfig
         var numberOfPagesToScrap = GetNumberOfPages(document);
         await ExtractAndHandleContent(context, numberOfPagesToScrap);
     }
+
     private async Task ExtractAndHandleContent(IBrowsingContext context, int numberOfPagesToScrap)
     {
         var extractedImages = await ExtractImagesAndTagsAsync(context, numberOfPagesToScrap, RequestsUrl);
@@ -58,7 +63,7 @@ public class AppImageParserService(IRepositoryManager repositoryManager, IConfig
 
         await CheckAndHandleNewTagsOnImages(extractedImages, imagesInDb);
         var removeNoneYet = await repositoryManager.AppImage.FindImageByMediaId(extractedImages, true);
-        var tagToDelete = removeNoneYet.SelectMany(x=>x.Tags).FirstOrDefault(x=>x.Name=="none yet");
+        var tagToDelete = removeNoneYet.SelectMany(x => x.Tags).FirstOrDefault(x => x.Name == "none yet");
         removeNoneYet.FindAll(x => x.Tags.Any(y => y.Name == "none yet") && x.Tags.Count != 1).ToList()
             .ForEach(x => x.Tags.Remove(tagToDelete));
         await repositoryManager.Save();
@@ -93,7 +98,7 @@ public class AppImageParserService(IRepositoryManager repositoryManager, IConfig
         var distinctBy = patchedImages.SelectMany(x => x.Tags).DistinctBy(x => x.Name.Trim().ToLower()).ToList();
         var tagsFromDb = await SaveNewTagsToDb(distinctBy);
         ReplaceTagsInImagesFromDb(tagsFromDb, patchedImages);
-        await repositoryManager.AppImage.UpdateImagesAsync(patchedImages);
+        repositoryManager.AppImage.UpdateImages(patchedImages);
         await repositoryManager.Save();
     }
 
@@ -108,6 +113,12 @@ public class AppImageParserService(IRepositoryManager repositoryManager, IConfig
         if (newImages.Any()) await ProcessNewImages(context, newImages);
     }
 
+    private (int Width, int Height) GetImageDimensionsAsync(string imagePath)
+    {
+        using var image =  Image.Load(imagePath);
+        return (image.Width, image.Height);
+    }
+
     private async Task ProcessNewImages(IBrowsingContext context, List<AppImage?> newImages)
     {
         var distinctBy = newImages.SelectMany(x => x.Tags).DistinctBy(x => x.Name).ToList();
@@ -119,7 +130,7 @@ public class AppImageParserService(IRepositoryManager repositoryManager, IConfig
         var byLoginAsync = await repositoryManager.AppUser.GetByLoginAsync("admin", false);
         images.AsParallel().ForAll(x =>
         {
-            var (width, height) = ImageHelpers.GetImageDimensions(x.PathToFileOnDisc);
+            var (width, height) = GetImageDimensionsAsync(x.PathToFileOnDisc);
             x.Width = width;
             x.Height = height;
             x.UploadedById = byLoginAsync!.Id;
@@ -316,7 +327,7 @@ public class AppImageParserService(IRepositoryManager repositoryManager, IConfig
             Name = x.Trim(),
             CreatDateTime = DateTime.Now.ToUniversalTime()
         }).ToList();
-        var appImage = new AppImage
+        var appImage = new SelebusImage()
         {
             MediaId = mediaId,
             Tags = tags,
@@ -342,8 +353,8 @@ public class AppImageParserService(IRepositoryManager repositoryManager, IConfig
         var htmlFormElement = openAsync.Forms.FirstOrDefault();
         var dictionary = new Dictionary<string, string>
         {
-            { "loginModel.Username", configuration["ParserLogin"] },
-            { "loginModel.Password", configuration["ParserPassword"] }
+            { "loginModel.Username", _options.Value.ParserLogin },
+            { "loginModel.Password", _options.Value.ParserPassword }
         };
         var formElement = htmlFormElement.SetValues(dictionary);
         var submitAsync = await formElement.SubmitAsync();

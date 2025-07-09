@@ -4,7 +4,7 @@ using SixLabors.ImageSharp.Formats.Jpeg;
 using SixLabors.ImageSharp.Processing;
 
 namespace Service.Helpers;
-
+//todo: Remowe this shit later
 public static class ImageHelpers
 {
     public static async Task<(int Width, int Height)> GetImageDimensionsAsync(string imagePath)

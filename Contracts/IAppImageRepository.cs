@@ -8,7 +8,7 @@ public interface IAppImageRepository
     public Task<List<ImageTag?>> GetTagsByNames(IEnumerable<string> tags);
 
     public Task<(List<AppImage> images, int total)> SearchImagesByTags(List<ImageTag> tags, OrderBy orderBy,
-        int page, int pageSize);
+        int page, int pageSize,bool fanImages);
 
     public Task Create(AppImage image);
     public Task<AppImage?> GetById(int id);
@@ -19,8 +19,8 @@ public interface IAppImageRepository
     Task AddImagesAsync(List<AppImage> list);
     Task<List<ImageTag>> GetTagsSuggestion(string tags);
     public Task<List<AppImage>> GetNotApprovedImagesAsync();
-    public Task AttachImagesAsync(List<AppImage> images);
-    public Task UpdateImagesAsync(List<AppImage> images);
+    public void AttachImages(List<AppImage> images);
+    public void UpdateImages(List<AppImage> images);
     public Task<List<AppImage>> GetImagesByUser(int userId, bool trackChanges);
 }
 
