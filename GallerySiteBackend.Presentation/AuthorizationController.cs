@@ -12,7 +12,7 @@ namespace GallerySiteBackend.Presentation;
 public class AuthorizationController(IServiceManager serviceManager, IMediator mediator) : ControllerBase
 {
 
-
+    [AllowAnonymous]
     [HttpPost("login")]
     public async Task<IActionResult> Login(AppLoginDto loginRequest)
     {
@@ -21,7 +21,7 @@ public class AuthorizationController(IServiceManager serviceManager, IMediator m
         var result = await mediator.Send(request);
         return Ok(result);
     }
-
+    [AllowAnonymous]
     [HttpPost("register")]
     public async Task<IActionResult> Registration(CreateUserDto registrationRequest)
     {
