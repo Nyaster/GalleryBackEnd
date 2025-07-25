@@ -23,7 +23,7 @@ public class ImageEmbeddingPollingService(IServiceScopeFactory scopeFactory) : M
             var findImageByCondition = await dbImages.AppImage.FindImageByCondition(x => x.Embedding == null, false);
             var imageIdsToProcess =
                 await findImageByCondition
-                    .OrderBy(x => x.Id).Take(batchSize).Select(x => x.Id)
+                    .OrderByDescending(x => x.Id).Take(batchSize).Select(x => x.Id)
                     .ToListAsync(cancellationToken: stoppingToken);
             if (imageIdsToProcess.Count == 0)
             {

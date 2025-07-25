@@ -17,7 +17,7 @@ public class AppImageService : IAppImageService
     private readonly List<string>
         _acceptedFileTypes = [".jpg", ".jpeg", ".png", ".webp"]; //todo:Make this read from configuration
 
-    private readonly long _fileSizeLimit = 5 * 1024 * 1024; //todo: Make this read from configuration
+    private readonly long _fileSizeLimit = 20 * 1024 * 1024; //todo: Make this read from configuration
     private readonly ILogger<AppImageService> _logger;
     private readonly IMapper _mapper;
     private readonly IRepositoryManager _repositoryManager;
