@@ -6,10 +6,20 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Application.BackgroundService;
 
-public class ImageEmbeddingPollingService(IServiceScopeFactory scopeFactory) : Microsoft.Extensions.Hosting.BackgroundService
+public class ImageEmbeddingPollingService : Microsoft.Extensions.Hosting.BackgroundService
 {
-    private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly PeriodicTimer _timer = new(TimeSpan.FromMinutes(2));
+    private readonly int _batchSize = 10;
+
+    public ImageEmbeddingPollingService(IServiceScopeFactory scopeFactory)
+    {
+        var FromMinutes = Environment.GetEnvironmentVariable("GENERATE_EVERY") ?? "2";
+        var batch = Environment.GetEnvironmentVariable("GENERATE_SIZE") ?? "10";
+        _timer = new PeriodicTimer(TimeSpan.FromMinutes(int.Parse(FromMinutes)));
+        _batchSize = int.Parse(batch);
+        _scopeFactory = scopeFactory;
+    }
 
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -19,7 +29,7 @@ public class ImageEmbeddingPollingService(IServiceScopeFactory scopeFactory) : M
             await using var scope = _scopeFactory.CreateAsyncScope();
             var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
             var dbImages = scope.ServiceProvider.GetRequiredService<IRepositoryManager>();
-            const int batchSize = 10;
+            int batchSize = _batchSize;
             var findImageByCondition = await dbImages.AppImage.FindImageByCondition(x => x.Embedding == null, false);
             var imageIdsToProcess =
                 await findImageByCondition
