@@ -10,13 +10,13 @@ namespace Service;
 
 public class OnnxImageEmbeddingGenerator : IImageEmbeddingGenerator, IDisposable
 {
-    private readonly InferenceSession _session;
+    private readonly InferenceSession? _session;
     private readonly SemaphoreSlim _semaphoreSlim = new(1, 1);
-    private readonly string ModelPath;
+    private readonly string ModelPath; //todo: Make path from config
 
     public OnnxImageEmbeddingGenerator()
     {
-        ModelPath = $"{Directory.GetCurrentDirectory()}/app/model/model.onnx";
+        ModelPath = $"{Directory.GetCurrentDirectory()}/upload/model/model.onnx";
         try
         {
             var sessionOptions = new SessionOptions();
@@ -26,8 +26,7 @@ public class OnnxImageEmbeddingGenerator : IImageEmbeddingGenerator, IDisposable
         }
         catch (Exception e)
         {
-            Console.WriteLine(e);
-            throw;
+            Console.WriteLine();
         }
     }
 
