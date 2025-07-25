@@ -1,4 +1,5 @@
-﻿using Contracts;
+﻿using System.Linq.Expressions;
+using Contracts;
 using Entities.Models;
 using GallerySiteBackend.Models;
 using Microsoft.EntityFrameworkCore;
@@ -122,6 +123,12 @@ public class AppImageRepository(RepositoryContext repositoryContext)
     {
         return await FindByCondition(x => x.UploadedById == userId, trackChanges)
             .Include(x => x.Tags).Include(x => x.UploadedBy).ToListAsync();
+    }
+
+    public Task<IQueryable<AppImage>> FindImageByCondition(Expression<Func<AppImage, bool>> expression, bool trackChanges)
+    {
+        IQueryable<AppImage> findByCondition = FindByCondition(expression, trackChanges);
+        return Task.FromResult(findByCondition);
     }
 
     private IQueryable<T> IncludeStandardProperties<T>(IQueryable<T> queryable) where T : AppImage

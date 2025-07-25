@@ -1,9 +1,10 @@
-﻿using Entities.Models;
+﻿using System.Linq.Expressions;
+using Entities.Models;
 using GallerySiteBackend.Models;
 
 namespace Contracts;
 
-public interface IAppImageRepository
+public interface IAppImageRepository : IRepositoryBase<AppImage>
 {
     public Task<List<ImageTag?>> GetTagsByNames(IEnumerable<string> tags);
 
@@ -22,7 +23,8 @@ public interface IAppImageRepository
     public void AttachImages(List<AppImage> images);
     public void UpdateImages(List<AppImage> images);
     public Task<List<AppImage>> GetImagesByUser(int userId, bool trackChanges);
-}
+    public Task<IQueryable<AppImage>> FindImageByCondition(Expression<Func<AppImage, bool>> expression, bool trackChanges);
+ }
 
 public enum OrderBy
 {

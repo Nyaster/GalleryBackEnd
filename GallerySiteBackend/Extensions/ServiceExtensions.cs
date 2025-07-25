@@ -33,7 +33,7 @@ public static class ServiceExtensions
     public static void ConfigureNpsqlContext(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddDbContext<RepositoryContext>(options =>
-            options.UseNpgsql(configuration.GetConnectionString("DefaultConnection")));
+            options.UseNpgsql(configuration.GetConnectionString("DefaultConnection"), o => o.UseVector()));
     }
 
     public static void ConfigureJwtToken(this IServiceCollection services, IConfiguration configuration)
@@ -85,7 +85,9 @@ public static class ServiceExtensions
         services.AddAuthorization(options =>
         {
             options.AddPolicy("AdminOnly", policy => policy.RequireRole("Admin"));
-            options.AddPolicy("UserOnly", policy => policy.RequireAssertion(context => context.User.IsInRole("Admin") || context.User.IsInRole("User")));
+            options.AddPolicy("UserOnly",
+                policy => policy.RequireAssertion(context =>
+                    context.User.IsInRole("Admin") || context.User.IsInRole("User")));
         });
     }
 }

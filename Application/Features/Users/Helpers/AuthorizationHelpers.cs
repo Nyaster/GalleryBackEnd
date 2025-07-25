@@ -23,7 +23,7 @@ public static class AuthorizationHelpers
             jwtConfiguration.ValidIssuer,
             jwtConfiguration.ValidAudience,
             claims,
-            expires: DateTime.Now.AddMinutes(10).ToUniversalTime(),
+            expires: DateTime.Now.AddSeconds(30).ToUniversalTime(),
             signingCredentials: credentials
         );
 

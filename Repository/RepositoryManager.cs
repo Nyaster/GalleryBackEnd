@@ -1,4 +1,5 @@
 ﻿using Contracts;
+using Microsoft.EntityFrameworkCore;
 
 namespace Repository;
 
@@ -13,5 +14,10 @@ public class RepositoryManager(RepositoryContext repositoryContext) : IRepositor
     public async Task Save()
     {
         await repositoryContext.SaveChangesAsync();
+    }
+
+    public DbContext RepositoryContext()
+    {
+        return repositoryContext;
     }
 }

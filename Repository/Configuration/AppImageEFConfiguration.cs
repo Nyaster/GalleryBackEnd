@@ -19,5 +19,6 @@ public class AppImageEfConfiguration : IEntityTypeConfiguration<AppImage>
         builder.HasMany(x => x.Tags).WithMany(x => x.AppImages);
         builder.Property(x => x.PathToFileOnDisc).IsRequired();
         builder.Property(x => x.MediaId).IsRequired();
+        builder.Property(x => x.Embedding).HasMaxLength(1280).IsRequired(false);
     }
 }

@@ -1,4 +1,5 @@
 using System.Text;
+using Application.BackgroundService;
 using Contracts;
 using GallerySiteBackend.Configuration;
 using GallerySiteBackend.Extensions;
@@ -8,6 +9,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Service;
+using Service.Contracts;
 
 namespace GallerySiteBackend;
 
@@ -29,6 +31,8 @@ public class Program
         builder.Services.ConfigureLoggerService();
         builder.Services.ConfigureRepositoryManager();
         builder.Services.ConfigureServicesInjection();
+        builder.Services.AddSingleton<IImageEmbeddingGenerator, OnnxImageEmbeddingGenerator>();
+        builder.Services.AddHostedService<ImageEmbeddingPollingService>();
         // Add services to the container.
         builder.Services.AddAutoMapper(typeof(Program));
         builder.Services.AddControllers()

@@ -19,7 +19,11 @@ public class RepositoryContextFactory : IDesignTimeDbContextFactory<RepositoryCo
         var builder =
             new DbContextOptionsBuilder<RepositoryContext>().UseNpgsql(
                 configuration.GetConnectionString("DefaultConnection"),
-                b => b.MigrationsAssembly("GallerySiteBackend"));
+                b =>
+                {
+                    b.MigrationsAssembly("GallerySiteBackend");
+                    b.UseVector();
+                });
 
 
         return new RepositoryContext(builder.Options);

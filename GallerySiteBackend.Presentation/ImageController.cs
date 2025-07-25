@@ -22,6 +22,7 @@ public class ImageController(IServiceManager serviceManager, IMediator mediator)
         {
             return Unauthorized();
         }
+
         var uploadImageAsync = await serviceManager.AppImageService.UploadImageAsync(request, userClaim.Value);
         return CreatedAtRoute("GetImageById", new { id = uploadImageAsync.Id }, uploadImageAsync);
     }
@@ -45,22 +46,32 @@ public class ImageController(IServiceManager serviceManager, IMediator mediator)
     }
 
     [Authorize(Roles = "User,Admin")]
+    [HttpGet("{id:int}/recommendation", Name = "GetImageRecommendationById")]
+    public async Task<IActionResult> GetImageRecommendation(int id)
+    {
+        var request = new Application.Features.Images.GetImageRecommendation.Command(id);
+        var result = await mediator.Send(request);
+        return Ok(result);
+    }
+
+    [Authorize(Roles = "User,Admin")]
     [HttpGet("/api/images/search")]
     public async Task<IActionResult> GetOfficialImagesBySearch([FromQuery] List<string> tags, string orderBy, int page,
         int pageSize)
     {
         var searchImageDto = new SearchImageDto(tags, orderBy, page, pageSize, false);
-        var request = new Command(searchImageDto); 
+        var request = new Command(searchImageDto);
         var result = await mediator.Send(request);
         return Ok(result);
     }
+
     [Authorize(Roles = "User,Admin")]
     [HttpGet("/api/fan/search")]
     public async Task<IActionResult> GetUserMadeImagesBySearch([FromQuery] List<string> tags, string orderBy, int page,
         int pageSize)
     {
         var searchImageDto = new SearchImageDto(tags, orderBy, page, pageSize, true);
-        var request = new Command(searchImageDto); 
+        var request = new Command(searchImageDto);
         var result = await mediator.Send(request);
         return Ok(result);
     }

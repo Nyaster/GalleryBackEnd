@@ -1,4 +1,6 @@
-﻿using GallerySiteBackend.Models;
+﻿using System.ComponentModel.DataAnnotations.Schema;
+using System.Numerics;
+using GallerySiteBackend.Models;
 
 namespace Entities.Models;
 
@@ -19,4 +21,5 @@ public abstract class AppImage
     public required string PathToFileOnDisc { get; set; }
     public int Width { get; set; }
     public int Height { get; set; }
+    public Pgvector.Vector Embedding { get; set; }
 }
