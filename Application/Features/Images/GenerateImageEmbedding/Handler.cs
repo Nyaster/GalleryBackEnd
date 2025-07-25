@@ -28,16 +28,16 @@ public class Handler(IRepositoryManager repositoryManager, IImageEmbeddingGenera
             await using var stream = new FileStream(image.PathToFileOnDisc, FileMode.Open, FileAccess.Read);
             var embeddingVector = await _embeddingGenerator.GenerateEmbeddingAsync(stream, cancellationToken);
             image.Embedding = embeddingVector;
-            
         }
         catch (Exception e)
         {
-            Console.WriteLine(e);
+            Console.WriteLine($"Error happened in image {image.Id}: {e.Message}");
+            image.IsHidden = true;
+            
         }
         finally
         {
             await _repositoryManager.Save();
         }
-       
     }
 }

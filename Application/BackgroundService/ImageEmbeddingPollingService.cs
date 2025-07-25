@@ -32,7 +32,7 @@ public class ImageEmbeddingPollingService : Microsoft.Extensions.Hosting.Backgro
             int batchSize = _batchSize;
             var findImageByCondition = await dbImages.AppImage.FindImageByCondition(x => x.Embedding == null, false);
             var imageIdsToProcess =
-                await findImageByCondition
+                await findImageByCondition.Where(x=>x.IsHidden == false)
                     .OrderByDescending(x => x.Id).Take(batchSize).Select(x => x.Id)
                     .ToListAsync(cancellationToken: stoppingToken);
             if (imageIdsToProcess.Count == 0)
