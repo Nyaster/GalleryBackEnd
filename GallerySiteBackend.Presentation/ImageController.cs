@@ -38,6 +38,7 @@ public class ImageController(IServiceManager serviceManager, IMediator mediator)
 
     [Authorize(Roles = "User,Admin")]
     [HttpGet("{id:int}/content", Name = "GetImageFileById")]
+    [ResponseCache(Duration = 3600, VaryByQueryKeys = ["asJpeg"])]
     public async Task<IActionResult> GetImageById(int id, bool asJpeg = false)
     {
         var request = new Application.Features.Images.GetImageContent.Command(id, asJpeg);

@@ -18,6 +18,7 @@ public class Program
     public static void Main(string[] args)
     {
         var builder = WebApplication.CreateBuilder(args);
+        builder.Services.AddResponseCaching();
         IConfiguration configuration = new ConfigurationBuilder()
             .AddJsonFile("secrets.json", true, true).Build();
 
@@ -89,6 +90,7 @@ public class Program
         }
 
         app.UseCors("CorsPolicy");
+        app.UseResponseCaching();
         app.UseAuthentication();
         app.UseAuthorization();
         app.UseHttpsRedirection();
