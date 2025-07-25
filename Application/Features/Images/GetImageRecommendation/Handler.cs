@@ -16,8 +16,8 @@ public class Handler(IRepositoryManager repositoryManager, IMapper mapper) : IRe
     {
         var requestId = request.id;
         var image = await RepositoryManager.AppImage.GetById(requestId);
-        var listAsync = await RepositoryManager.AppImage.FindAll(false)
-            .OrderBy(x => x.Embedding!.L2Distance(image!.Embedding)).Take(20).ToListAsync(cancellationToken: cancellationToken);
+        var listAsync = await RepositoryManager.AppImage.FindAll(false).Where(x => x.Id != requestId)
+            .OrderBy(x => x.Embedding!.L2Distance(image!.Embedding)).Take(20).ToListAsync(cancellationToken: cancellationToken); ;
         return listAsync.Select(mapper.Map<AppImage, AppImageDto>).ToList();
     }
 }
