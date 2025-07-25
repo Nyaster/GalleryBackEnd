@@ -42,7 +42,7 @@ public class OnnxImageEmbeddingGenerator : IImageEmbeddingGenerator, IDisposable
                     Size = new Size(512, 512),
                     Mode = ResizeMode.Pad
                 }));
-            var imageTensor = new DenseTensor<float>(new[] { 1, 3, 512, 512 });
+            var imageTensor = new DenseTensor<float>([1, 3, 512, 512]);
             image.ProcessPixelRows(accessor =>
             {
                 for (var y = 0; y < accessor.Height; y++)

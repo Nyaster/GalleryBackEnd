@@ -22,9 +22,22 @@ public class Handler(IRepositoryManager repositoryManager, IImageEmbeddingGenera
         {
             return;
         }
-        await using var stream = new FileStream(image.PathToFileOnDisc, FileMode.Open, FileAccess.Read);
-        var embeddingVector = await _embeddingGenerator.GenerateEmbeddingAsync(stream, cancellationToken);
-        image.Embedding = embeddingVector;
-        await _repositoryManager.Save();
+
+        try
+        {
+            await using var stream = new FileStream(image.PathToFileOnDisc, FileMode.Open, FileAccess.Read);
+            var embeddingVector = await _embeddingGenerator.GenerateEmbeddingAsync(stream, cancellationToken);
+            image.Embedding = embeddingVector;
+            
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine(e);
+        }
+        finally
+        {
+            await _repositoryManager.Save();
+        }
+       
     }
 }
