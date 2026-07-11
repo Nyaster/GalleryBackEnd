@@ -1,81 +1,77 @@
-﻿using Microsoft.ML.OnnxRuntime;
+using Microsoft.Extensions.Options;
+using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 using Pgvector;
 using Service.Contracts;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.PixelFormats;
-using SixLabors.ImageSharp.Processing;
+using SkiaSharp;
 
 namespace Service;
 
-public class OnnxImageEmbeddingGenerator : IImageEmbeddingGenerator, IDisposable
+public sealed class OnnxImageEmbeddingGenerator : IImageEmbeddingGenerator, IDisposable
 {
-    private readonly InferenceSession? _session;
-    private readonly SemaphoreSlim _semaphoreSlim = new(1, 1);
-    private readonly string ModelPath; //todo: Make path from config
+    private readonly InferenceSession _session;
+    private readonly SemaphoreSlim _gate = new(1, 1);
 
-    public OnnxImageEmbeddingGenerator()
+    public OnnxImageEmbeddingGenerator(IOptions<EmbeddingOptions> options)
     {
-        ModelPath = $"{Directory.GetCurrentDirectory()}/upload/model/model.onnx";
-        try
+        var modelPath = Path.GetFullPath(options.Value.ModelPath);
+        if (!File.Exists(modelPath))
+            throw new InvalidOperationException($"Embedding model was not found at '{modelPath}'.");
+        _session = new InferenceSession(modelPath, new SessionOptions
         {
-            var sessionOptions = new SessionOptions();
-            sessionOptions.GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL;
-            sessionOptions.ExecutionMode = ExecutionMode.ORT_SEQUENTIAL;
-            _session = new InferenceSession(ModelPath, sessionOptions);
-        }
-        catch (Exception e)
-        {
-            Console.WriteLine();
-        }
+            GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL,
+            ExecutionMode = ExecutionMode.ORT_SEQUENTIAL
+        });
     }
 
     public async Task<Vector> GenerateEmbeddingAsync(Stream imageStream, CancellationToken cancellationToken)
     {
-        await _semaphoreSlim.WaitAsync(cancellationToken);
+        await _gate.WaitAsync(cancellationToken);
         try
         {
-            using var image = await Image.LoadAsync<Rgb24>(imageStream, cancellationToken);
-            image.Mutate(x =>
-                x.Resize(new ResizeOptions()
-                {
-                    Size = new Size(512, 512),
-                    Mode = ResizeMode.Pad
-                }));
-            var imageTensor = new DenseTensor<float>([1, 3, 512, 512]);
-            image.ProcessPixelRows(accessor =>
+            using var source = SKBitmap.Decode(imageStream) ?? throw new InvalidOperationException("Image cannot be decoded for embedding.");
+            using var canvasBitmap = new SKBitmap(512, 512, SKColorType.Rgba8888, SKAlphaType.Opaque);
+            using (var canvas = new SKCanvas(canvasBitmap))
             {
-                for (var y = 0; y < accessor.Height; y++)
-                {
-                    var pixelSpan = accessor.GetRowSpan(y);
-                    for (var x = 0; x < accessor.Width; x++)
-                    {
-                        imageTensor[0, 0, y, x] = pixelSpan[x].R / 255f;
-                        imageTensor[0, 1, y, x] = pixelSpan[x].G / 255f;
-                        imageTensor[0, 2, y, x] = pixelSpan[x].B / 255f;
-                    }
-                }
-            });
-            using var inputOrtValue = OrtValue.CreateTensorValueFromMemory(OrtMemoryInfo.DefaultInstance,
-                imageTensor.Buffer,
+                canvas.Clear(SKColors.Black);
+                var scale = Math.Min(512f / source.Width, 512f / source.Height);
+                var width = source.Width * scale;
+                var height = source.Height * scale;
+                canvas.DrawBitmap(source, new SKRect((512 - width) / 2, (512 - height) / 2,
+                    (512 + width) / 2, (512 + height) / 2),
+                    new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.None));
+            }
+
+            var tensor = new DenseTensor<float>([1, 3, 512, 512]);
+            for (var y = 0; y < 512; y++)
+            for (var x = 0; x < 512; x++)
+            {
+                var pixel = canvasBitmap.GetPixel(x, y);
+                tensor[0, 0, y, x] = pixel.Red / 255f;
+                tensor[0, 1, y, x] = pixel.Green / 255f;
+                tensor[0, 2, y, x] = pixel.Blue / 255f;
+            }
+
+            using var input = OrtValue.CreateTensorValueFromMemory(OrtMemoryInfo.DefaultInstance, tensor.Buffer,
                 [1, 3, 512, 512]);
-            var inputs = new Dictionary<string, OrtValue>
+            using var results = _session.Run(new RunOptions(), new Dictionary<string, OrtValue>
             {
-                { "input", inputOrtValue }
-            };
-            using var results = _session.Run(new RunOptions(), inputs, _session.OutputNames);
-            var embedding = results[0].GetTensorDataAsSpan<float>().ToArray();
-            return new Vector(embedding);
+                ["input"] = input
+            }, _session.OutputNames);
+            var result = results[0].GetTensorDataAsSpan<float>().ToArray();
+            if (result.Length != 1280)
+                throw new InvalidOperationException($"Embedding model returned {result.Length} values; 1280 are required.");
+            return new Vector(result);
         }
         finally
         {
-            _semaphoreSlim.Release();
+            _gate.Release();
         }
     }
 
     public void Dispose()
     {
-        _session?.Dispose();
-        _semaphoreSlim?.Dispose();
+        _session.Dispose();
+        _gate.Dispose();
     }
 }

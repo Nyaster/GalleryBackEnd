@@ -1,7 +1,10 @@
-﻿namespace Service.Contracts;
+using Entities.Models;
+
+namespace Service.Contracts;
 
 public interface IImageParserService
 {
-    public Task CheckUpdates();
-    public Task DownloadAllImages();
+    Task<ScrapeResult> RunAsync(ScrapeMode mode, CancellationToken cancellationToken = default);
 }
+
+public sealed record ScrapeResult(int ImagesDiscovered, int ImagesImported);

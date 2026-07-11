@@ -1,23 +1,22 @@
-﻿using AutoMapper;
+using Application.Helpers;
 using Contracts;
-using Entities.Models;
+using Entities.Exceptions;
 using MediatR;
-using Microsoft.EntityFrameworkCore;
-using Pgvector.EntityFrameworkCore;
+using Service.Contracts;
 using Shared.DataTransferObjects;
 
 namespace Application.Features.Images.GetImageRecommendation;
 
-public class Handler(IRepositoryManager repositoryManager, IMapper mapper) : IRequestHandler<Command, List<AppImageDto>>
+public sealed class Handler(IRepositoryManager repositories, IUserContext currentUser) : IRequestHandler<Command, List<AppImageDto>>
 {
-    public readonly IRepositoryManager RepositoryManager = repositoryManager;
-
     public async Task<List<AppImageDto>> Handle(Command request, CancellationToken cancellationToken)
     {
-        var requestId = request.id;
-        var image = await RepositoryManager.AppImage.GetById(requestId);
-        var listAsync = await RepositoryManager.AppImage.FindAll(false).Where(x => x.Id != requestId)
-            .OrderBy(x => x.Embedding!.L2Distance(image!.Embedding)).Take(20).ToListAsync(cancellationToken: cancellationToken); ;
-        return listAsync.Select(mapper.Map<AppImage, AppImageDto>).ToList();
+        var image = await repositories.AppImage.GetByIdAsync(request.Id, false, cancellationToken)
+            ?? throw new Base404ReturnException("Image not found.");
+        ImageAuthorization.EnsureReadable(image, currentUser);
+        if (image.Embedding is null)
+            throw new Base409ConflictException("Recommendations are not ready for this image.");
+        var recommendations = await repositories.AppImage.GetRecommendationsAsync(image.Id, request.Limit, cancellationToken);
+        return recommendations.Select(ImageDtoMapper.ToDto).ToList();
     }
 }

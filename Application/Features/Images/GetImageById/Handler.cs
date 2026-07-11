@@ -1,23 +1,19 @@
-﻿using AutoMapper;
+using Application.Helpers;
 using Contracts;
 using Entities.Exceptions;
-using Entities.Models;
 using MediatR;
+using Service.Contracts;
 using Shared.DataTransferObjects;
 
 namespace Application.Features.Images.GetImageById;
 
-public class Handler(IRepositoryManager repositoryManager, IMapper mapper) : IRequestHandler<Command, AppImageDto>
+public sealed class Handler(IRepositoryManager repositories, IUserContext currentUser) : IRequestHandler<Command, AppImageDto>
 {
     public async Task<AppImageDto> Handle(Command request, CancellationToken cancellationToken)
     {
-        var id = request.Id;
-        var byId = await repositoryManager.AppImage.GetById(id);
-        if (byId == null)
-        {
-            throw new Base404ReturnException($"Image with id:{id} not found");
-        }
-        var appImageDto = mapper.Map<AppImage, AppImageDto>(byId);
-        return appImageDto;
+        var image = await repositories.AppImage.GetByIdAsync(request.Id, false, cancellationToken)
+            ?? throw new Base404ReturnException("Image not found.");
+        ImageAuthorization.EnsureReadable(image, currentUser);
+        return ImageDtoMapper.ToDto(image);
     }
 }

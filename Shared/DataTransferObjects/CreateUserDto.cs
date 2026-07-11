@@ -1,5 +1,7 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 
 namespace Shared.DataTransferObjects;
 
-public record CreateUserDto([MinLength(4)] string Login, [MinLength(8)] string Password);
+public sealed record CreateUserDto(
+    [property: Required, StringLength(64, MinimumLength = 4)] string Login,
+    [property: Required, StringLength(128, MinimumLength = 12)] string Password);

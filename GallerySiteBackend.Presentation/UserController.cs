@@ -1,25 +1,16 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Service.Contracts;
+using Shared.DataTransferObjects;
 
 namespace GallerySiteBackend.Presentation;
 
-[Route("api/user")]
+[ApiController]
 [Authorize]
-public class UserController : ControllerBase
+[Route("api/users/me")]
+public sealed class UserController(IMediator mediator) : ControllerBase
 {
-    private readonly IUserService _userService;
-
-    public UserController(IUserService userService)
-    {
-        _userService = userService;
-    }
-
     [HttpGet("images")]
-    public async Task<IActionResult> GetUploadedImages()
-    {
-        var identityName = HttpContext.User.Identity?.Name;
-        var uploadedImagesAsync = await _userService.GetUploadedImagesAsync(identityName);
-        return Ok(uploadedImagesAsync);
-    }
+    public async Task<ActionResult<List<AppImageDto>>> Images(CancellationToken cancellationToken)
+        => Ok(await mediator.Send(new Application.Features.Images.GetMyImages.Command(), cancellationToken));
 }

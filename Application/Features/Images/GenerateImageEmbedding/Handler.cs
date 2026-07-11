@@ -1,43 +1,32 @@
-﻿using Contracts;
+using Contracts;
+using Entities.Models;
 using MediatR;
+using Microsoft.Extensions.Logging;
 using Service.Contracts;
 
 namespace Application.Features.Images.GenerateImageEmbedding;
 
-public class Handler(IRepositoryManager repositoryManager, IImageEmbeddingGenerator embeddingGenerator)
+public sealed class Handler(IRepositoryManager repositories, IImageStorage storage, IImageEmbeddingGenerator generator, ILogger<Handler> logger)
     : IRequestHandler<Command>
 {
-    private readonly IRepositoryManager _repositoryManager = repositoryManager;
-    private IImageEmbeddingGenerator _embeddingGenerator = embeddingGenerator;
-
-    public async Task Handle(GenerateImageEmbedding.Command request, CancellationToken cancellationToken)
+    public async Task Handle(Command request, CancellationToken cancellationToken)
     {
-        var image = await _repositoryManager.AppImage.GetById(request.imageId);
-        if (image is null)
-        {
-            return;
-        }
-
-        if (!File.Exists(image.PathToFileOnDisc))
-        {
-            return;
-        }
-
+        var image = await repositories.AppImage.GetByIdAsync(request.ImageId, true, cancellationToken);
+        if (image is null || image.EmbeddingStatus != EmbeddingStatus.Processing) return;
         try
         {
-            await using var stream = new FileStream(image.PathToFileOnDisc, FileMode.Open, FileAccess.Read);
-            var embeddingVector = await _embeddingGenerator.GenerateEmbeddingAsync(stream, cancellationToken);
-            image.Embedding = embeddingVector;
+            if (!storage.Exists(image.StorageKey)) throw new FileNotFoundException("Image file does not exist.");
+            await using var stream = await storage.OpenReadAsync(image.StorageKey, cancellationToken);
+            image.Embedding = await generator.GenerateEmbeddingAsync(stream, cancellationToken);
+            image.EmbeddingStatus = EmbeddingStatus.Ready;
+            image.EmbeddingError = null;
         }
-        catch (Exception e)
+        catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            Console.WriteLine($"Error happened in image {image.Id}: {e.Message}");
-            image.IsHidden = true;
-            
+            image.EmbeddingStatus = image.EmbeddingAttempts >= 3 ? EmbeddingStatus.Failed : EmbeddingStatus.Pending;
+            image.EmbeddingError = exception.Message[..Math.Min(exception.Message.Length, 1024)];
+            logger.LogError(exception, "Embedding generation failed for image {ImageId}", image.Id);
         }
-        finally
-        {
-            await _repositoryManager.Save();
-        }
+        await repositories.SaveAsync(cancellationToken);
     }
 }

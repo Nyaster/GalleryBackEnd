@@ -1,3 +1,3 @@
-﻿namespace Shared.DataTransferObjects;
+namespace Shared.DataTransferObjects;
 
-public record AppUserDto(int Id, string Login);
+public sealed record AppUserDto(int Id, string Login, IReadOnlyList<string> Roles);

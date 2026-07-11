@@ -1,12 +1,15 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 
 namespace Service;
 
-public class ParserSettings
+public sealed class ParserSettings
 {
-    public string ApiKey { get; set; }
-    [Required]
-    public string ParserLogin{get;set;}
-    [Required] //todo:Remowe this after debug
-    public string ParserPassword{get;set;}
+    public bool Enabled { get; init; }
+    [Required] public string SiteUrl { get; init; } = "https://lessonsinlovegame.com";
+    [Required] public string LoginUrl { get; init; } = "https://lessonsinlovegame.com/account/login/";
+    [Required] public string RequestsUrl { get; init; } = "https://lessonsinlovegame.com/galleries/requests";
+    [Required] public string ParserLogin { get; init; } = string.Empty;
+    [Required] public string ParserPassword { get; init; } = string.Empty;
+    [Range(1, 10)] public int DownloadConcurrency { get; init; } = 3;
+    [Range(1, 100)] public int IncrementalPages { get; init; } = 5;
 }

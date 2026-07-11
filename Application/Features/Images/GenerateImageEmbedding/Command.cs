@@ -1,5 +1,5 @@
-﻿using MediatR;
+using MediatR;
 
 namespace Application.Features.Images.GenerateImageEmbedding;
 
-public record Command(int imageId) : IRequest;
+public sealed record Command(int ImageId) : IRequest;

@@ -1,21 +1,18 @@
-﻿using Entities.Models;
+namespace Entities.Models;
 
-namespace GallerySiteBackend.Models;
-
-public class AppUser
+public sealed class AppUser
 {
     public int Id { get; set; }
-    public string Login { get; set; }
-    public string Password { get; set; }
-    public string Salt { get; set; }
-    public string? RefreshToken { get; set; }
-    public DateTime? RefreshTokenExp { get; set; }
-    public bool IsRefreshTokenExpired => RefreshTokenExp < DateTime.Now;
-    public List<AppUserRoles> AppUserRolesList { get; set; } = new();
-    public List<AppImage> UploadedImages { get; set; }
+    public required string Login { get; set; }
+    public required string NormalizedLogin { get; set; }
+    public required string PasswordHash { get; set; }
+    public List<AppUserRole> Roles { get; set; } = [AppUserRole.User];
+    public List<AppImage> UploadedImages { get; set; } = [];
+    public List<RefreshSession> RefreshSessions { get; set; } = [];
+    public DateTimeOffset CreatedAtUtc { get; set; }
 }
 
-public enum AppUserRoles
+public enum AppUserRole
 {
     Admin,
     Moderator,

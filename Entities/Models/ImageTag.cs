@@ -1,15 +1,10 @@
-﻿using Entities.Models;
+namespace Entities.Models;
 
-namespace GallerySiteBackend.Models;
-
-public class ImageTag
+public sealed class ImageTag
 {
     public int Id { get; set; }
-    public string Name { get; set; }
-    public bool IsDeleted { get; set; }
-    public DateTime CreatDateTime { get; set; }
-    public AppUser CreatedBy { get; set; }
-    public int CreatedById { get; set; }
-    public int AppImageTagCount { get; set; }
-    public List<AppImage> AppImages { get; set; } = new();
+    public required string Name { get; set; }
+    public required string NormalizedName { get; set; }
+    public DateTimeOffset CreatedAtUtc { get; set; }
+    public List<AppImage> AppImages { get; set; } = [];
 }

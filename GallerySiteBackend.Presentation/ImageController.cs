@@ -1,87 +1,49 @@
-﻿using System.Security.Claims;
-using Application.Features.Images.GetImageBySearch;
+using Application.Features.Images.GetImageContent;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Service.Contracts;
+using Microsoft.AspNetCore.RateLimiting;
 using Shared.DataTransferObjects;
 
 namespace GallerySiteBackend.Presentation;
 
 [ApiController]
-[Route("/api/images")]
-public class ImageController(IServiceManager serviceManager, IMediator mediator) : ControllerBase
+[Authorize]
+[Route("api/images")]
+public sealed class ImageController(IMediator mediator) : ControllerBase
 {
-    [Authorize(Roles = "User,Admin")]
     [HttpPost]
-    public async Task<IActionResult> Upload([FromForm] AppImageCreationDto request)
+    [EnableRateLimiting("upload")]
+    [Consumes("multipart/form-data")]
+    [ProducesResponseType<AppImageDto>(StatusCodes.Status201Created)]
+    public async Task<ActionResult<AppImageDto>> Upload([FromForm] AppImageCreationDto request, CancellationToken cancellationToken)
     {
-        var userClaim = HttpContext.User.Claims.FirstOrDefault(x => x.Type == ClaimTypes.Name);
-        if (userClaim == null)
-        {
-            return Unauthorized();
-        }
-
-        var uploadImageAsync = await serviceManager.AppImageService.UploadImageAsync(request, userClaim.Value);
-        return CreatedAtRoute("GetImageById", new { id = uploadImageAsync.Id }, uploadImageAsync);
+        var image = await mediator.Send(new Application.Features.Images.UploadImage.Command(request), cancellationToken);
+        return CreatedAtRoute("GetImage", new { id = image.Id }, image);
     }
 
-    [Authorize(Roles = "User,Admin")]
-    [HttpGet("{id:int}", Name = "GetImageById")]
-    public async Task<IActionResult> GetImageById(int id)
+    [HttpGet("{id:int}", Name = "GetImage")]
+    public async Task<ActionResult<AppImageDto>> Get(int id, CancellationToken cancellationToken)
+        => Ok(await mediator.Send(new Application.Features.Images.GetImageById.Command(id), cancellationToken));
+
+    [HttpGet("{id:int}/content")]
+    public async Task<IActionResult> GetContent(int id, [FromQuery] string format = "original", CancellationToken cancellationToken = default)
     {
-        var request = new Application.Features.Images.GetImageById.Command(id);
-        var result = await mediator.Send(request);
-        return Ok(result);
+        if (!string.Equals(format, "original", StringComparison.OrdinalIgnoreCase) && !string.Equals(format, "jpeg", StringComparison.OrdinalIgnoreCase))
+            return BadRequest("format must be 'original' or 'jpeg'.");
+        var content = await mediator.Send(new Command(id, string.Equals(format, "jpeg", StringComparison.OrdinalIgnoreCase)), cancellationToken);
+        Response.Headers.CacheControl = "private, max-age=3600";
+        return File(content.Stream, content.ContentType);
     }
 
-    [Authorize(Roles = "User,Admin")]
-    [HttpGet("{id:int}/content", Name = "GetImageFileById")]
-    [ResponseCache(Duration = 3600, VaryByQueryKeys = ["asJpeg"])]
-    public async Task<IActionResult> GetImageById(int id, bool asJpeg = false)
-    {
-        var request = new Application.Features.Images.GetImageContent.Command(id, asJpeg);
-        var result = await mediator.Send(request);
-        return result;
-    }
+    [HttpGet]
+    public async Task<ActionResult<PageableImagesDto>> Search([FromQuery] List<string>? tags, [FromQuery] ImageKind kind = ImageKind.All,
+        [FromQuery] ImageSort sort = ImageSort.Newest, [FromQuery] int page = 1, [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
+        => Ok(await mediator.Send(new Application.Features.Images.GetImageBySearch.Command(new SearchImageDto(tags, kind, sort, page, pageSize)), cancellationToken));
 
-    [Authorize(Roles = "User,Admin")]
-    [HttpGet("{id:int}/recommendation", Name = "GetImageRecommendationById")]
-    public async Task<IActionResult> GetImageRecommendation(int id)
-    {
-        var request = new Application.Features.Images.GetImageRecommendation.Command(id);
-        var result = await mediator.Send(request);
-        return Ok(result);
-    }
-
-    [Authorize(Roles = "User,Admin")]
-    [HttpGet("/api/images/search")]
-    public async Task<IActionResult> GetOfficialImagesBySearch([FromQuery] List<string> tags, string orderBy, int page,
-        int pageSize)
-    {
-        var searchImageDto = new SearchImageDto(tags, orderBy, page, pageSize, false);
-        var request = new Command(searchImageDto);
-        var result = await mediator.Send(request);
-        return Ok(result);
-    }
-
-    [Authorize(Roles = "User,Admin")]
-    [HttpGet("/api/fan/search")]
-    public async Task<IActionResult> GetUserMadeImagesBySearch([FromQuery] List<string> tags, string orderBy, int page,
-        int pageSize)
-    {
-        var searchImageDto = new SearchImageDto(tags, orderBy, page, pageSize, true);
-        var request = new Command(searchImageDto);
-        var result = await mediator.Send(request);
-        return Ok(result);
-    }
-
-    [Authorize(Roles = "User,Admin")]
-    [HttpGet("/api/tags/suggestions")]
-    public async Task<IActionResult> GetTagsSuggestions(string tag)
-    {
-        var request = new Application.Features.Images.GetTagSuggestion.Command(tag);
-        var result = await mediator.Send(request);
-        return Ok(result);
-    }
+    [HttpGet("{id:int}/recommendations")]
+    public async Task<ActionResult<List<AppImageDto>>> Recommendations(int id, [FromQuery] int limit = 20, CancellationToken cancellationToken = default)
+        => Ok(await mediator.Send(new Application.Features.Images.GetImageRecommendation.Command(id, limit), cancellationToken));
 }

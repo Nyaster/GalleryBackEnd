@@ -1,6 +1,5 @@
-﻿using MediatR;
-using Microsoft.AspNetCore.Mvc;
+using MediatR;
 
 namespace Application.Features.Images.GetImageContent;
 
-public record Command(int Id, bool AsJpeg) : IRequest<IActionResult>;
+public sealed record Command(int Id, bool AsJpeg) : IRequest<ImageContent>;

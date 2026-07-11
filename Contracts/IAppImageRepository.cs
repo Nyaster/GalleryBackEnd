@@ -1,33 +1,20 @@
-﻿using System.Linq.Expressions;
 using Entities.Models;
-using GallerySiteBackend.Models;
+using Shared.DataTransferObjects;
 
 namespace Contracts;
 
-public interface IAppImageRepository : IRepositoryBase<AppImage>
+public interface IAppImageRepository
 {
-    public Task<List<ImageTag?>> GetTagsByNames(IEnumerable<string> tags);
-
-    public Task<(List<AppImage> images, int total)> SearchImagesByTags(List<ImageTag> tags, OrderBy orderBy,
-        int page, int pageSize,bool fanImages);
-
-    public Task Create(AppImage image);
-    public Task<AppImage?> GetById(int id);
-    public void AttachTags(List<ImageTag> tags);
-    Task<List<ImageTag>> GetExistingTagsFromDb(List<string> tagsList);
-    Task AddTags(List<ImageTag> newTags);
-    Task<List<AppImage>> FindImageByMediaId(List<AppImage?> images, bool trackChanges);
-    Task AddImagesAsync(List<AppImage> list);
-    Task<List<ImageTag>> GetTagsSuggestion(string tags);
-    public Task<List<AppImage>> GetNotApprovedImagesAsync();
-    public void AttachImages(List<AppImage> images);
-    public void UpdateImages(List<AppImage> images);
-    public Task<List<AppImage>> GetImagesByUser(int userId, bool trackChanges);
-    public Task<IQueryable<AppImage>> FindImageByCondition(Expression<Func<AppImage, bool>> expression, bool trackChanges);
- }
-
-public enum OrderBy
-{
-    Id,
-    UploadDate
+    Task<AppImage?> GetByIdAsync(int id, bool trackChanges, CancellationToken cancellationToken = default);
+    Task<(List<AppImage> Images, int Total)> SearchAsync(SearchImageDto request, CancellationToken cancellationToken = default);
+    Task<List<AppImage>> GetUploadedByUserAsync(int userId, CancellationToken cancellationToken = default);
+    Task<List<AppImage>> GetRecommendationsAsync(int imageId, int limit, CancellationToken cancellationToken = default);
+    Task<List<AppImage>> GetPendingAsync(int page, int pageSize, CancellationToken cancellationToken = default);
+    Task<List<ImageTag>> GetByNormalizedNamesAsync(IEnumerable<string> normalizedTags, CancellationToken cancellationToken = default);
+    Task<List<ImageTag>> GetOrCreateTagsAsync(IEnumerable<string> tagNames, DateTimeOffset now, CancellationToken cancellationToken = default);
+    Task<List<ImageTag>> GetTagSuggestionsAsync(string normalizedQuery, int limit, CancellationToken cancellationToken = default);
+    Task<List<AppImage>> GetByExternalMediaIdsAsync(IEnumerable<int> mediaIds, bool trackChanges, CancellationToken cancellationToken = default);
+    Task AddAsync(AppImage image, CancellationToken cancellationToken = default);
+    Task AddRangeAsync(IEnumerable<AppImage> images, CancellationToken cancellationToken = default);
+    Task<List<int>> ClaimPendingEmbeddingsAsync(int batchSize, DateTimeOffset now, CancellationToken cancellationToken = default);
 }

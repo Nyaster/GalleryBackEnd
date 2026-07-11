@@ -1,10 +1,15 @@
-﻿namespace Shared.DataTransferObjects;
+using Entities.Models;
 
-public record AppImageDto(
+namespace Shared.DataTransferObjects;
+
+public sealed record AppImageDto(
     int Id,
-    string UploadedBy,
-    DateTime UploadDate,
-    string UrlToImage,
-    string[] Tags,
+    ImageSource Source,
+    string? UploadedBy,
+    DateTimeOffset UploadedAtUtc,
+    string ContentUrl,
+    IReadOnlyList<string> Tags,
     int Width,
-    int Height);
+    int Height,
+    ImageVisibility Visibility,
+    ModerationStatus ModerationStatus);

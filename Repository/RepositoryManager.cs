@@ -1,23 +1,36 @@
-﻿using Contracts;
+using Contracts;
+using Entities.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace Repository;
 
-public class RepositoryManager(RepositoryContext repositoryContext) : IRepositoryManager
+public sealed class RepositoryManager(RepositoryContext context) : IRepositoryManager
 {
-    private readonly Lazy<IAppImageRepository> _appImageRepository = new(() => new AppImageRepository(repositoryContext));
-    private readonly Lazy<IAppUserRepository> _appUserRepository = new(() => new AppUserRepository(repositoryContext));
+    private readonly Lazy<IAppImageRepository> _images = new(() => new AppImageRepository(context));
+    private readonly Lazy<IAppUserRepository> _users = new(() => new AppUserRepository(context));
 
-    public IAppUserRepository AppUser => _appUserRepository.Value;
-    public IAppImageRepository AppImage => _appImageRepository.Value;
+    public IAppUserRepository AppUser => _users.Value;
+    public IAppImageRepository AppImage => _images.Value;
 
-    public async Task Save()
+    public Task<ScrapeRun?> GetScrapeRunAsync(Guid id, bool trackChanges, CancellationToken cancellationToken = default)
     {
-        await repositoryContext.SaveChangesAsync();
+        var query = trackChanges ? context.ScrapeRuns : context.ScrapeRuns.AsNoTracking();
+        return query.SingleOrDefaultAsync(run => run.Id == id, cancellationToken);
     }
 
-    public DbContext RepositoryContext()
+    public async Task<ScrapeRun?> ClaimNextScrapeRunAsync(DateTimeOffset now, CancellationToken cancellationToken = default)
     {
-        return repositoryContext;
+        var run = await context.ScrapeRuns.Where(candidate => candidate.Status == BackgroundJobStatus.Queued)
+            .OrderBy(candidate => candidate.CreatedAtUtc).FirstOrDefaultAsync(cancellationToken);
+        if (run is null) return null;
+        run.Status = BackgroundJobStatus.Running;
+        run.StartedAtUtc = now;
+        await context.SaveChangesAsync(cancellationToken);
+        return run;
     }
+
+    public Task AddScrapeRunAsync(ScrapeRun run, CancellationToken cancellationToken = default)
+        => context.ScrapeRuns.AddAsync(run, cancellationToken).AsTask();
+
+    public Task SaveAsync(CancellationToken cancellationToken = default) => context.SaveChangesAsync(cancellationToken);
 }

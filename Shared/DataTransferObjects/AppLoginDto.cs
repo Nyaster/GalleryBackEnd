@@ -1,5 +1,7 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 
 namespace Shared.DataTransferObjects;
 
-public record AppLoginDto([Required] string Login, [Required] string Password);
+public sealed record AppLoginDto(
+    [property: Required, StringLength(64, MinimumLength = 4)] string Login,
+    [property: Required, StringLength(128, MinimumLength = 8)] string Password);

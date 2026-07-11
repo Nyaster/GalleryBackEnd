@@ -1,9 +1,6 @@
-﻿using MediatR;
-using Microsoft.AspNetCore.Mvc;
+using MediatR;
+using Shared.DataTransferObjects;
 
 namespace Application.Features.Images.UploadImage;
 
-public class Command : IRequest<IActionResult>
-{
-    
-}
+public sealed record Command(AppImageCreationDto Request) : IRequest<AppImageDto>;

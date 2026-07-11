@@ -1,161 +1,131 @@
-﻿using System.Linq.Expressions;
 using Contracts;
 using Entities.Models;
-using GallerySiteBackend.Models;
 using Microsoft.EntityFrameworkCore;
+using Pgvector.EntityFrameworkCore;
+using Shared.DataTransferObjects;
 
 namespace Repository;
 
-public class AppImageRepository(RepositoryContext repositoryContext)
-    : RepositoryBase<AppImage>(repositoryContext), IAppImageRepository
+public sealed class AppImageRepository(RepositoryContext context) : IAppImageRepository
 {
-    public async Task<List<ImageTag?>> GetTagsByNames(IEnumerable<string> tags)
-    {
-        var listAsync = await RepositoryContext.Tags.AsNoTracking().Where(x => tags.Contains(x.Name.ToLower()))
-            .ToListAsync();
+    public Task<AppImage?> GetByIdAsync(int id, bool trackChanges, CancellationToken cancellationToken = default)
+        => ImageQuery(trackChanges).SingleOrDefaultAsync(image => image.Id == id, cancellationToken);
 
-        return listAsync;
-    }
-
-    public async Task<(List<AppImage> images, int total)> SearchImagesByTags(
-        List<ImageTag> tags,
-        OrderBy orderBy,
-        int page,
-        int pageSize,
-        bool fanImages)
+    public async Task<(List<AppImage> Images, int Total)> SearchAsync(SearchImageDto request, CancellationToken cancellationToken = default)
     {
-        if (fanImages)
+        var page = Math.Max(request.Page, 1);
+        var pageSize = Math.Clamp(request.PageSize, 1, 50);
+        var query = ImageQuery(false).Where(IsDiscoverable());
+        query = request.Kind switch
         {
-            var queryable = RepositoryContext.UserMadeImages.AsQueryable();
-            return await SearchInternal<UserMadeImage>(queryable, tags, orderBy, page, pageSize);
-        }
-        else
-        {
-            var queryable = RepositoryContext.SelebusImages.AsQueryable();
-            return await SearchInternal<SelebusImage>(queryable, tags, orderBy, page, pageSize);
-        }
-    }
-
-    private async Task<(List<AppImage> images, int total)> SearchInternal<T>(
-        IQueryable<T> queryable,
-        List<ImageTag> tags,
-        OrderBy orderBy,
-        int page,
-        int pageSize) where T : AppImage
-    {
-        queryable = (tags.Count == 0
-            ? IncludeStandardProperties(queryable)
-            : IncludeAndFilterByTags(queryable, tags));
-
-        queryable = ApplyOrdering(queryable, orderBy);
-
-        var total = await queryable.CountAsync();
-        var skip = page * pageSize;
-        var images = await queryable.Skip(skip).Take(pageSize).ToListAsync();
-
-        // Upcast to AppImage if needed for return type
-        return (images.Cast<AppImage>().ToList(), total);
-    }
-
-
-    public new async Task Create(AppImage image)
-    {
-        await base.Create(image);
-    }
-
-    public async Task<AppImage?> GetById(int id)
-    {
-        return await RepositoryContext.Images.Include(x => x.Tags).FirstOrDefaultAsync(x => x.Id == id);
-    }
-
-    public void AttachTags(List<ImageTag> tags)
-    {
-        RepositoryContext.Tags.AttachRange(tags);
-    }
-
-    public async Task<List<ImageTag>> GetExistingTagsFromDb(List<string> tagsList)
-    {
-        return await RepositoryContext.Tags.Where(x => tagsList.Contains(x.Name)).ToListAsync();
-    }
-
-    public async Task AddTags(List<ImageTag> newTags)
-    {
-        await repositoryContext.Tags.AddRangeAsync(newTags);
-    }
-
-    public async Task<List<AppImage>> FindImageByMediaId(List<AppImage?> images, bool trackChanges)
-    {
-        var enumerable = images.Select(x => x.MediaId).ToList();
-        return await FindByCondition(x => enumerable.Contains(x.MediaId), trackChanges).Include(x => x.Tags)
-            .ToListAsync();
-    }
-
-    public async Task AddImagesAsync(List<AppImage> appImages)
-    {
-        await RepositoryContext.Images.AddRangeAsync(appImages);
-    }
-
-    public async Task<List<ImageTag>> GetTagsSuggestion(string tag)
-    {
-        var imageTags = await RepositoryContext.Tags.Where(x => EF.Functions.Like(x.Name, $"%{tag.ToLower()}%"))
-            .Take(50)
-            .ToListAsync();
-        return imageTags;
-    }
-
-    public async Task<List<AppImage>> GetNotApprovedImagesAsync()
-    {
-        var notApprovedImages = await FindByCondition(x => x.IsHidden == true, false).ToListAsync();
-        return notApprovedImages;
-    }
-
-    public void AttachImages(List<AppImage> images)
-    {
-        RepositoryContext.Images.AttachRange(images);
-    }
-
-    public void UpdateImages(List<AppImage> images)
-    {
-        RepositoryContext.Images.UpdateRange(images);
-    }
-
-    public async Task<List<AppImage>> GetImagesByUser(int userId, bool trackChanges)
-    {
-        return await FindByCondition(x => x.UploadedById == userId, trackChanges)
-            .Include(x => x.Tags).Include(x => x.UploadedBy).ToListAsync();
-    }
-
-    public Task<IQueryable<AppImage>> FindImageByCondition(Expression<Func<AppImage, bool>> expression, bool trackChanges)
-    {
-        IQueryable<AppImage> findByCondition = FindByCondition(expression, trackChanges);
-        return Task.FromResult(findByCondition);
-    }
-
-    private IQueryable<T> IncludeStandardProperties<T>(IQueryable<T> queryable) where T : AppImage
-     {
-        return queryable.Include(x => x.Tags)
-            .Include(x => x.UploadedBy)
-            .AsQueryable();
-    }
-
-    private IQueryable<T> IncludeAndFilterByTags<T>(IQueryable<T> queryable, List<ImageTag> tags) where T : AppImage 
-    {
-        var tagIds = tags.Select(t => t.Id).ToList();
-
-        return queryable.Include(image => image.Tags)
-            .Include(image => image.UploadedBy)
-            .Where(image => tagIds.All(tagId => image.Tags.Any(tag => tag.Id == tagId)));
-    }
-
-    private IQueryable<T> ApplyOrdering<T>(IQueryable<T> queryable, OrderBy orderBy) where T : AppImage
-    {
-        return orderBy switch
-        {
-            OrderBy.Id => queryable.OrderByDescending(a => a.MediaId).ThenBy(x => x.UploadedDate).ThenBy(x => x.Id)
-                .AsQueryable(),
-            OrderBy.UploadDate => queryable.OrderByDescending(a => a.UploadedDate).ThenBy(a => a.MediaId).ThenBy(x => x.Id)
-                .AsQueryable(),
-            _ => queryable.OrderBy(a => a.MediaId).ThenBy(x => x.UploadedDate).AsQueryable()
+            ImageKind.Official => query.Where(image => image.Source == ImageSource.Scraped),
+            ImageKind.Fan => query.Where(image => image.Source == ImageSource.UserUpload),
+            _ => query
         };
+
+        var normalizedTags = NormalizeTags(request.Tags);
+        if (normalizedTags.Count > 0)
+            query = query.Where(image => normalizedTags.All(tag => image.Tags.Any(imageTag => imageTag.NormalizedName == tag)));
+
+        query = request.Sort switch
+        {
+            ImageSort.Oldest => query.OrderBy(image => image.UploadedAtUtc).ThenBy(image => image.Id),
+            ImageSort.MediaId => query.OrderByDescending(image => image.ExternalMediaId).ThenByDescending(image => image.UploadedAtUtc),
+            _ => query.OrderByDescending(image => image.UploadedAtUtc).ThenByDescending(image => image.Id)
+        };
+        var total = await query.CountAsync(cancellationToken);
+        var images = await query.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(cancellationToken);
+        return (images, total);
     }
+
+    public Task<List<AppImage>> GetUploadedByUserAsync(int userId, CancellationToken cancellationToken = default)
+        => ImageQuery(false).Where(image => image.UploadedById == userId && image.DeletedAtUtc == null)
+            .OrderByDescending(image => image.UploadedAtUtc).ToListAsync(cancellationToken);
+
+    public async Task<List<AppImage>> GetRecommendationsAsync(int imageId, int limit, CancellationToken cancellationToken = default)
+    {
+        var source = await context.Images.AsNoTracking().SingleOrDefaultAsync(image => image.Id == imageId, cancellationToken);
+        if (source?.Embedding is null)
+            return [];
+        return await ImageQuery(false).Where(IsDiscoverable())
+            .Where(image => image.Id != imageId && image.Embedding != null)
+            .OrderBy(image => image.Embedding!.L2Distance(source.Embedding))
+            .Take(Math.Clamp(limit, 1, 50)).ToListAsync(cancellationToken);
+    }
+
+    public Task<List<AppImage>> GetPendingAsync(int page, int pageSize, CancellationToken cancellationToken = default)
+        => ImageQuery(false).Where(image => image.DeletedAtUtc == null && image.ModerationStatus == ModerationStatus.Pending)
+            .OrderBy(image => image.UploadedAtUtc).Skip(Math.Max(page - 1, 0) * Math.Clamp(pageSize, 1, 50))
+            .Take(Math.Clamp(pageSize, 1, 50)).ToListAsync(cancellationToken);
+
+    public Task<List<ImageTag>> GetByNormalizedNamesAsync(IEnumerable<string> normalizedTags, CancellationToken cancellationToken = default)
+    {
+        var names = normalizedTags.Distinct().ToArray();
+        return context.Tags.Where(tag => names.Contains(tag.NormalizedName)).ToListAsync(cancellationToken);
+    }
+
+    public async Task<List<ImageTag>> GetOrCreateTagsAsync(IEnumerable<string> tagNames, DateTimeOffset now, CancellationToken cancellationToken = default)
+    {
+        var cleaned = tagNames.Select(NormalizeTag).Where(tag => tag.Length > 0).Distinct().Take(20).ToArray();
+        var existing = await GetByNormalizedNamesAsync(cleaned, cancellationToken);
+        var known = existing.Select(tag => tag.NormalizedName).ToHashSet();
+        var newTags = cleaned.Where(tag => known.Add(tag)).Select(tag => new ImageTag
+        {
+            Name = tag,
+            NormalizedName = tag,
+            CreatedAtUtc = now
+        }).ToList();
+        if (newTags.Count > 0)
+            await context.Tags.AddRangeAsync(newTags, cancellationToken);
+        existing.AddRange(newTags);
+        return existing;
+    }
+
+    public Task<List<ImageTag>> GetTagSuggestionsAsync(string normalizedQuery, int limit, CancellationToken cancellationToken = default)
+        => context.Tags.AsNoTracking().Where(tag => tag.AppImages.Any(image => image.DeletedAtUtc == null &&
+                image.Visibility == ImageVisibility.Gallery && image.ModerationStatus == ModerationStatus.Approved))
+            .Where(tag => EF.Functions.ILike(tag.NormalizedName, $"{EscapeLike(normalizedQuery)}%", "\\"))
+            .OrderBy(tag => tag.Name).Take(Math.Clamp(limit, 1, 50)).ToListAsync(cancellationToken);
+
+    public Task<List<AppImage>> GetByExternalMediaIdsAsync(IEnumerable<int> mediaIds, bool trackChanges, CancellationToken cancellationToken = default)
+    {
+        var ids = mediaIds.Distinct().ToArray();
+        return ImageQuery(trackChanges).Where(image => image.Source == ImageSource.Scraped && image.ExternalMediaId != null && ids.Contains(image.ExternalMediaId.Value))
+            .ToListAsync(cancellationToken);
+    }
+
+    public Task AddAsync(AppImage image, CancellationToken cancellationToken = default)
+        => context.Images.AddAsync(image, cancellationToken).AsTask();
+
+    public Task AddRangeAsync(IEnumerable<AppImage> images, CancellationToken cancellationToken = default)
+        => context.Images.AddRangeAsync(images, cancellationToken);
+
+    public async Task<List<int>> ClaimPendingEmbeddingsAsync(int batchSize, DateTimeOffset now, CancellationToken cancellationToken = default)
+    {
+        var candidates = await context.Images.Where(image => image.EmbeddingStatus == EmbeddingStatus.Pending && image.DeletedAtUtc == null)
+            .OrderBy(image => image.UploadedAtUtc).Take(Math.Clamp(batchSize, 1, 50)).ToListAsync(cancellationToken);
+        foreach (var image in candidates)
+        {
+            image.EmbeddingStatus = EmbeddingStatus.Processing;
+            image.EmbeddingAttempts++;
+            image.EmbeddingError = null;
+        }
+        await context.SaveChangesAsync(cancellationToken);
+        return candidates.Select(image => image.Id).ToList();
+    }
+
+    private IQueryable<AppImage> ImageQuery(bool trackChanges)
+    {
+        var query = trackChanges ? context.Images : context.Images.AsNoTracking();
+        return query.Include(image => image.Tags).Include(image => image.UploadedBy);
+    }
+
+    private static System.Linq.Expressions.Expression<Func<AppImage, bool>> IsDiscoverable()
+        => image => image.DeletedAtUtc == null && image.Visibility == ImageVisibility.Gallery && image.ModerationStatus == ModerationStatus.Approved;
+
+    private static List<string> NormalizeTags(IReadOnlyList<string>? tags)
+        => tags?.Select(NormalizeTag).Where(tag => tag.Length > 0).Distinct().Take(20).ToList() ?? [];
+
+    private static string NormalizeTag(string value) => value.Trim().ToLowerInvariant();
+    private static string EscapeLike(string value) => value.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
 }

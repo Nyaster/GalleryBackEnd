@@ -1,30 +1,30 @@
-﻿using Contracts;
-using GallerySiteBackend.Models;
+using Contracts;
+using Entities.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace Repository;
 
-public class AppUserRepository(RepositoryContext context) : RepositoryBase<AppUser>(context), IAppUserRepository
+public sealed class AppUserRepository(RepositoryContext context) : IAppUserRepository
 {
-    public async Task<AppUser?> GetByLoginAsync(string login, bool trackChanges)
+    public Task<AppUser?> GetByNormalizedLoginAsync(string normalizedLogin, bool trackChanges, CancellationToken cancellationToken = default)
+        => QueryUsers(trackChanges).SingleOrDefaultAsync(user => user.NormalizedLogin == normalizedLogin, cancellationToken);
+
+    public Task<AppUser?> GetByIdAsync(int id, bool trackChanges, CancellationToken cancellationToken = default)
+        => QueryUsers(trackChanges).SingleOrDefaultAsync(user => user.Id == id, cancellationToken);
+
+    public Task<RefreshSession?> GetRefreshSessionAsync(byte[] tokenHash, bool trackChanges, CancellationToken cancellationToken = default)
     {
-        var appUser = await FindByCondition(x => x.Login == login, trackChanges).SingleOrDefaultAsync();
-        return appUser;
+        var query = trackChanges ? context.RefreshSessions : context.RefreshSessions.AsNoTracking();
+        return query.Include(session => session.User)
+            .SingleOrDefaultAsync(session => session.TokenHash == tokenHash, cancellationToken);
     }
 
-    public async Task<AppUser?> GetByRefreshTokenAsync(string refreshToken, bool trackChanges)
-    {
-        var appUser = await FindByCondition(x => x.RefreshToken == refreshToken, trackChanges).SingleOrDefaultAsync();
-        return appUser;
-    }
+    public Task AddAsync(AppUser user, CancellationToken cancellationToken = default)
+        => context.AppUsers.AddAsync(user, cancellationToken).AsTask();
 
-    public new void Update(AppUser user)
-    {
-        base.Update(user);
-    }
+    public Task AddRefreshSessionAsync(RefreshSession session, CancellationToken cancellationToken = default)
+        => context.RefreshSessions.AddAsync(session, cancellationToken).AsTask();
 
-    public new async Task Create(AppUser user)
-    {
-        await base.Create(user);
-    }
+    private IQueryable<AppUser> QueryUsers(bool trackChanges)
+        => trackChanges ? context.AppUsers : context.AppUsers.AsNoTracking();
 }

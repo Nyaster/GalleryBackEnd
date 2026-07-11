@@ -1,45 +1,27 @@
-﻿using Contracts;
+using Application.Helpers;
+using Contracts;
 using Entities.Exceptions;
 using MediatR;
-using Microsoft.AspNetCore.Mvc;
-using ImageHelpers = Application.Features.Images.Helpers.ImageHelpers;
+using Service.Contracts;
 
 namespace Application.Features.Images.GetImageContent;
 
-public class Handler(IRepositoryManager repository)
-    : IRequestHandler<Command, IActionResult>
+public sealed class Handler(IRepositoryManager repositories, IImageStorage storage, IImageProcessor processor, IUserContext currentUser)
+    : IRequestHandler<Command, ImageContent>
 {
-    public async Task<IActionResult> Handle(Command request, CancellationToken cancellationToken)
+    public async Task<ImageContent> Handle(Command request, CancellationToken cancellationToken)
     {
-        var id = request.Id;
-        var asJpeg = request.AsJpeg;
-        var byId = await repository.AppImage.GetById(id) ?? throw new Base404ReturnException("Image not found");
-        var filePath = byId.PathToFileOnDisc;
-        Stream fileBytes = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, 10*1024, options:FileOptions.Asynchronous | FileOptions.SequentialScan);
-        string contentType;
-        
-        if (asJpeg)
-        {
-            fileBytes = await ImageHelpers.ConvertImageToJpeg(fileBytes, cancellationToken);
-            contentType = "image/jpeg";
-        }
-        else
-        {
-            contentType = GetFileType(byId.PathToFileOnDisc);
-        }
-        return new FileStreamResult(fileBytes, contentType);
-    }
-
-    private string GetFileType(string path)
-    {
-        var extension = Path.GetExtension(path).ToLowerInvariant();
-        return extension switch
-        {
-            ".jpg" => "image/jpeg",
-            ".jpeg" => "image/jpeg",
-            ".png" => "image/png",
-            ".webp" => "image/webp",
-            _ => "application/octet-stream"
-        };
+        var image = await repositories.AppImage.GetByIdAsync(request.Id, false, cancellationToken)
+            ?? throw new Base404ReturnException("Image not found.");
+        ImageAuthorization.EnsureReadable(image, currentUser);
+        if (!storage.Exists(image.StorageKey))
+            throw new InvalidOperationException("Image data is unavailable.");
+        var stream = await storage.OpenReadAsync(image.StorageKey, cancellationToken);
+        if (!request.AsJpeg)
+            return new ImageContent(stream, image.ContentType);
+        await using (stream)
+            return new ImageContent(await processor.ConvertToJpegAsync(stream, cancellationToken), "image/jpeg");
     }
 }
+
+public sealed record ImageContent(Stream Stream, string ContentType);

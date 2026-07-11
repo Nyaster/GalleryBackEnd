@@ -1,6 +1,5 @@
-﻿using MediatR;
-using Shared.DataTransferObjects;
+using MediatR;
 
 namespace Application.Features.Users.RefreshUserToken;
 
-public record Command(AppRefreshhTokenResetDto RefreshRequest, string Token) : IRequest<JwtTokenResponse>;
+public sealed record Command(string RefreshToken) : IRequest<AuthCommandResult>;

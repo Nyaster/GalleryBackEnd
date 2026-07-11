@@ -1,16 +1,16 @@
-﻿using GallerySiteBackend.Models;
+using Entities.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace Repository.Configuration;
 
-public class ImageTagEfConfiguration : IEntityTypeConfiguration<ImageTag>
+public sealed class ImageTagEfConfiguration : IEntityTypeConfiguration<ImageTag>
 {
     public void Configure(EntityTypeBuilder<ImageTag> builder)
     {
-        builder.HasKey(x => x.Id);
-        builder.Property(x => x.IsDeleted);
-        builder.Property(x => x.CreatDateTime);
-        builder.HasOne(x => x.CreatedBy).WithMany().HasForeignKey(x => x.CreatedById);
+        builder.HasKey(tag => tag.Id);
+        builder.Property(tag => tag.Name).HasMaxLength(64).IsRequired();
+        builder.Property(tag => tag.NormalizedName).HasMaxLength(64).IsRequired();
+        builder.HasIndex(tag => tag.NormalizedName).IsUnique().HasDatabaseName("UX_ImageTags_NormalizedName");
     }
 }

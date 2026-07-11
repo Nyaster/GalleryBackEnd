@@ -1,3 +1,4 @@
-﻿namespace Shared.DataTransferObjects;
+namespace Shared.DataTransferObjects;
 
-public record AppRefreshhTokenResetDto(string RefreshToken);
+// Refresh credentials are intentionally carried only by the HttpOnly cookie.
+public sealed record AppRefreshTokenRequest;

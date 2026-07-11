@@ -9,20 +9,21 @@ public class RepositoryContextFactory : IDesignTimeDbContextFactory<RepositoryCo
     public RepositoryContext CreateDbContext(string[] args)
     {
         IConfigurationRoot configuration;
-        if (File.Exists(Directory.GetCurrentDirectory() + Path.DirectorySeparatorChar + "/secrets.json"))
+        if (File.Exists(Path.Combine(Directory.GetCurrentDirectory(), "secrets.json")))
             configuration = new ConfigurationBuilder().SetBasePath(Directory.GetCurrentDirectory())
                 .AddJsonFile("secrets.json").Build();
         else
             configuration = new ConfigurationBuilder().SetBasePath(Directory.GetCurrentDirectory())
                 .AddJsonFile("appsettings.json").Build();
 
+        var connectionString = configuration.GetConnectionString("DefaultConnection")
+            ?? "Host=localhost;Database=gallery;Username=gallery;Password=gallery";
         var builder =
             new DbContextOptionsBuilder<RepositoryContext>().UseNpgsql(
-                configuration.GetConnectionString("DefaultConnection"),
+                connectionString,
                 b =>
                 {
-                    b.MigrationsAssembly("GallerySiteBackend");
-                    b.UseVector();
+                b.UseVector();
                 });
 
 

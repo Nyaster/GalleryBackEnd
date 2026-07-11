@@ -1,382 +1,158 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Net;
-using System.Text.Json;
 using AngleSharp;
 using AngleSharp.Dom;
 using AngleSharp.Html.Dom;
 using Contracts;
 using Entities.Models;
-using GallerySiteBackend.Models;
 using Microsoft.Extensions.Options;
 using Service.Contracts;
-using SixLabors.ImageSharp;
 using Configuration = AngleSharp.Configuration;
-using IConfiguration = Microsoft.Extensions.Configuration.IConfiguration;
 
 namespace Service;
 
-public class AppImageParserService(IRepositoryManager repositoryManager, IConfiguration configuration, IOptions<ParserSettings> options)
-    : IImageParserService
+public sealed class AppImageParserService(
+    IRepositoryManager repositories,
+    IImageStorage storage,
+    IImageProcessor processor,
+    IOptions<ParserSettings> options,
+    TimeProvider clock) : IImageParserService
 {
-    private const string SiteUrl = "https://lessonsinlovegame.com";
-    private const string LoginUrl = "https://lessonsinlovegame.com/account/login/";
-    private const string RequestsUrl = "https://lessonsinlovegame.com/galleries/requests";
-    private const string GravureSetsUrl = "https://lessonsinlovegame.com/galleries/gravure-sets";
-    private const string CookiesFilePath = "configs/cookies.json";
-    private const int DefaultPageSize = 20;
-    private const int DefaultCheckUpdatesPages = 5;
-    private IOptions<ParserSettings> _options = options;
-
-
-    private async Task<IBrowsingContext> PrepareForScrappingAsync()
+    public async Task<ScrapeResult> RunAsync(ScrapeMode mode, CancellationToken cancellationToken = default)
     {
-        var config = Configuration.Default
-            .WithDefaultLoader().WithDefaultCookies();
-        var context = BrowsingContext.New(config);
-        await CheckAndLoadCookies(context);
-        await CheckIfSuccessfulLogin(context);
-        return context;
-    }
+        var settings = options.Value;
+        if (!settings.Enabled)
+            throw new InvalidOperationException("Scraping is disabled by configuration.");
+        if (string.IsNullOrWhiteSpace(settings.ParserLogin) || string.IsNullOrWhiteSpace(settings.ParserPassword))
+            throw new InvalidOperationException("Parser credentials are not configured.");
 
-    public async Task CheckUpdates()
-    {
-        var context = await PrepareForScrappingAsync();
-        await ExtractAndHandleContent(context, DefaultCheckUpdatesPages);
-    }
-
-    public async Task DownloadImages()
-    {
-        var context = await PrepareForScrappingAsync();
-        var document = await context.OpenAsync(RequestsUrl);
-        var numberOfPagesToScrap = GetNumberOfPages(document);
-        await ExtractAndHandleContent(context, numberOfPagesToScrap);
-    }
-
-    private async Task ExtractAndHandleContent(IBrowsingContext context, int numberOfPagesToScrap)
-    {
-        var extractedImages = await ExtractImagesAndTagsAsync(context, numberOfPagesToScrap, RequestsUrl);
-        var imagesInDb = await repositoryManager.AppImage.FindImageByMediaId(extractedImages, false);
-        var newImages = extractedImages.ExceptBy(imagesInDb.Select(x => x.MediaId), y => y.MediaId).ToList();
-        if (newImages.Any()) await ProcessNewImages(context, newImages);
-
-        await CheckAndHandleNewTagsOnImages(extractedImages, imagesInDb);
-        var removeNoneYet = await repositoryManager.AppImage.FindImageByMediaId(extractedImages, true);
-        var tagToDelete = removeNoneYet.SelectMany(x => x.Tags).FirstOrDefault(x => x.Name == "none yet");
-        removeNoneYet.FindAll(x => x.Tags.Any(y => y.Name == "none yet") && x.Tags.Count != 1).ToList()
-            .ForEach(x => x.Tags.Remove(tagToDelete));
-        await repositoryManager.Save();
-    }
-
-    private async Task CheckAndHandleNewTagsOnImages(List<AppImage> extractedImages, List<AppImage> imagesInDb)
-    {
-        var imagesWithoutTags =
-            imagesInDb.FindAll(x => x.Tags.Any(x => x.Name.ToLower().Trim() == "none yet") && x.Tags.Count == 1);
-        extractedImages = extractedImages.IntersectBy(imagesWithoutTags.Select(x => x.MediaId), y => y.MediaId)
-            .ToList();
-        if (imagesWithoutTags.Count == 0)
+        var context = BrowsingContext.New(Configuration.Default.WithDefaultLoader().WithDefaultCookies());
+        await EnsureLoginAsync(context, settings, cancellationToken);
+        var firstPage = await context.OpenAsync(settings.RequestsUrl, cancellationToken);
+        var pageCount = mode == ScrapeMode.Full ? GetPageCount(firstPage) : settings.IncrementalPages;
+        var candidates = new List<ScrapedCandidate>();
+        for (var page = 1; page <= Math.Max(pageCount, 1); page++)
         {
-            return;
+            var document = page == 1 ? firstPage : await context.OpenAsync($"{settings.RequestsUrl}?page={page}", cancellationToken);
+            candidates.AddRange(ExtractCandidates(document, settings.SiteUrl));
         }
+        candidates = candidates.DistinctBy(candidate => candidate.MediaId).ToList();
+        var existing = await repositories.AppImage.GetByExternalMediaIdsAsync(candidates.Select(candidate => candidate.MediaId), false, cancellationToken);
+        var existingIds = existing.Select(image => image.ExternalMediaId!.Value).ToHashSet();
+        var newCandidates = candidates.Where(candidate => !existingIds.Contains(candidate.MediaId)).ToList();
+        var imported = 0;
+        var cookie = context.GetCookie(new Url(settings.SiteUrl));
 
-        var patchedImages = new List<AppImage>();
-        foreach (var image in extractedImages)
+        foreach (var candidate in newCandidates)
         {
-            var whereReplaceTags = imagesWithoutTags.First(x => x.MediaId == image.MediaId);
-
-            if (whereReplaceTags.Tags.Count == image.Tags.Count &&
-                image.Tags.Any(x => x.Name.ToLower().Trim() == "none yet"))
-            {
-                continue;
-            }
-
-            whereReplaceTags.Tags = image.Tags;
-            patchedImages.Add(whereReplaceTags);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (await ImportCandidateAsync(candidate, cookie, settings, cancellationToken))
+                imported++;
         }
-
-        var distinctBy = patchedImages.SelectMany(x => x.Tags).DistinctBy(x => x.Name.Trim().ToLower()).ToList();
-        var tagsFromDb = await SaveNewTagsToDb(distinctBy);
-        ReplaceTagsInImagesFromDb(tagsFromDb, patchedImages);
-        repositoryManager.AppImage.UpdateImages(patchedImages);
-        await repositoryManager.Save();
+        return new ScrapeResult(candidates.Count, imported);
     }
 
-    public async Task DownloadAllImages()
+    private async Task<bool> ImportCandidateAsync(ScrapedCandidate candidate, string cookie, ParserSettings settings,
+        CancellationToken cancellationToken)
     {
-        var context = await PrepareForScrappingAsync();
-        var document = await context.OpenAsync(RequestsUrl);
-        var numberOfPagesToScrap = GetNumberOfPages(document);
-        var imagesAndTags = await ExtractImagesAndTagsAsync(context, numberOfPagesToScrap, RequestsUrl);
-        var imagesInDb = await repositoryManager.AppImage.FindImageByMediaId(imagesAndTags, true);
-        var newImages = imagesAndTags.ExceptBy(imagesInDb.Select(x => x.MediaId), y => y.MediaId).ToList();
-        if (newImages.Any()) await ProcessNewImages(context, newImages);
-    }
-
-    private (int Width, int Height) GetImageDimensionsAsync(string imagePath)
-    {
-        using var image =  Image.Load(imagePath);
-        return (image.Width, image.Height);
-    }
-
-    private async Task ProcessNewImages(IBrowsingContext context, List<AppImage?> newImages)
-    {
-        var distinctBy = newImages.SelectMany(x => x.Tags).DistinctBy(x => x.Name).ToList();
-        var tagsFromDb = await SaveNewTagsToDb(distinctBy);
-        repositoryManager.AppImage.AttachTags(tagsFromDb);
-        ReplaceTagsInImagesFromDb(tagsFromDb, newImages);
-
-        var images = await DownloadImagesAsync(context, newImages);
-        var byLoginAsync = await repositoryManager.AppUser.GetByLoginAsync("admin", false);
-        images.AsParallel().ForAll(x =>
-        {
-            var (width, height) = GetImageDimensionsAsync(x.PathToFileOnDisc);
-            x.Width = width;
-            x.Height = height;
-            x.UploadedById = byLoginAsync!.Id;
-        });
-        await repositoryManager.AppImage.AddImagesAsync(newImages);
-        await repositoryManager.Save();
-    }
-
-    private static void ReplaceTagsInImagesFromDb(List<ImageTag> tagsFromDb, List<AppImage?> appImages)
-    {
-        var tagDictionary =
-            tagsFromDb.ToDictionary(t => t.Name, t => t); // Create a dictionary for quick lookup by name
-
-        foreach (var appImage in appImages)
-            for (var i = 0; i < appImage.Tags.Count; i++)
-            {
-                var tagName = appImage.Tags[i].Name;
-
-                if (tagDictionary.TryGetValue(tagName, out var replacementTag))
-                    appImage.Tags[i] = replacementTag; // Replace with the tag from tagsFromDb
-            }
-    }
-
-    private async Task<List<ImageTag>> SaveNewTagsToDb(List<ImageTag> distinctBy)
-    {
-        var uniqueTags = distinctBy.Select(x => x.Name).ToList();
-        var tagsFromDb =
-            await repositoryManager.AppImage.GetExistingTagsFromDb(uniqueTags);
-        var newTags = distinctBy.ExceptBy(tagsFromDb.Select(x => x.Name), x => x.Name).ToList();
-
-        await repositoryManager.AppImage.AddTags(newTags);
-        await repositoryManager.Save();
-        tagsFromDb.AddRange(newTags);
-        return tagsFromDb;
-    }
-
-    private async Task CheckIfSuccessfulLogin(IBrowsingContext context)
-    {
-        var loggedIn = await context.OpenAsync(RequestsUrl);
-        if (loggedIn.Url != RequestsUrl)
-        {
-            await LoginAsync(context);
-            await SaveCookiesAsync(context);
-        }
-    }
-
-    private async Task CheckAndLoadCookies(IBrowsingContext context)
-    {
-        if (File.Exists(CookiesFilePath)) await LoadCookiesAsync(context);
-    }
-
-    private static int GetNumberOfPages(IDocument page)
-    {
-        var numberOfPagesInString = page.QuerySelector("div.message");
-        var textNumberOfPages = numberOfPagesInString!.Text();
-        var numberOfItems = int.Parse(string.Concat(textNumberOfPages.Where(char.IsDigit)));
-        var numberOfPages = (int)Math.Ceiling((double)numberOfItems / DefaultPageSize);
-        return numberOfPages;
-    }
-
-    private async Task<List<AppImage>> DownloadImagesAsync(IBrowsingContext page,
-        List<AppImage> imagesAndTags)
-    {
-        var pathToDirectory = Path.Combine(Directory.GetCurrentDirectory(), "upload", "images", "selebus");
-        Directory.CreateDirectory(pathToDirectory);
-        var downloadTasks = new List<Task<AppImage>>();
-        var cookies = page.GetCookie(new Url(SiteUrl));
-        var semaphore = new SemaphoreSlim(3);
-        foreach (var appImage in imagesAndTags)
-            // Start a new task and add it to the list
-            downloadTasks.Add(Task.Run(async () =>
-            {
-                await semaphore.WaitAsync(); // Wait for the semaphore to be available
-                try
-                {
-                    return await DownloadImageAsync(appImage, cookies);
-                }
-                finally
-                {
-                    semaphore.Release(); // Release the semaphore once the task is done
-                }
-            }));
-
-        var results = await Task.WhenAll(downloadTasks);
-
-        return results.ToList();
-    }
-
-
-    private async Task<AppImage> DownloadImageAsync(AppImage appImage, string cookie)
-    {
-        var fullImageUrl = SiteUrl + appImage.PathToFileOnDisc;
-        var fileName = Path.GetFileName(new Uri(fullImageUrl).LocalPath);
-        var pathToDirectory = Path.Combine(Directory.GetCurrentDirectory(), "upload", "images", "selebus");
-        var filePath = Path.Combine(pathToDirectory, appImage.MediaId + fileName);
-        var cookiesPairs = cookie.Split(";", StringSplitOptions.RemoveEmptyEntries);
-
-        if (File.Exists(filePath))
-        {
-            Console.WriteLine($"Image {fileName} already exists on disk. Skipping download.");
-            appImage.PathToFileOnDisc = filePath;
-            return appImage;
-        }
-
-        Console.WriteLine($"Downloading {fileName}...");
-
-
-        // Set cookies in the HttpClient if needed
-        var handler = new HttpClientHandler();
-        var cookieContainer = new CookieContainer();
-        foreach (var cookiePair in cookiesPairs)
-        {
-            var cookieParts = cookiePair.Split('=', StringSplitOptions.TrimEntries);
-            if (cookieParts.Length == 2)
-            {
-                var name = cookieParts[0].Trim();
-                var value = cookieParts[1].Trim();
-                cookieContainer.Add(new Cookie(name, value, "/",
-                    "lessonsinlovegame.com"));
-            }
-        }
-
-
-        handler.CookieContainer = cookieContainer;
-
-        using var httpClient = new HttpClient(handler);
-
+        string? temporaryPath = null;
+        string? storageKey = null;
         try
         {
-            using var response =
-                await httpClient.GetAsync(fullImageUrl.Split('?')[0], HttpCompletionOption.ResponseHeadersRead);
+            using var handler = new HttpClientHandler { CookieContainer = CreateCookies(cookie, new Uri(settings.SiteUrl).Host) };
+            using var client = new HttpClient(handler, disposeHandler: false);
+            client.Timeout = TimeSpan.FromSeconds(30);
+            using var request = new HttpRequestMessage(HttpMethod.Get, candidate.ImageUrl);
+            using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
             response.EnsureSuccessStatusCode();
-
-            using var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None);
-            await response.Content.CopyToAsync(fileStream);
-
-            Console.WriteLine($"Downloaded {fileName} with tags:");
-            appImage.PathToFileOnDisc = filePath;
-            return appImage;
+            await using var body = await response.Content.ReadAsStreamAsync(cancellationToken);
+            temporaryPath = await storage.SaveTemporaryAsync(body, cancellationToken);
+            var inspected = await processor.InspectAsync(temporaryPath, cancellationToken);
+            storageKey = $"scraped/{candidate.MediaId}-{Guid.NewGuid():N}{inspected.Extension}";
+            await storage.MoveTemporaryToFinalAsync(temporaryPath, storageKey, cancellationToken);
+            temporaryPath = null;
+            var tags = await repositories.AppImage.GetOrCreateTagsAsync(candidate.Tags, clock.GetUtcNow(), cancellationToken);
+            await repositories.AppImage.AddAsync(new SelebusImage
+            {
+                Source = ImageSource.Scraped,
+                ExternalMediaId = candidate.MediaId,
+                UploadedAtUtc = candidate.UploadedAtUtc,
+                Visibility = ImageVisibility.Gallery,
+                ModerationStatus = ModerationStatus.Approved,
+                StorageKey = storageKey,
+                ContentType = inspected.ContentType,
+                Width = inspected.Width,
+                Height = inspected.Height,
+                Tags = tags,
+                EmbeddingStatus = EmbeddingStatus.Pending
+            }, cancellationToken);
+            await repositories.SaveAsync(cancellationToken);
+            return true;
         }
-        catch (Exception ex)
+        catch
         {
-            Console.WriteLine($"Failed to download {fileName}: {ex.Message}");
+            if (storageKey is not null)
+                await storage.DeleteAsync(storageKey, cancellationToken);
             throw;
         }
-    }
-
-    private async Task<List<AppImage?>> ExtractImagesAndTagsAsync(IBrowsingContext page,
-        int numberOfPages, string requestUrl)
-    {
-        var appImages = new List<AppImage?>();
-        for (var i = 1; i <= numberOfPages; i++)
+        finally
         {
-            Console.WriteLine($"Parsing page {i} of {numberOfPages}");
-            var openAsync = await page.OpenAsync($"{requestUrl}?page={i}");
-            var elements = openAsync.QuerySelectorAll(".requests > .block:not(.hidden) > .block-inner");
-
-
-            foreach (var element in elements)
-            {
-                var appImage = await ExtractImageDataFromElement(element);
-                if (appImage == null) continue;
-
-                appImages.Add(appImage);
-            }
+            if (temporaryPath is not null && File.Exists(temporaryPath))
+                File.Delete(temporaryPath);
         }
-
-        return appImages;
     }
 
-    private static async Task<AppImage?> ExtractImageDataFromElement(IElement element)
+    private static async Task EnsureLoginAsync(IBrowsingContext context, ParserSettings settings, CancellationToken cancellationToken)
     {
-        var imageUrl = element.QuerySelector("a");
-        var imageSrc = imageUrl!.GetAttribute("href");
-        var tagsElement = element.QuerySelector(".overlay > p.tags");
-
-        var mediaIdElement = element.QuerySelector("div.like");
-        var mediaIdAttribute = mediaIdElement!.GetAttribute("data-media-id");
-        var mediaId = int.Parse(mediaIdAttribute!);
-        var dateElement = element.QuerySelector(".overlay>p:nth-child(1)");
-        var dateText = dateElement.Text();
-        var date = await GetDateFromString(dateText);
-        var tagsText = tagsElement != null ? tagsElement.TextContent : string.Empty;
-        tagsText = tagsText.ToLower().Replace("tags:", "");
-        var fullImageUrl = SiteUrl + imageSrc;
-        if (Path.GetExtension(new Uri(fullImageUrl).LocalPath)
-            .Equals(".gif", StringComparison.OrdinalIgnoreCase))
-            return null;
-
-        var tags = tagsText.ToLower().Split(",").Select(x => new ImageTag
+        var protectedPage = await context.OpenAsync(settings.RequestsUrl, cancellationToken);
+        if (protectedPage.Url.StartsWith(settings.RequestsUrl, StringComparison.OrdinalIgnoreCase)) return;
+        var loginPage = await context.OpenAsync(settings.LoginUrl, cancellationToken);
+        var form = loginPage.Forms.FirstOrDefault() ?? throw new InvalidOperationException("Parser login form was not found.");
+        form.SetValues(new Dictionary<string, string>
         {
-            CreatedById = 1,
-            IsDeleted = false,
-            Name = x.Trim(),
-            CreatDateTime = DateTime.Now.ToUniversalTime()
-        }).ToList();
-        var appImage = new SelebusImage()
+            ["loginModel.Username"] = settings.ParserLogin,
+            ["loginModel.Password"] = settings.ParserPassword
+        });
+        await form.SubmitAsync(cancellationToken);
+    }
+
+    private static int GetPageCount(IDocument document)
+    {
+        var message = document.QuerySelector("div.message")?.TextContent ?? string.Empty;
+        var digits = new string(message.Where(char.IsDigit).ToArray());
+        return int.TryParse(digits, out var count) ? Math.Max((int)Math.Ceiling(count / 20d), 1) : 1;
+    }
+
+    private static IEnumerable<ScrapedCandidate> ExtractCandidates(IDocument document, string siteUrl)
+    {
+        foreach (var element in document.QuerySelectorAll(".requests > .block:not(.hidden) > .block-inner"))
         {
-            MediaId = mediaId,
-            Tags = tags,
-            IsDeleted = false,
-            IsHidden = false,
-            PathToFileOnDisc = imageSrc,
-            UploadedDate = date.ToUniversalTime()
-        };
-        return appImage;
+            var imagePath = element.QuerySelector("a")?.GetAttribute("href");
+            var mediaIdText = element.QuerySelector("div.like")?.GetAttribute("data-media-id");
+            var dateText = element.QuerySelector(".overlay>p:nth-child(1)")?.TextContent;
+            if (string.IsNullOrWhiteSpace(imagePath) || !int.TryParse(mediaIdText, out var mediaId) || dateText is null)
+                continue;
+            if (!Uri.TryCreate(new Uri(siteUrl), imagePath, out var imageUri) || imageUri.AbsolutePath.EndsWith(".gif", StringComparison.OrdinalIgnoreCase))
+                continue;
+            var dateValue = dateText.Replace("Added:", string.Empty, StringComparison.OrdinalIgnoreCase).Trim();
+            if (!DateTimeOffset.TryParseExact(dateValue, "M/d/yyyy", CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var date))
+                continue;
+            var rawTags = element.QuerySelector(".overlay > p.tags")?.TextContent ?? string.Empty;
+            var tags = rawTags.Replace("tags:", string.Empty, StringComparison.OrdinalIgnoreCase).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            yield return new ScrapedCandidate(mediaId, imageUri, date.ToUniversalTime(), tags);
+        }
     }
 
-    private static Task<DateTime> GetDateFromString(string dateString)
+    private static CookieContainer CreateCookies(string rawCookies, string host)
     {
-        var clearedInputString = dateString.Replace("Added: ", "").Trim();
-        var format = "M/d/yyyy";
-        return Task.FromResult(DateTime.ParseExact(clearedInputString, format, CultureInfo.InvariantCulture));
-    }
-
-
-    private async Task LoginAsync(IBrowsingContext page)
-    {
-        var openAsync = await page.OpenAsync(LoginUrl);
-        var htmlFormElement = openAsync.Forms.FirstOrDefault();
-        var dictionary = new Dictionary<string, string>
+        var container = new CookieContainer();
+        foreach (var part in rawCookies.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
-            { "loginModel.Username", _options.Value.ParserLogin },
-            { "loginModel.Password", _options.Value.ParserPassword }
-        };
-        var formElement = htmlFormElement.SetValues(dictionary);
-        var submitAsync = await formElement.SubmitAsync();
+            var pair = part.Split('=', 2, StringSplitOptions.TrimEntries);
+            if (pair.Length == 2) container.Add(new Cookie(pair[0], pair[1], "/", host));
+        }
+        return container;
     }
 
-
-    private static async Task SaveCookiesAsync(IBrowsingContext page)
-    {
-        Directory.CreateDirectory("configs");
-        Console.WriteLine($"Cookies saved. {CookiesFilePath}");
-        var cookies = page.GetCookie(new Url(SiteUrl));
-        var json = JsonSerializer.Serialize(cookies);
-        await File.WriteAllTextAsync(CookiesFilePath, json);
-        Console.WriteLine("Cookies saved.");
-    }
-
-    private static async Task LoadCookiesAsync(IBrowsingContext page)
-    {
-        Console.WriteLine($"Cookies try load loaded. {CookiesFilePath}");
-        var cookiesJson = await File.ReadAllTextAsync(CookiesFilePath);
-        var cookies = JsonSerializer.Deserialize<string>(cookiesJson);
-        var strings = cookies.Split(";", StringSplitOptions.RemoveEmptyEntries);
-        foreach (var se in strings) page.SetCookie(new Url(SiteUrl), se);
-
-        Console.WriteLine($"Cookies loaded. {page.GetCookie(new Url(SiteUrl))}");
-    }
+    private sealed record ScrapedCandidate(int MediaId, Uri ImageUrl, DateTimeOffset UploadedAtUtc, IReadOnlyList<string> Tags);
 }

@@ -1,47 +1,42 @@
-﻿using System.Net;
-using Entities.ErrorModel;
+using System.Net;
 using Entities.Exceptions;
 using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
 namespace GallerySiteBackend;
 
-public class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logger) : IExceptionHandler
+public sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logger) : IExceptionHandler
 {
-    public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception,
-        CancellationToken cancellationToken)
+    public async ValueTask<bool> TryHandleAsync(HttpContext context, Exception exception, CancellationToken cancellationToken)
     {
-        var error = httpContext.Features.Get<IExceptionHandlerFeature>()?.Error ?? exception;
-        var isDuplicateLogin = error is DbUpdateException
-                               {
-                                   InnerException: PostgresException
-                                   {
-                                       SqlState: PostgresErrorCodes.UniqueViolation,
-                                       ConstraintName: "UX_AppUsers_Login"
-                                   }
-                               };
-
-        httpContext.Response.StatusCode = error switch
+        var error = context.Features.Get<IExceptionHandlerFeature>()?.Error ?? exception;
+        var status = error switch
         {
-            UserArleadyExistException => StatusCodes.Status409Conflict,
-            _ when isDuplicateLogin => StatusCodes.Status409Conflict,
-            AppUserNotFoundException => StatusCodes.Status404NotFound,
-            AppUserUnauthorizedException => StatusCodes.Status401Unauthorized,
-            _ => (int)HttpStatusCode.InternalServerError
+            Base400BadRequestException => StatusCodes.Status400BadRequest,
+            Base401UnauthorizedException => StatusCodes.Status401Unauthorized,
+            AppForbiddenException => StatusCodes.Status403Forbidden,
+            Base404ReturnException => StatusCodes.Status404NotFound,
+            Base409ConflictException => StatusCodes.Status409Conflict,
+            DbUpdateException { InnerException: PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } } => StatusCodes.Status409Conflict,
+            _ => StatusCodes.Status500InternalServerError
         };
-        httpContext.Response.ContentType = "application/json";
-        var message = isDuplicateLogin
-            ? "Username is already registered."
+        logger.LogError(error, "Request {Method} {Path} failed with {StatusCode}", context.Request.Method, context.Request.Path, status);
+        var detail = status == StatusCodes.Status500InternalServerError
+            ? "An unexpected server error occurred."
             : error.Message;
-
-        logger.LogError(error, "Something went wrong while processing the request");
-        await httpContext.Response.WriteAsync(new ErrorDetails
+        var problem = new ProblemDetails
         {
-            StatusCode = httpContext.Response.StatusCode,
-            Message = message
-        }.ToString(), cancellationToken);
-
+            Status = status,
+            Title = ReasonPhrases.GetReasonPhrase(status),
+            Detail = detail,
+            Instance = context.Request.Path
+        };
+        problem.Extensions["traceId"] = context.TraceIdentifier;
+        context.Response.StatusCode = status;
+        await context.Response.WriteAsJsonAsync(problem, cancellationToken);
         return true;
     }
 }

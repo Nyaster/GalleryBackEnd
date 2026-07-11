@@ -1,6 +1,30 @@
-@GallerySiteBackend_HostAddress = http://localhost:5118
+@GallerySiteBackend_HostAddress = https://localhost:7118
 
-GET {{GallerySiteBackend_HostAddress}}/weatherforecast/
-Accept: application/json
+### Register; the response supplies an access token and sets the HttpOnly refresh cookie.
+POST {{GallerySiteBackend_HostAddress}}/api/auth/register
+Content-Type: application/json
 
-###
+{
+  "login": "galleryuser",
+  "password": "correct-horse-battery-staple"
+}
+
+### Search approved gallery images. Replace the token with the register/login response token.
+GET {{GallerySiteBackend_HostAddress}}/api/images?kind=All&sort=Newest&page=1&pageSize=20
+Authorization: Bearer {{accessToken}}
+
+### Upload a user image. New uploads are pending moderation.
+POST {{GallerySiteBackend_HostAddress}}/api/images
+Authorization: Bearer {{accessToken}}
+Content-Type: multipart/form-data; boundary=GalleryBoundary
+
+--GalleryBoundary
+Content-Disposition: form-data; name="imageFile"; filename="example.jpg"
+Content-Type: image/jpeg
+
+< ./example.jpg
+--GalleryBoundary
+Content-Disposition: form-data; name="tags"
+
+example
+--GalleryBoundary--

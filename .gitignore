@@ -1,5 +1,14 @@
 bin/
 obj/
-/packages/
-riderModule.iml
+packages/
+/.vs/
+/.idea/
 /_ReSharper.Caches/
+*.user
+secrets.json
+secrets.*.json
+!appsettings*.json
+Data/
+configs/
+upload/
+TestResults/

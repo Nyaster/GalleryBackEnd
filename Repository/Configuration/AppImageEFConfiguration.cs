@@ -1,24 +1,37 @@
-﻿using Entities.Models;
+using Entities.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace Repository.Configuration;
 
-public class AppImageEfConfiguration : IEntityTypeConfiguration<AppImage>
+public sealed class AppImageEfConfiguration : IEntityTypeConfiguration<AppImage>
 {
     public void Configure(EntityTypeBuilder<AppImage> builder)
     {
-        builder.HasKey(x => x.Id);
-        builder.Property(x => x.UploadedDate).IsRequired();
-        builder.Property(x => x.IsDeleted).IsRequired();
-        builder.Property(x => x.IsHidden).IsRequired();
-        builder.Property(x => x.LikesCount).IsRequired();
-        builder.Property(x => x.FavoritesCount).IsRequired();
-        builder.HasMany(x => x.LikedBy).WithMany();
-        builder.HasMany(x => x.FavoriteBy).WithMany();
-        builder.HasMany(x => x.Tags).WithMany(x => x.AppImages);
-        builder.Property(x => x.PathToFileOnDisc).IsRequired();
-        builder.Property(x => x.MediaId).IsRequired();
-        builder.Property(x => x.Embedding).HasMaxLength(1280).IsRequired(false);
+        builder.HasKey(image => image.Id);
+        builder.HasDiscriminator<string>("image_type")
+            .HasValue<UserMadeImage>("user")
+            .HasValue<SelebusImage>("scraped");
+        builder.Property(image => image.Source).HasConversion<string>().IsRequired();
+        builder.Property(image => image.Visibility).HasConversion<string>().IsRequired();
+        builder.Property(image => image.ModerationStatus).HasConversion<string>().IsRequired();
+        builder.Property(image => image.EmbeddingStatus).HasConversion<string>().IsRequired();
+        builder.Property(image => image.StorageKey).HasMaxLength(260).IsRequired();
+        builder.Property(image => image.ContentType).HasMaxLength(100).IsRequired();
+        builder.Property(image => image.Embedding).HasColumnType("vector(1280)");
+        builder.HasOne(image => image.UploadedBy)
+            .WithMany(user => user.UploadedImages)
+            .HasForeignKey(image => image.UploadedById)
+            .OnDelete(DeleteBehavior.SetNull);
+        builder.HasMany(image => image.Tags).WithMany(tag => tag.AppImages);
+        builder.HasIndex(image => new { image.Source, image.ExternalMediaId })
+            .IsUnique()
+            .HasFilter("\"ExternalMediaId\" IS NOT NULL");
+        builder.HasIndex(image => new { image.ModerationStatus, image.Visibility, image.UploadedAtUtc });
+        builder.HasIndex(image => image.DeletedAtUtc);
+        builder.HasIndex(image => image.Embedding)
+            .HasMethod("hnsw")
+            .HasOperators("vector_l2_ops")
+            .HasFilter("\"Embedding\" IS NOT NULL");
     }
 }

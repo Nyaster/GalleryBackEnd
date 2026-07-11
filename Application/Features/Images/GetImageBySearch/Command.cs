@@ -1,6 +1,6 @@
-﻿using MediatR;
+using MediatR;
 using Shared.DataTransferObjects;
 
 namespace Application.Features.Images.GetImageBySearch;
 
-public record Command(SearchImageDto SearchImageDto) : IRequest<PageableImagesDto>;
+public sealed record Command(SearchImageDto Request) : IRequest<PageableImagesDto>;
