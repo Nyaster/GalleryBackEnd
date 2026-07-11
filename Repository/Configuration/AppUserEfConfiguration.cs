@@ -14,6 +14,7 @@ public sealed class AppUserEfConfiguration : IEntityTypeConfiguration<AppUser>
         builder.HasIndex(user => user.NormalizedLogin).IsUnique().HasDatabaseName("UX_AppUsers_NormalizedLogin");
         builder.Property(user => user.PasswordHash).IsRequired();
         builder.PrimitiveCollection(user => user.Roles).HasColumnName("roles");
+        builder.Property(user => user.CanUploadImages).HasDefaultValue(false).IsRequired();
         builder.HasMany(user => user.RefreshSessions).WithOne(session => session.User)
             .HasForeignKey(session => session.UserId).OnDelete(DeleteBehavior.Cascade);
     }

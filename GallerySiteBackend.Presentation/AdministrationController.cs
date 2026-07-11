@@ -52,4 +52,15 @@ public sealed class AdministrationController(IMediator mediator) : ControllerBas
     [Authorize(Roles = "Admin")]
     public async Task<ActionResult<ScrapeRunDto>> GetScrape(Guid id, CancellationToken cancellationToken)
         => Ok(await mediator.Send(new Application.Features.Administration.GetScrapeRun.Command(id), cancellationToken));
+
+    [HttpGet("users/{id:int}/upload-permission")]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult<UploadPermissionDto>> GetUploadPermission(int id, CancellationToken cancellationToken)
+        => Ok(await mediator.Send(new Application.Features.Administration.GetUserUploadPermission.Command(id), cancellationToken));
+
+    [HttpPut("users/{id:int}/upload-permission")]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult<UploadPermissionDto>> UpdateUploadPermission(int id, UpdateUploadPermissionDto request,
+        CancellationToken cancellationToken)
+        => Ok(await mediator.Send(new Application.Features.Administration.UpdateUserUploadPermission.Command(id, request.CanUploadImages), cancellationToken));
 }

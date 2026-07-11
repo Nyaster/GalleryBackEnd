@@ -41,6 +41,7 @@ public sealed class AuthenticationServiceTests
 
         Assert.NotNull(createdUser);
         Assert.NotEqual("a-long-and-valid-password", createdUser.PasswordHash);
+        Assert.False(createdUser.CanUploadImages);
         Assert.NotNull(createdSession);
         Assert.Equal(42, createdSession.UserId);
         Assert.NotEmpty(result.Response.AccessToken);

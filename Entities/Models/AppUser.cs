@@ -7,6 +7,7 @@ public sealed class AppUser
     public required string NormalizedLogin { get; set; }
     public required string PasswordHash { get; set; }
     public List<AppUserRole> Roles { get; set; } = [AppUserRole.User];
+    public bool CanUploadImages { get; set; }
     public List<AppImage> UploadedImages { get; set; } = [];
     public List<RefreshSession> RefreshSessions { get; set; } = [];
     public DateTimeOffset CreatedAtUtc { get; set; }

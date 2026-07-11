@@ -14,6 +14,8 @@ public sealed class ManagementControllerContractTests
     [InlineData(typeof(AdministrationController), "Tags", "GET", "tags")]
     [InlineData(typeof(AdministrationController), "ChangeTagModeration", "PATCH", "tags/{id:int}/moderation")]
     [InlineData(typeof(AdministrationController), "HiddenImages", "GET", "images/hidden")]
+    [InlineData(typeof(AdministrationController), "GetUploadPermission", "GET", "users/{id:int}/upload-permission")]
+    [InlineData(typeof(AdministrationController), "UpdateUploadPermission", "PUT", "users/{id:int}/upload-permission")]
     public void ManagementRoutes_ExposeExpectedHttpContracts(Type controllerType, string methodName, string verb, string template)
     {
         var method = controllerType.GetMethod(methodName) ?? throw new InvalidOperationException($"{methodName} was not found.");
@@ -40,6 +42,8 @@ public sealed class ManagementControllerContractTests
     [Theory]
     [InlineData("StartScrape")]
     [InlineData("GetScrape")]
+    [InlineData("GetUploadPermission")]
+    [InlineData("UpdateUploadPermission")]
     public void ScrapeEndpoints_RemainAdminOnly(string methodName)
     {
         var method = typeof(AdministrationController).GetMethod(methodName) ?? throw new InvalidOperationException($"{methodName} was not found.");

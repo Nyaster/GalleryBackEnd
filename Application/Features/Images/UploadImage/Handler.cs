@@ -1,5 +1,6 @@
 using Application.Helpers;
 using Contracts;
+using Entities.Exceptions;
 using Entities.Models;
 using MediatR;
 using Microsoft.Extensions.Options;
@@ -20,6 +21,17 @@ public sealed class Handler(
     public async Task<AppImageDto> Handle(Command request, CancellationToken cancellationToken)
     {
         currentUser.RequireAuthenticated();
+        if (!currentUser.IsInRole(nameof(AppUserRole.Admin)))
+        {
+            var userId = currentUser.UserId;
+            if (userId is null)
+                throw new AppForbiddenException("You do not have permission to upload images.");
+
+            var user = await repositories.AppUser.GetByIdAsync(userId.Value, false, cancellationToken);
+            if (user is null || !user.CanUploadImages)
+                throw new AppForbiddenException("You do not have permission to upload images.");
+        }
+
         var file = request.Request.ImageFile ?? throw new Entities.Exceptions.ImageUploadValidationError("An image file is required.");
         if (file.Length <= 0)
             throw new Entities.Exceptions.ImageUploadValidationError("The uploaded file is empty.");
