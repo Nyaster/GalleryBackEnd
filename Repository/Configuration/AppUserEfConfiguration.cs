@@ -10,6 +10,9 @@ public class AppUserEfConfiguration : IEntityTypeConfiguration<AppUser>
     {
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Login).IsRequired();
+        builder.HasIndex(x => x.Login)
+            .IsUnique()
+            .HasDatabaseName("UX_AppUsers_Login");
         builder.Property(x => x.Password).IsRequired();
         builder.Property(x => x.Salt).IsRequired();
         builder.Property(x => x.RefreshToken).IsRequired(false);
