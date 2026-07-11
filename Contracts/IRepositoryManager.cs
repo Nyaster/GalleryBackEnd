@@ -1,6 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
-
-namespace Contracts;
+﻿namespace Contracts;
 
 public interface IRepositoryManager
 {

@@ -1,12 +1,8 @@
-using System.Text;
 using Application.BackgroundService;
-using Contracts;
 using GallerySiteBackend.Configuration;
 using GallerySiteBackend.Extensions;
 using GallerySiteBackend.Presentation;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Service;
 using Service.Contracts;
@@ -19,15 +15,11 @@ public class Program
     {
         var builder = WebApplication.CreateBuilder(args);
         builder.Services.AddResponseCaching();
-        IConfiguration configuration = new ConfigurationBuilder()
-            .AddJsonFile("secrets.json", true, true).Build();
-
-        builder.Configuration.AddConfiguration(configuration);
+        builder.Configuration.AddJsonFile("secrets.json", optional: true, reloadOnChange: true);
         builder.Services.AddOptions<JwtConfiguration>().Bind(builder.Configuration.GetSection("JwtConfig"))
             .ValidateDataAnnotations().ValidateOnStart();
-        builder.Services.AddOptions<ParserSettings>().Bind(builder.Configuration.GetSection("ParserSettings"));
-        var jwtConfiguration = builder.Configuration.GetSection("JwtConfig1").Get<JwtConfiguration>();
-        ;
+        builder.Services.AddOptions<ParserSettings>().Bind(builder.Configuration.GetSection("ParserSettings"))
+            .ValidateDataAnnotations().ValidateOnStart();
         builder.Services.ConfigureNpsqlContext(builder.Configuration);
         builder.Services.ConfigureLoggerService();
         builder.Services.ConfigureRepositoryManager();
@@ -35,7 +27,7 @@ public class Program
         builder.Services.AddSingleton<IImageEmbeddingGenerator, OnnxImageEmbeddingGenerator>();
         builder.Services.AddHostedService<ImageEmbeddingPollingService>();
         // Add services to the container.
-        builder.Services.AddAutoMapper(typeof(Program));
+        builder.Services.AddAutoMapper(_ => { }, typeof(Program).Assembly);
         builder.Services.AddControllers()
             .AddApplicationPart(typeof(AssemblyReference).Assembly);
         builder.Services.Configure<ApiBehaviorOptions>(options => options.SuppressModelStateInvalidFilter = true);
@@ -70,18 +62,18 @@ public class Program
         });
         builder.Services.ConfigureCors();
         builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
-        builder.Services.ConfigureJwtToken(configuration);
+        builder.Services.ConfigureJwtToken(builder.Configuration);
         builder.Services.ConfigureAuthorizationPolicies();
 
         builder.Services.AddMediatR(options =>
             options.RegisterServicesFromAssembly(typeof(Application.AssemblyApplication).Assembly));
         var app = builder.Build();
-        app.UseExceptionHandler(opt => { });
+        app.UseExceptionHandler();
         // Configure the HTTP request pipeline.
-        /*if (app.Environment.IsProduction())
+        if (!app.Environment.IsDevelopment())
         {
             app.UseHsts();
-        }*/
+        }
 
         if (app.Environment.IsDevelopment())
         {
@@ -89,11 +81,11 @@ public class Program
             app.UseSwaggerUI();
         }
 
+        app.UseHttpsRedirection();
         app.UseCors("CorsPolicy");
         app.UseResponseCaching();
         app.UseAuthentication();
         app.UseAuthorization();
-        app.UseHttpsRedirection();
         app.MapControllers();
         app.Run();
     }

@@ -3,7 +3,6 @@ using Application.Features.Images.GetImageBySearch;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Service;
 using Service.Contracts;
 using Shared.DataTransferObjects;
 

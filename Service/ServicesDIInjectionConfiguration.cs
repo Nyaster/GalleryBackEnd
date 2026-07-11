@@ -1,6 +1,4 @@
-﻿using Contracts;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.DependencyInjection;
 using Service.Contracts;
 
 namespace Service;

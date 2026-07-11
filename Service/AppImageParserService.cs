@@ -8,9 +8,7 @@ using Contracts;
 using Entities.Models;
 using GallerySiteBackend.Models;
 using Microsoft.Extensions.Options;
-using Microsoft.IdentityModel.Tokens;
 using Service.Contracts;
-using Service.Helpers;
 using SixLabors.ImageSharp;
 using Configuration = AngleSharp.Configuration;
 using IConfiguration = Microsoft.Extensions.Configuration.IConfiguration;
@@ -75,7 +73,7 @@ public class AppImageParserService(IRepositoryManager repositoryManager, IConfig
             imagesInDb.FindAll(x => x.Tags.Any(x => x.Name.ToLower().Trim() == "none yet") && x.Tags.Count == 1);
         extractedImages = extractedImages.IntersectBy(imagesWithoutTags.Select(x => x.MediaId), y => y.MediaId)
             .ToList();
-        if (imagesWithoutTags.IsNullOrEmpty())
+        if (imagesWithoutTags.Count == 0)
         {
             return;
         }

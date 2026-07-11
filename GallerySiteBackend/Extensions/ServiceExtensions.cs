@@ -5,8 +5,6 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Repository;
-using Service;
-using Service.Contracts;
 
 namespace GallerySiteBackend.Extensions;
 

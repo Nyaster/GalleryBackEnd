@@ -1,6 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations.Schema;
-using System.Numerics;
-using GallerySiteBackend.Models;
+﻿using GallerySiteBackend.Models;
 
 namespace Entities.Models;
 
