@@ -17,6 +17,6 @@ public sealed class Handler(IRepositoryManager repositories, IUserContext curren
         if (image.Embedding is null)
             throw new Base409ConflictException("Recommendations are not ready for this image.");
         var recommendations = await repositories.AppImage.GetRecommendationsAsync(image.Id, request.Limit, cancellationToken);
-        return recommendations.Select(ImageDtoMapper.ToDto).ToList();
+        return recommendations.Select(image => ImageDtoMapper.ToDto(image, currentUser)).ToList();
     }
 }

@@ -28,3 +28,37 @@ Content-Disposition: form-data; name="tags"
 
 example
 --GalleryBoundary--
+
+### Replace all tags on an owned image.
+PUT {{GallerySiteBackend_HostAddress}}/api/images/42/tags
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "tags": ["example", "portrait"]
+}
+
+### Hide then restore an owned image.
+DELETE {{GallerySiteBackend_HostAddress}}/api/images/42
+Authorization: Bearer {{accessToken}}
+
+###
+POST {{GallerySiteBackend_HostAddress}}/api/images/42/restore
+Authorization: Bearer {{accessToken}}
+
+### Staff tag review.
+GET {{GallerySiteBackend_HostAddress}}/api/admin/tags?status=Pending&page=1&pageSize=20
+Authorization: Bearer {{staffAccessToken}}
+
+###
+PATCH {{GallerySiteBackend_HostAddress}}/api/admin/tags/7/moderation
+Authorization: Bearer {{staffAccessToken}}
+Content-Type: application/json
+
+{
+  "status": "Approved"
+}
+
+### Staff hidden-image queue.
+GET {{GallerySiteBackend_HostAddress}}/api/admin/images/hidden?page=1&pageSize=20
+Authorization: Bearer {{staffAccessToken}}

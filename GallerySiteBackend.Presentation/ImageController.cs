@@ -46,4 +46,20 @@ public sealed class ImageController(IMediator mediator) : ControllerBase
     [HttpGet("{id:int}/recommendations")]
     public async Task<ActionResult<List<AppImageDto>>> Recommendations(int id, [FromQuery] int limit = 20, CancellationToken cancellationToken = default)
         => Ok(await mediator.Send(new Application.Features.Images.GetImageRecommendation.Command(id, limit), cancellationToken));
+
+    [HttpPut("{id:int}/tags")]
+    public async Task<ActionResult<AppImageDto>> ReplaceTags(int id, ReplaceImageTagsDto request, CancellationToken cancellationToken)
+        => Ok(await mediator.Send(new Application.Features.Images.ReplaceImageTags.Command(id, request), cancellationToken));
+
+    [HttpDelete("{id:int}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> Hide(int id, CancellationToken cancellationToken)
+    {
+        await mediator.Send(new Application.Features.Images.HideImage.Command(id), cancellationToken);
+        return NoContent();
+    }
+
+    [HttpPost("{id:int}/restore")]
+    public async Task<ActionResult<AppImageDto>> Restore(int id, CancellationToken cancellationToken)
+        => Ok(await mediator.Send(new Application.Features.Images.RestoreImage.Command(id), cancellationToken));
 }

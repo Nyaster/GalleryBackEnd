@@ -6,17 +6,17 @@ using MediatR;
 using Service.Contracts;
 using Shared.DataTransferObjects;
 
-namespace Application.Features.Administration.ChangeModeration;
+namespace Application.Features.Images.RestoreImage;
 
 public sealed class Handler(IRepositoryManager repositories, IUserContext currentUser) : IRequestHandler<Command, AppImageDto>
 {
     public async Task<AppImageDto> Handle(Command request, CancellationToken cancellationToken)
     {
-        if (!ImageAuthorization.IsStaff(currentUser)) throw new AppForbiddenException("Staff access is required.");
         var image = await repositories.AppImage.GetByIdAsync(request.ImageId, true, cancellationToken)
             ?? throw new Base404ReturnException("Image not found.");
-        if (image.DeletedAtUtc is not null) throw new Base404ReturnException("Image not found.");
-        image.ModerationStatus = request.Status;
+        ImageAuthorization.EnsureCanManage(image, currentUser);
+        image.DeletedAtUtc = null;
+        image.ModerationStatus = ModerationStatus.Pending;
         await repositories.SaveAsync(cancellationToken);
         return ImageDtoMapper.ToDto(image, currentUser);
     }

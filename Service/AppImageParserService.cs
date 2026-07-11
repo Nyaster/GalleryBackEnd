@@ -5,6 +5,7 @@ using AngleSharp.Dom;
 using AngleSharp.Html.Dom;
 using Contracts;
 using Entities.Models;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Service.Contracts;
 using Configuration = AngleSharp.Configuration;
@@ -16,7 +17,8 @@ public sealed class AppImageParserService(
     IImageStorage storage,
     IImageProcessor processor,
     IOptions<ParserSettings> options,
-    TimeProvider clock) : IImageParserService
+    TimeProvider clock,
+    ILogger<AppImageParserService> logger) : IImageParserService
 {
     public async Task<ScrapeResult> RunAsync(ScrapeMode mode, CancellationToken cancellationToken = default)
     {
@@ -27,7 +29,9 @@ public sealed class AppImageParserService(
             throw new InvalidOperationException("Parser credentials are not configured.");
 
         var context = BrowsingContext.New(Configuration.Default.WithDefaultLoader().WithDefaultCookies());
+        logger.LogInformation("Authenticating scraper with the source site");
         await EnsureLoginAsync(context, settings, cancellationToken);
+        logger.LogInformation("Scraper authentication succeeded");
         var firstPage = await context.OpenAsync(settings.RequestsUrl, cancellationToken);
         var pageCount = mode == ScrapeMode.Full ? GetPageCount(firstPage) : settings.IncrementalPages;
         var candidates = new List<ScrapedCandidate>();
@@ -104,16 +108,46 @@ public sealed class AppImageParserService(
 
     private static async Task EnsureLoginAsync(IBrowsingContext context, ParserSettings settings, CancellationToken cancellationToken)
     {
-        var protectedPage = await context.OpenAsync(settings.RequestsUrl, cancellationToken);
-        if (protectedPage.Url.StartsWith(settings.RequestsUrl, StringComparison.OrdinalIgnoreCase)) return;
-        var loginPage = await context.OpenAsync(settings.LoginUrl, cancellationToken);
-        var form = loginPage.Forms.FirstOrDefault() ?? throw new InvalidOperationException("Parser login form was not found.");
-        form.SetValues(new Dictionary<string, string>
+        using var loginCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        loginCancellation.CancelAfter(TimeSpan.FromSeconds(settings.LoginTimeoutSeconds));
+
+        try
         {
-            ["loginModel.Username"] = settings.ParserLogin,
-            ["loginModel.Password"] = settings.ParserPassword
-        });
-        await form.SubmitAsync(cancellationToken);
+            var protectedPage = await context.OpenAsync(settings.RequestsUrl, loginCancellation.Token)
+                .WaitAsync(loginCancellation.Token);
+            if (IsRequestsPage(protectedPage, settings.RequestsUrl)) return;
+
+            var loginPage = await context.OpenAsync(settings.LoginUrl, loginCancellation.Token)
+                .WaitAsync(loginCancellation.Token);
+            var form = loginPage.Forms.FirstOrDefault() ?? throw new InvalidOperationException("Parser login form was not found.");
+            form.SetValues(new Dictionary<string, string>
+            {
+                ["loginModel.Username"] = settings.ParserLogin,
+                ["loginModel.Password"] = settings.ParserPassword
+            });
+
+            // AngleSharp's form submission API does not accept a CancellationToken. WaitAsync still
+            // bounds the worker, even if the underlying request ignores cancellation.
+            await form.SubmitAsync().WaitAsync(loginCancellation.Token);
+
+            protectedPage = await context.OpenAsync(settings.RequestsUrl, loginCancellation.Token)
+                .WaitAsync(loginCancellation.Token);
+            if (!IsRequestsPage(protectedPage, settings.RequestsUrl))
+                throw new InvalidOperationException("Parser login was rejected or did not grant access to the requests gallery.");
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && loginCancellation.IsCancellationRequested)
+        {
+            throw new TimeoutException($"Parser login did not complete within {settings.LoginTimeoutSeconds} seconds.");
+        }
+    }
+
+    private static bool IsRequestsPage(IDocument document, string requestsUrl)
+    {
+        if (!Uri.TryCreate(requestsUrl, UriKind.Absolute, out var requestsUri) ||
+            !Uri.TryCreate(document.Url, UriKind.Absolute, out var documentUri)) return false;
+
+        return string.Equals(requestsUri.GetLeftPart(UriPartial.Path).TrimEnd('/'),
+            documentUri.GetLeftPart(UriPartial.Path).TrimEnd('/'), StringComparison.OrdinalIgnoreCase);
     }
 
     private static int GetPageCount(IDocument document)

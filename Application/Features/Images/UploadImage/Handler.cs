@@ -38,6 +38,8 @@ public sealed class Handler(
 
             var now = clock.GetUtcNow();
             var tags = await repositories.AppImage.GetOrCreateTagsAsync(request.Request.Tags, now, cancellationToken);
+            if (tags.Any(tag => tag.ModerationStatus == TagModerationStatus.Rejected))
+                throw new Entities.Exceptions.Base400BadRequestException("Rejected tags cannot be used.");
             var image = new UserMadeImage
             {
                 Source = ImageSource.UserUpload,
@@ -55,7 +57,7 @@ public sealed class Handler(
             await repositories.AppImage.AddAsync(image, cancellationToken);
             await repositories.SaveAsync(cancellationToken);
             image.UploadedBy = new AppUser { Id = currentUser.UserId!.Value, Login = currentUser.Login!, NormalizedLogin = string.Empty, PasswordHash = string.Empty };
-            return ImageDtoMapper.ToDto(image);
+            return ImageDtoMapper.ToDto(image, currentUser);
         }
         catch
         {

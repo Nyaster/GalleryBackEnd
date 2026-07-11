@@ -12,6 +12,6 @@ public sealed class Handler(IRepositoryManager repositories) : IRequestHandler<C
         var normalized = request.Request with { Page = Math.Max(request.Request.Page, 1), PageSize = Math.Clamp(request.Request.PageSize, 1, 50) };
         var result = await repositories.AppImage.SearchAsync(normalized, cancellationToken);
         return new PageableImagesDto(normalized.Page, normalized.PageSize, result.Total, normalized.Sort,
-            result.Images.Select(ImageDtoMapper.ToDto).ToArray());
+            result.Images.Select(image => ImageDtoMapper.ToDto(image)).ToArray());
     }
 }

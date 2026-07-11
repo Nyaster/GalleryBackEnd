@@ -6,6 +6,7 @@ packages/
 /_ReSharper.Caches/
 *.user
 secrets.json
+.env
 secrets.*.json
 !appsettings*.json
 Data/

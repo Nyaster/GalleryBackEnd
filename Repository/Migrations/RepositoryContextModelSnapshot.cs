@@ -185,6 +185,10 @@ namespace Repository.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
+                    b.Property<string>("ModerationStatus")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<string>("NormalizedName")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -195,6 +199,8 @@ namespace Repository.Migrations
                     b.HasIndex("NormalizedName")
                         .IsUnique()
                         .HasDatabaseName("UX_ImageTags_NormalizedName");
+
+                    b.HasIndex("ModerationStatus", "CreatedAtUtc");
 
                     b.ToTable("Tags");
                 });

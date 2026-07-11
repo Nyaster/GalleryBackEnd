@@ -45,6 +45,7 @@ public sealed class AuthenticationServiceTests
         Assert.Equal(42, createdSession.UserId);
         Assert.NotEmpty(result.Response.AccessToken);
         Assert.StartsWith(createdSession.Id.ToString(), result.RefreshToken, StringComparison.Ordinal);
+        Assert.Equal(SHA256.HashData(Encoding.UTF8.GetBytes(result.RefreshToken)), createdSession.TokenHash);
         repositories.Verify(repo => repo.SaveAsync(It.IsAny<CancellationToken>()), Times.Exactly(2));
     }
 

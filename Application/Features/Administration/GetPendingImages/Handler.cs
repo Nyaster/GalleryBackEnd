@@ -11,8 +11,8 @@ public sealed class Handler(IRepositoryManager repositories, IUserContext curren
 {
     public async Task<List<AppImageDto>> Handle(Command request, CancellationToken cancellationToken)
     {
-        if (!currentUser.IsInRole(nameof(AppUserRole.Admin))) throw new Entities.Exceptions.AppForbiddenException("Administrator access is required.");
+        if (!ImageAuthorization.IsStaff(currentUser)) throw new Entities.Exceptions.AppForbiddenException("Staff access is required.");
         var images = await repositories.AppImage.GetPendingAsync(request.Page, request.PageSize, cancellationToken);
-        return images.Select(ImageDtoMapper.ToDto).ToList();
+        return images.Select(image => ImageDtoMapper.ToDto(image, currentUser)).ToList();
     }
 }

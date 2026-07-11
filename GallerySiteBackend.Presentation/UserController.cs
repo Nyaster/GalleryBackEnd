@@ -11,6 +11,6 @@ namespace GallerySiteBackend.Presentation;
 public sealed class UserController(IMediator mediator) : ControllerBase
 {
     [HttpGet("images")]
-    public async Task<ActionResult<List<AppImageDto>>> Images(CancellationToken cancellationToken)
-        => Ok(await mediator.Send(new Application.Features.Images.GetMyImages.Command(), cancellationToken));
+    public async Task<ActionResult<List<AppImageDto>>> Images([FromQuery] bool includeHidden = false, CancellationToken cancellationToken = default)
+        => Ok(await mediator.Send(new Application.Features.Images.GetMyImages.Command(includeHidden), cancellationToken));
 }

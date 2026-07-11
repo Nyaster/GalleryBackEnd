@@ -14,6 +14,7 @@ using Repository;
 using Service;
 using Service.Contracts;
 using System.Text;
+using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -22,7 +23,9 @@ builder.Configuration.AddJsonFile("secrets.json", optional: true, reloadOnChange
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddOpenApi();
-builder.Services.AddControllers().AddApplicationPart(typeof(AssemblyReference).Assembly);
+builder.Services.AddControllers().AddJsonOptions(options =>
+    options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()))
+    .AddApplicationPart(typeof(AssemblyReference).Assembly);
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IUserContext, HttpUserContext>();
 builder.Services.AddSingleton(TimeProvider.System);
@@ -72,6 +75,10 @@ if (builder.Configuration.GetSection("Embedding").Get<EmbeddingOptions>()?.Enabl
 {
     builder.Services.AddSingleton<IImageEmbeddingGenerator, OnnxImageEmbeddingGenerator>();
     builder.Services.AddHostedService<ImageEmbeddingPollingService>();
+}
+else
+{
+    builder.Services.AddSingleton<IImageEmbeddingGenerator, DisabledImageEmbeddingGenerator>();
 }
 builder.Services.AddHostedService<ScrapeRunPollingService>();
 

@@ -25,7 +25,8 @@ public sealed class AppImageRepository(RepositoryContext context) : IAppImageRep
 
         var normalizedTags = NormalizeTags(request.Tags);
         if (normalizedTags.Count > 0)
-            query = query.Where(image => normalizedTags.All(tag => image.Tags.Any(imageTag => imageTag.NormalizedName == tag)));
+            query = query.Where(image => normalizedTags.All(tag => image.Tags.Any(imageTag =>
+                imageTag.NormalizedName == tag && imageTag.ModerationStatus == TagModerationStatus.Approved)));
 
         query = request.Sort switch
         {
@@ -38,8 +39,8 @@ public sealed class AppImageRepository(RepositoryContext context) : IAppImageRep
         return (images, total);
     }
 
-    public Task<List<AppImage>> GetUploadedByUserAsync(int userId, CancellationToken cancellationToken = default)
-        => ImageQuery(false).Where(image => image.UploadedById == userId && image.DeletedAtUtc == null)
+    public Task<List<AppImage>> GetUploadedByUserAsync(int userId, bool includeHidden, CancellationToken cancellationToken = default)
+        => ImageQuery(false).Where(image => image.UploadedById == userId && (includeHidden || image.DeletedAtUtc == null))
             .OrderByDescending(image => image.UploadedAtUtc).ToListAsync(cancellationToken);
 
     public async Task<List<AppImage>> GetRecommendationsAsync(int imageId, int limit, CancellationToken cancellationToken = default)
@@ -58,6 +59,12 @@ public sealed class AppImageRepository(RepositoryContext context) : IAppImageRep
             .OrderBy(image => image.UploadedAtUtc).Skip(Math.Max(page - 1, 0) * Math.Clamp(pageSize, 1, 50))
             .Take(Math.Clamp(pageSize, 1, 50)).ToListAsync(cancellationToken);
 
+    public Task<List<AppImage>> GetHiddenAsync(int page, int pageSize, CancellationToken cancellationToken = default)
+        => ImageQuery(false).Where(image => image.DeletedAtUtc != null)
+            .OrderByDescending(image => image.DeletedAtUtc).ThenByDescending(image => image.Id)
+            .Skip(Math.Max(page - 1, 0) * Math.Clamp(pageSize, 1, 50))
+            .Take(Math.Clamp(pageSize, 1, 50)).ToListAsync(cancellationToken);
+
     public Task<List<ImageTag>> GetByNormalizedNamesAsync(IEnumerable<string> normalizedTags, CancellationToken cancellationToken = default)
     {
         var names = normalizedTags.Distinct().ToArray();
@@ -73,7 +80,8 @@ public sealed class AppImageRepository(RepositoryContext context) : IAppImageRep
         {
             Name = tag,
             NormalizedName = tag,
-            CreatedAtUtc = now
+            CreatedAtUtc = now,
+            ModerationStatus = TagModerationStatus.Pending
         }).ToList();
         if (newTags.Count > 0)
             await context.Tags.AddRangeAsync(newTags, cancellationToken);
@@ -82,10 +90,28 @@ public sealed class AppImageRepository(RepositoryContext context) : IAppImageRep
     }
 
     public Task<List<ImageTag>> GetTagSuggestionsAsync(string normalizedQuery, int limit, CancellationToken cancellationToken = default)
-        => context.Tags.AsNoTracking().Where(tag => tag.AppImages.Any(image => image.DeletedAtUtc == null &&
+        => context.Tags.AsNoTracking().Where(tag => tag.ModerationStatus == TagModerationStatus.Approved)
+            .Where(tag => tag.AppImages.Any(image => image.DeletedAtUtc == null &&
                 image.Visibility == ImageVisibility.Gallery && image.ModerationStatus == ModerationStatus.Approved))
             .Where(tag => EF.Functions.ILike(tag.NormalizedName, $"{EscapeLike(normalizedQuery)}%", "\\"))
-            .OrderBy(tag => tag.Name).Take(Math.Clamp(limit, 1, 50)).ToListAsync(cancellationToken);
+            .OrderByDescending(tag => tag.AppImages.Count(image => image.DeletedAtUtc == null &&
+                image.Visibility == ImageVisibility.Gallery && image.ModerationStatus == ModerationStatus.Approved))
+            .ThenBy(tag => tag.Name).Take(Math.Clamp(limit, 1, 50)).ToListAsync(cancellationToken);
+
+    public async Task<(List<ImageTag> Tags, int Total)> GetTagsAsync(TagModerationStatus status, int page, int pageSize, CancellationToken cancellationToken = default)
+    {
+        var query = context.Tags.AsNoTracking().Where(tag => tag.ModerationStatus == status).OrderBy(tag => tag.CreatedAtUtc).ThenBy(tag => tag.Id);
+        var total = await query.CountAsync(cancellationToken);
+        var size = Math.Clamp(pageSize, 1, 50);
+        var tags = await query.Include(tag => tag.AppImages).Skip(Math.Max(page - 1, 0) * size).Take(size).ToListAsync(cancellationToken);
+        return (tags, total);
+    }
+
+    public Task<ImageTag?> GetTagByIdAsync(int id, bool trackChanges, CancellationToken cancellationToken = default)
+    {
+        var query = trackChanges ? context.Tags : context.Tags.AsNoTracking();
+        return query.Include(tag => tag.AppImages).SingleOrDefaultAsync(tag => tag.Id == id, cancellationToken);
+    }
 
     public Task<List<AppImage>> GetByExternalMediaIdsAsync(IEnumerable<int> mediaIds, bool trackChanges, CancellationToken cancellationToken = default)
     {

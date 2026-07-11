@@ -12,4 +12,6 @@ public sealed record AppImageDto(
     int Width,
     int Height,
     ImageVisibility Visibility,
-    ModerationStatus ModerationStatus);
+    ModerationStatus ModerationStatus,
+    IReadOnlyList<string>? PendingTags = null,
+    DateTimeOffset? HiddenAtUtc = null);

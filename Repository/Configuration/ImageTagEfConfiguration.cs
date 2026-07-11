@@ -11,6 +11,8 @@ public sealed class ImageTagEfConfiguration : IEntityTypeConfiguration<ImageTag>
         builder.HasKey(tag => tag.Id);
         builder.Property(tag => tag.Name).HasMaxLength(64).IsRequired();
         builder.Property(tag => tag.NormalizedName).HasMaxLength(64).IsRequired();
+        builder.Property(tag => tag.ModerationStatus).HasConversion<string>().IsRequired();
         builder.HasIndex(tag => tag.NormalizedName).IsUnique().HasDatabaseName("UX_ImageTags_NormalizedName");
+        builder.HasIndex(tag => new { tag.ModerationStatus, tag.CreatedAtUtc });
     }
 }

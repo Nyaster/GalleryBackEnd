@@ -94,18 +94,20 @@ public sealed class AuthenticationService(
     {
         var now = clock.GetUtcNow();
         var rawToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
+        var sessionId = Guid.NewGuid();
+        var refreshToken = $"{sessionId}.{rawToken}";
         var session = new RefreshSession
         {
-            Id = Guid.NewGuid(),
+            Id = sessionId,
             UserId = user.Id,
-            TokenHash = HashToken(rawToken),
+            TokenHash = HashToken(refreshToken),
             CreatedAtUtc = now,
             ExpiresAtUtc = now.AddDays(options.Value.RefreshTokenDays)
         };
         await repositories.AppUser.AddRefreshSessionAsync(session, cancellationToken);
         if (save)
             await repositories.SaveAsync(cancellationToken);
-        return new AuthenticationResult(CreateJwtResponse(user, now), $"{session.Id}.{rawToken}");
+        return new AuthenticationResult(CreateJwtResponse(user, now), refreshToken);
     }
 
     private JwtTokenResponse CreateJwtResponse(AppUser user, DateTimeOffset now)
