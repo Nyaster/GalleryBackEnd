@@ -18,7 +18,7 @@ public sealed class AppImageEfConfiguration : IEntityTypeConfiguration<AppImage>
         builder.Property(image => image.EmbeddingStatus).HasConversion<string>().IsRequired();
         builder.Property(image => image.StorageKey).HasMaxLength(260).IsRequired();
         builder.Property(image => image.ContentType).HasMaxLength(100).IsRequired();
-        builder.Property(image => image.Embedding).HasColumnType("vector(1280)");
+        builder.Property(image => image.Embedding).HasColumnType("vector(1024)");
         builder.HasOne(image => image.UploadedBy)
             .WithMany(user => user.UploadedImages)
             .HasForeignKey(image => image.UploadedById)
