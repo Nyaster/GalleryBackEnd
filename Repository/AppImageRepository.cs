@@ -39,9 +39,15 @@ public sealed class AppImageRepository(RepositoryContext context) : IAppImageRep
         return (images, total);
     }
 
-    public Task<List<AppImage>> GetUploadedByUserAsync(int userId, bool includeHidden, CancellationToken cancellationToken = default)
-        => ImageQuery(false).Where(image => image.UploadedById == userId && (includeHidden || image.DeletedAtUtc == null))
-            .OrderByDescending(image => image.UploadedAtUtc).ToListAsync(cancellationToken);
+    public async Task<(List<AppImage> Images, int Total)> GetUploadedByUserAsync(int userId, bool includeHidden, int page, int pageSize, CancellationToken cancellationToken = default)
+    {
+        var query = ImageQuery(false).Where(image => image.UploadedById == userId && (includeHidden || image.DeletedAtUtc == null));
+        var total = await query.CountAsync(cancellationToken);
+        var size = Math.Clamp(pageSize, 1, 50);
+        var images = await query.OrderByDescending(image => image.UploadedAtUtc).ThenByDescending(image => image.Id)
+            .Skip((Math.Max(page, 1) - 1) * size).Take(size).ToListAsync(cancellationToken);
+        return (images, total);
+    }
 
     public async Task<List<AppImage>> GetRecommendationsAsync(int imageId, int limit, CancellationToken cancellationToken = default)
     {
@@ -128,22 +134,25 @@ public sealed class AppImageRepository(RepositoryContext context) : IAppImageRep
 
     public async Task<List<int>> ClaimPendingEmbeddingsAsync(int batchSize, DateTimeOffset now, CancellationToken cancellationToken = default)
     {
-        var candidates = await context.Images.Where(image => image.EmbeddingStatus == EmbeddingStatus.Pending && image.DeletedAtUtc == null)
-            .OrderBy(image => image.UploadedAtUtc).Take(Math.Clamp(batchSize, 1, 50)).ToListAsync(cancellationToken);
-        foreach (var image in candidates)
-        {
-            image.EmbeddingStatus = EmbeddingStatus.Processing;
-            image.EmbeddingAttempts++;
-            image.EmbeddingError = null;
-        }
-        await context.SaveChangesAsync(cancellationToken);
+        var leaseExpires = now.AddMinutes(15);
+        // UPDATE ... RETURNING cannot be composed by EF; enumerate the returned rows directly.
+        var candidates = context.Images.FromSqlInterpolated($"""
+            UPDATE "Images" SET "EmbeddingStatus" = {"Processing"}, "EmbeddingAttempts" = "EmbeddingAttempts" + 1,
+                "EmbeddingError" = NULL, "EmbeddingLeaseExpiresAtUtc" = {leaseExpires}
+            WHERE "Id" IN (
+                SELECT "Id" FROM "Images"
+                WHERE "DeletedAtUtc" IS NULL AND ("EmbeddingStatus" = {"Pending"} OR
+                    ("EmbeddingStatus" = {"Processing"} AND "EmbeddingLeaseExpiresAtUtc" < {now}))
+                ORDER BY "UploadedAtUtc" FOR UPDATE SKIP LOCKED LIMIT {Math.Clamp(batchSize, 1, 50)}
+            ) RETURNING *
+            """).AsEnumerable().ToList();
         return candidates.Select(image => image.Id).ToList();
     }
 
     private IQueryable<AppImage> ImageQuery(bool trackChanges)
     {
         var query = trackChanges ? context.Images : context.Images.AsNoTracking();
-        return query.Include(image => image.Tags).Include(image => image.UploadedBy);
+        return query.Include(image => image.Tags).Include(image => image.UploadedBy).Include(image => image.Likes).Include(image => image.Comments);
     }
 
     private static System.Linq.Expressions.Expression<Func<AppImage, bool>> IsDiscoverable()

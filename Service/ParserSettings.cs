@@ -13,4 +13,6 @@ public sealed class ParserSettings
     [Range(1, 300)] public int LoginTimeoutSeconds { get; init; } = 30;
     [Range(1, 10)] public int DownloadConcurrency { get; init; } = 3;
     [Range(1, 100)] public int IncrementalPages { get; init; } = 5;
+    [Range(1, 100)] public int MaximumDownloadMegabytes { get; init; } = 25;
+    public string[] AllowedImageHosts { get; init; } = [];
 }

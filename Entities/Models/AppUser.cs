@@ -10,6 +10,9 @@ public sealed class AppUser
     public bool CanUploadImages { get; set; }
     public List<AppImage> UploadedImages { get; set; } = [];
     public List<RefreshSession> RefreshSessions { get; set; } = [];
+    public List<Comment> Comments { get; set; } = [];
+    public List<ImageLike> ImageLikes { get; set; } = [];
+    public CommentRestriction? CommentRestriction { get; set; }
     public DateTimeOffset CreatedAtUtc { get; set; }
 }
 

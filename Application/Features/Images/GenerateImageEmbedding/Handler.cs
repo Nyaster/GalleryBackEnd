@@ -2,11 +2,14 @@ using Contracts;
 using Entities.Models;
 using MediatR;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using Service;
 using Service.Contracts;
 
 namespace Application.Features.Images.GenerateImageEmbedding;
 
-public sealed class Handler(IRepositoryManager repositories, IImageStorage storage, IImageEmbeddingGenerator generator, ILogger<Handler> logger)
+public sealed class Handler(IRepositoryManager repositories, IImageStorage storage, IImageEmbeddingGenerator generator,
+    IOptions<EmbeddingOptions> options, ILogger<Handler> logger)
     : IRequestHandler<Command>
 {
     public async Task Handle(Command request, CancellationToken cancellationToken)
@@ -23,10 +26,11 @@ public sealed class Handler(IRepositoryManager repositories, IImageStorage stora
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            image.EmbeddingStatus = image.EmbeddingAttempts >= 3 ? EmbeddingStatus.Failed : EmbeddingStatus.Pending;
+            image.EmbeddingStatus = image.EmbeddingAttempts >= options.Value.MaxAttempts ? EmbeddingStatus.Failed : EmbeddingStatus.Pending;
             image.EmbeddingError = exception.Message[..Math.Min(exception.Message.Length, 1024)];
             logger.LogError(exception, "Embedding generation failed for image {ImageId}", image.Id);
         }
+        image.EmbeddingLeaseExpiresAtUtc = null;
         await repositories.SaveAsync(cancellationToken);
     }
 }

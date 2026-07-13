@@ -4,6 +4,7 @@ using AngleSharp;
 using AngleSharp.Dom;
 using AngleSharp.Html.Dom;
 using Contracts;
+using Entities.Exceptions;
 using Entities.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -45,15 +46,23 @@ public sealed class AppImageParserService(
         var existingIds = existing.Select(image => image.ExternalMediaId!.Value).ToHashSet();
         var newCandidates = candidates.Where(candidate => !existingIds.Contains(candidate.MediaId)).ToList();
         var imported = 0;
+        var failed = 0;
         var cookie = context.GetCookie(new Url(settings.SiteUrl));
 
         foreach (var candidate in newCandidates)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (await ImportCandidateAsync(candidate, cookie, settings, cancellationToken))
-                imported++;
+            try
+            {
+                if (await ImportCandidateAsync(candidate, cookie, settings, cancellationToken)) imported++;
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                failed++;
+                logger.LogWarning(exception, "Skipping malformed or unavailable scraped image {MediaId}", candidate.MediaId);
+            }
         }
-        return new ScrapeResult(candidates.Count, imported);
+        return new ScrapeResult(candidates.Count, imported, failed > 0, failed);
     }
 
     private async Task<bool> ImportCandidateAsync(ScrapedCandidate candidate, string cookie, ParserSettings settings,
@@ -63,14 +72,17 @@ public sealed class AppImageParserService(
         string? storageKey = null;
         try
         {
-            using var handler = new HttpClientHandler { CookieContainer = CreateCookies(cookie, new Uri(settings.SiteUrl).Host) };
+            EnsureAllowedImageUri(candidate.ImageUrl, settings);
+            using var handler = new HttpClientHandler { CookieContainer = CreateCookies(cookie, new Uri(settings.SiteUrl).Host), AllowAutoRedirect = false };
             using var client = new HttpClient(handler, disposeHandler: false);
             client.Timeout = TimeSpan.FromSeconds(30);
-            using var request = new HttpRequestMessage(HttpMethod.Get, candidate.ImageUrl);
-            using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            using var response = await SendImageRequestAsync(client, candidate.ImageUrl, settings, cancellationToken);
             response.EnsureSuccessStatusCode();
+            if (response.Content.Headers.ContentLength is long contentLength && contentLength > settings.MaximumDownloadMegabytes * 1024L * 1024L)
+                throw new ImageUploadValidationError("Remote image exceeds the configured download limit.");
             await using var body = await response.Content.ReadAsStreamAsync(cancellationToken);
-            temporaryPath = await storage.SaveTemporaryAsync(body, cancellationToken);
+            await using var boundedBody = new LengthLimitedReadStream(body, settings.MaximumDownloadMegabytes * 1024L * 1024L);
+            temporaryPath = await storage.SaveTemporaryAsync(boundedBody, cancellationToken);
             var inspected = await processor.InspectAsync(temporaryPath, cancellationToken);
             storageKey = $"scraped/{candidate.MediaId}-{Guid.NewGuid():N}{inspected.Extension}";
             await storage.MoveTemporaryToFinalAsync(temporaryPath, storageKey, cancellationToken);
@@ -186,6 +198,49 @@ public sealed class AppImageParserService(
             if (pair.Length == 2) container.Add(new Cookie(pair[0], pair[1], "/", host));
         }
         return container;
+    }
+
+    private static void EnsureAllowedImageUri(Uri uri, ParserSettings settings)
+    {
+        if (!string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Scraped images must use HTTPS.");
+        var allowed = settings.AllowedImageHosts.Length == 0 ? [new Uri(settings.SiteUrl).Host] : settings.AllowedImageHosts;
+        if (!allowed.Any(host => string.Equals(host.Trim(), uri.Host, StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException("Scraped image host is not allowed.");
+    }
+
+    private static async Task<HttpResponseMessage> SendImageRequestAsync(HttpClient client, Uri initialUri, ParserSettings settings, CancellationToken cancellationToken)
+    {
+        var uri = initialUri;
+        for (var redirects = 0; redirects <= 3; redirects++)
+        {
+            EnsureAllowedImageUri(uri, settings);
+            var response = await client.SendAsync(new HttpRequestMessage(HttpMethod.Get, uri), HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            if (!((int)response.StatusCode is >= 300 and < 400)) return response;
+            var location = response.Headers.Location;
+            response.Dispose();
+            if (location is null) throw new InvalidOperationException("Remote image redirect has no location.");
+            uri = location.IsAbsoluteUri ? location : new Uri(uri, location);
+        }
+        throw new InvalidOperationException("Remote image exceeded redirect limit.");
+    }
+
+    private sealed class LengthLimitedReadStream(Stream inner, long maximumLength) : Stream
+    {
+        private long _read;
+        public override bool CanRead => inner.CanRead; public override bool CanSeek => false; public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException(); public override long Position { get => _read; set => throw new NotSupportedException(); }
+        public override void Flush() => throw new NotSupportedException(); public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException(); public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            var count = await inner.ReadAsync(buffer, cancellationToken);
+            _read += count;
+            if (_read > maximumLength) throw new ImageUploadValidationError("Remote image exceeds the configured download limit.");
+            return count;
+        }
+        protected override void Dispose(bool disposing) { if (disposing) inner.Dispose(); base.Dispose(disposing); }
     }
 
     private sealed record ScrapedCandidate(int MediaId, Uri ImageUrl, DateTimeOffset UploadedAtUtc, IReadOnlyList<string> Tags);

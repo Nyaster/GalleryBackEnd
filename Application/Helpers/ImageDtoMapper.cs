@@ -21,6 +21,9 @@ internal static class ImageDtoMapper
         image.Visibility,
         image.ModerationStatus,
         canSeePendingTags ? image.Tags.Where(tag => tag.ModerationStatus == TagModerationStatus.Pending).OrderBy(tag => tag.Name).Select(tag => tag.Name).ToArray() : null,
-        image.DeletedAtUtc);
+        image.DeletedAtUtc,
+        image.Likes.Count,
+        image.Comments.Count(comment => comment.DeletedAtUtc is null),
+        currentUser?.UserId is int userId && image.Likes.Any(like => like.UserId == userId));
     }
 }

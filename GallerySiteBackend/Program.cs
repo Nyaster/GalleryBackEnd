@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Repository;
@@ -29,6 +30,7 @@ builder.Services.AddControllers().AddJsonOptions(options =>
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IUserContext, HttpUserContext>();
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton(new SemaphoreSlim(1, 1));
 
 builder.Services.AddOptions<JwtConfiguration>().Bind(builder.Configuration.GetSection("JwtConfig"))
     .ValidateDataAnnotations().ValidateOnStart();
@@ -50,26 +52,29 @@ builder.Services.AddMediatR(options => options.RegisterServicesFromAssembly(type
 builder.Services.ConfigureCors(builder.Configuration);
 builder.Services.ConfigureJwtToken(builder.Configuration);
 builder.Services.AddAuthorization(options => options.AddPolicy("AdminOnly", policy => policy.RequireRole("Admin")));
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.ForwardLimit = 1;
+    options.KnownIPNetworks.Clear();
+    options.KnownProxies.Clear();
+    foreach (var value in builder.Configuration.GetSection("ReverseProxy:TrustedProxies").Get<string[]>() ?? [])
+        if (System.Net.IPAddress.TryParse(value, out var address)) options.KnownProxies.Add(address);
+});
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-    options.AddFixedWindowLimiter("auth", limiter =>
-    {
-        limiter.PermitLimit = 5;
-        limiter.Window = TimeSpan.FromMinutes(1);
-        limiter.QueueLimit = 0;
-        limiter.AutoReplenishment = true;
-    });
-    options.AddFixedWindowLimiter("upload", limiter =>
-    {
-        limiter.PermitLimit = 10;
-        limiter.Window = TimeSpan.FromMinutes(1);
-        limiter.QueueLimit = 0;
-        limiter.AutoReplenishment = true;
-    });
+    options.AddPolicy("auth", context => RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 5, Window = TimeSpan.FromMinutes(1), QueueLimit = 0, AutoReplenishment = true }));
+    options.AddPolicy("upload", context => RateLimitPartition.GetFixedWindowLimiter(
+        context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? context.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0, AutoReplenishment = true }));
+    options.AddPolicy("comment-write", context => RateLimitPartition.GetFixedWindowLimiter(
+        context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? context.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0, AutoReplenishment = true }));
 });
-builder.Services.AddHealthChecks();
-builder.Services.AddHostedService<DatabaseMigrationService>();
+builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database", tags: ["ready"]);
 
 if (builder.Configuration.GetSection("Embedding").Get<EmbeddingOptions>()?.Enabled == true)
 {
@@ -81,19 +86,27 @@ else
     builder.Services.AddSingleton<IImageEmbeddingGenerator, DisabledImageEmbeddingGenerator>();
 }
 builder.Services.AddHostedService<ScrapeRunPollingService>();
+builder.Services.AddHostedService<RankingSnapshotPollingService>();
+builder.Services.AddHostedService<RefreshSessionCleanupService>();
 
 var app = builder.Build();
+if (args.Contains("--migrate", StringComparer.OrdinalIgnoreCase))
+{
+    await DatabaseMigrationService.MigrateAsync(app.Services, app.Logger, CancellationToken.None);
+    return;
+}
 app.UseExceptionHandler();
+app.UseForwardedHeaders();
 if (!app.Environment.IsDevelopment()) app.UseHsts();
 if (app.Environment.IsDevelopment()) app.MapOpenApi();
 app.UseHttpsRedirection();
 app.UseCors("CorsPolicy");
-app.UseRateLimiter();
 app.UseAuthentication();
+app.UseRateLimiter();
 app.UseAuthorization();
 app.MapControllers();
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
-app.MapHealthChecks("/health/ready");
+app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains("ready") });
 app.Run();
 
 public partial class Program;

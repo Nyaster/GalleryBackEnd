@@ -62,4 +62,25 @@ public sealed class ImageController(IMediator mediator) : ControllerBase
     [HttpPost("{id:int}/restore")]
     public async Task<ActionResult<AppImageDto>> Restore(int id, CancellationToken cancellationToken)
         => Ok(await mediator.Send(new Application.Features.Images.RestoreImage.Command(id), cancellationToken));
+
+    [HttpGet("{imageId:int}/comments")]
+    public async Task<ActionResult<PageableCommentsDto>> Comments(int imageId, [FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken cancellationToken = default)
+        => Ok(await mediator.Send(new Application.Features.Images.Comments.GetCommentsCommand(imageId, page, pageSize), cancellationToken));
+
+    [HttpPost("{imageId:int}/comments")]
+    [EnableRateLimiting("comment-write")]
+    [ProducesResponseType<CommentDto>(StatusCodes.Status201Created)]
+    public async Task<ActionResult<CommentDto>> CreateComment(int imageId, CreateCommentDto request, CancellationToken cancellationToken)
+    {
+        var comment = await mediator.Send(new Application.Features.Images.Comments.CreateCommentCommand(imageId, request), cancellationToken);
+        return Created($"/api/comments/{comment.Id}", comment);
+    }
+
+    [HttpPut("{imageId:int}/likes/me")]
+    public async Task<ActionResult<LikeSummaryDto>> Like(int imageId, CancellationToken cancellationToken)
+        => Ok(await mediator.Send(new Application.Features.Images.Likes.SetLikeCommand(imageId, true), cancellationToken));
+
+    [HttpDelete("{imageId:int}/likes/me")]
+    public async Task<ActionResult<LikeSummaryDto>> Unlike(int imageId, CancellationToken cancellationToken)
+        => Ok(await mediator.Send(new Application.Features.Images.Likes.SetLikeCommand(imageId, false), cancellationToken));
 }

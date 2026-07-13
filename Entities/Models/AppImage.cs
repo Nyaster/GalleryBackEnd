@@ -18,10 +18,13 @@ public abstract class AppImage
     public int Width { get; set; }
     public int Height { get; set; }
     public List<ImageTag> Tags { get; set; } = [];
+    public List<Comment> Comments { get; set; } = [];
+    public List<ImageLike> Likes { get; set; } = [];
     public Vector? Embedding { get; set; }
     public EmbeddingStatus EmbeddingStatus { get; set; }
     public int EmbeddingAttempts { get; set; }
     public string? EmbeddingError { get; set; }
+    public DateTimeOffset? EmbeddingLeaseExpiresAtUtc { get; set; }
 }
 
 public enum ImageSource

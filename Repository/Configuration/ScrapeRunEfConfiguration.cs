@@ -13,5 +13,6 @@ public sealed class ScrapeRunEfConfiguration : IEntityTypeConfiguration<ScrapeRu
         builder.Property(run => run.Status).HasConversion<string>();
         builder.Property(run => run.Error).HasMaxLength(2048);
         builder.HasIndex(run => new { run.Status, run.CreatedAtUtc });
+        builder.HasIndex(run => run.Status).HasFilter("\"Status\" IN ('Queued', 'Running')").IsUnique();
     }
 }

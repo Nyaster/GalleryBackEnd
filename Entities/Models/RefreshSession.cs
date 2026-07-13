@@ -4,6 +4,7 @@ public sealed class RefreshSession
 {
     public Guid Id { get; set; }
     public int UserId { get; set; }
+    public Guid FamilyId { get; set; }
     public AppUser User { get; set; } = null!;
     public required byte[] TokenHash { get; set; }
     public DateTimeOffset CreatedAtUtc { get; set; }

@@ -63,4 +63,30 @@ public sealed class AdministrationController(IMediator mediator) : ControllerBas
     public async Task<ActionResult<UploadPermissionDto>> UpdateUploadPermission(int id, UpdateUploadPermissionDto request,
         CancellationToken cancellationToken)
         => Ok(await mediator.Send(new Application.Features.Administration.UpdateUserUploadPermission.Command(id, request.CanUploadImages), cancellationToken));
+
+    [HttpDelete("comments/{commentId:int}")]
+    [Authorize(Roles = "Admin,Moderator")]
+    public async Task<IActionResult> DeleteComment(int commentId, CancellationToken cancellationToken)
+    {
+        await mediator.Send(new Application.Features.Images.Comments.DeleteCommentCommand(commentId, true), cancellationToken);
+        return NoContent();
+    }
+
+    [HttpGet("users/{id:int}/comment-restriction")]
+    [Authorize(Roles = "Admin,Moderator")]
+    public async Task<ActionResult<CommentRestrictionDto>> GetCommentRestriction(int id, CancellationToken cancellationToken)
+        => Ok(await mediator.Send(new Application.Features.Administration.CommentRestrictions.GetCommentRestrictionCommand(id), cancellationToken));
+
+    [HttpPut("users/{id:int}/comment-restriction")]
+    [Authorize(Roles = "Admin,Moderator")]
+    public async Task<ActionResult<CommentRestrictionDto>> SetCommentRestriction(int id, CommentRestrictionUpdateDto request, CancellationToken cancellationToken)
+        => Ok(await mediator.Send(new Application.Features.Administration.CommentRestrictions.SetCommentRestrictionCommand(id, request), cancellationToken));
+
+    [HttpDelete("users/{id:int}/comment-restriction")]
+    [Authorize(Roles = "Admin,Moderator")]
+    public async Task<IActionResult> DeleteCommentRestriction(int id, CancellationToken cancellationToken)
+    {
+        await mediator.Send(new Application.Features.Administration.CommentRestrictions.DeleteCommentRestrictionCommand(id), cancellationToken);
+        return NoContent();
+    }
 }

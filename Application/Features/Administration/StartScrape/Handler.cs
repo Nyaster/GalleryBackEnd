@@ -23,5 +23,5 @@ public sealed class Handler(IRepositoryManager repositories, IUserContext curren
     }
 
     internal static ScrapeRunDto ToDto(ScrapeRun run) => new(run.Id, run.Mode, run.Status, run.CreatedAtUtc, run.StartedAtUtc,
-        run.CompletedAtUtc, run.ImagesDiscovered, run.ImagesImported, run.Error);
+        run.CompletedAtUtc, run.ImagesDiscovered, run.ImagesImported, run.Error, run.CompletedWithErrors, run.FailedItems);
 }

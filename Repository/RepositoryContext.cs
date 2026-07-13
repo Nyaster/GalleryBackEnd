@@ -13,6 +13,12 @@ public sealed class RepositoryContext(DbContextOptions<RepositoryContext> option
     public DbSet<ScrapeRun> ScrapeRuns => Set<ScrapeRun>();
     public DbSet<SelebusImage> SelebusImages => Set<SelebusImage>();
     public DbSet<UserMadeImage> UserMadeImages => Set<UserMadeImage>();
+    public DbSet<Comment> Comments => Set<Comment>();
+    public DbSet<CommentRestriction> CommentRestrictions => Set<CommentRestriction>();
+    public DbSet<ImageLike> ImageLikes => Set<ImageLike>();
+    public DbSet<ImageLikeActivity> ImageLikeActivities => Set<ImageLikeActivity>();
+    public DbSet<RankingSnapshot> RankingSnapshots => Set<RankingSnapshot>();
+    public DbSet<RankingSnapshotEntry> RankingSnapshotEntries => Set<RankingSnapshotEntry>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

@@ -40,6 +40,8 @@ public sealed class ScrapeRunPollingService(IServiceScopeFactory scopeFactory, I
             var result = await scope.ServiceProvider.GetRequiredService<IImageParserService>().RunAsync(run.Mode, cancellationToken);
             run.ImagesDiscovered = result.ImagesDiscovered;
             run.ImagesImported = result.ImagesImported;
+            run.FailedItems = result.FailedItems;
+            run.CompletedWithErrors = result.CompletedWithErrors;
             run.Status = BackgroundJobStatus.Completed;
             run.CompletedAtUtc = TimeProvider.System.GetUtcNow();
         }

@@ -14,4 +14,7 @@ public sealed record AppImageDto(
     ImageVisibility Visibility,
     ModerationStatus ModerationStatus,
     IReadOnlyList<string>? PendingTags = null,
-    DateTimeOffset? HiddenAtUtc = null);
+    DateTimeOffset? HiddenAtUtc = null,
+    int LikeCount = 0,
+    int CommentCount = 0,
+    bool IsLikedByCurrentUser = false);

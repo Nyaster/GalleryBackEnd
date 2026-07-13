@@ -14,7 +14,10 @@ public static class ServiceExtensions
 
     public static void ConfigureCors(this IServiceCollection services, IConfiguration configuration)
     {
-        var origins = configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
+        var productionOrigin = configuration["Cors:ProductionOrigin"];
+        var origins = !string.IsNullOrWhiteSpace(productionOrigin)
+            ? [productionOrigin]
+            : configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
         services.AddCors(options => options.AddPolicy("CorsPolicy", policy =>
         {
             if (origins.Length == 0) return;

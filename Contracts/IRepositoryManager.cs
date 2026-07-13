@@ -6,6 +6,8 @@ public interface IRepositoryManager
 {
     IAppUserRepository AppUser { get; }
     IAppImageRepository AppImage { get; }
+    IInteractionRepository Interactions { get; }
+    IRankingRepository Rankings { get; }
     Task<ScrapeRun?> GetScrapeRunAsync(Guid id, bool trackChanges, CancellationToken cancellationToken = default);
     Task<ScrapeRun?> ClaimNextScrapeRunAsync(DateTimeOffset now, CancellationToken cancellationToken = default);
     Task AddScrapeRunAsync(ScrapeRun run, CancellationToken cancellationToken = default);

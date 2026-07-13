@@ -13,7 +13,7 @@ Content-Type: application/json
 GET {{GallerySiteBackend_HostAddress}}/api/images?kind=All&sort=Newest&page=1&pageSize=20
 Authorization: Bearer {{accessToken}}
 
-### Upload a user image. New uploads are pending moderation.
+### Upload a user image. An Admin must first grant a non-admin user upload access; new uploads are pending moderation.
 POST {{GallerySiteBackend_HostAddress}}/api/images
 Authorization: Bearer {{accessToken}}
 Content-Type: multipart/form-data; boundary=GalleryBoundary
@@ -28,6 +28,19 @@ Content-Disposition: form-data; name="tags"
 
 example
 --GalleryBoundary--
+
+### Admin: inspect a user's effective image-upload access.
+GET {{GallerySiteBackend_HostAddress}}/api/admin/users/42/upload-permission
+Authorization: Bearer {{adminAccessToken}}
+
+### Admin: grant image-upload access. Use false to revoke it.
+PUT {{GallerySiteBackend_HostAddress}}/api/admin/users/42/upload-permission
+Authorization: Bearer {{adminAccessToken}}
+Content-Type: application/json
+
+{
+  "canUploadImages": true
+}
 
 ### Replace all tags on an owned image.
 PUT {{GallerySiteBackend_HostAddress}}/api/images/42/tags
@@ -62,3 +75,29 @@ Content-Type: application/json
 ### Staff hidden-image queue.
 GET {{GallerySiteBackend_HostAddress}}/api/admin/images/hidden?page=1&pageSize=20
 Authorization: Bearer {{staffAccessToken}}
+
+### Add a comment to an approved public image.
+POST {{GallerySiteBackend_HostAddress}}/api/images/42/comments
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "content": "Great image!"
+}
+
+### Like an approved public image, then view the live ranking.
+PUT {{GallerySiteBackend_HostAddress}}/api/images/42/likes/me
+Authorization: Bearer {{accessToken}}
+
+###
+GET {{GallerySiteBackend_HostAddress}}/api/rankings/Daily?page=1&pageSize=20
+Authorization: Bearer {{accessToken}}
+
+### Staff: permanently prevent a user from creating comments. Use DELETE to lift it.
+PUT {{GallerySiteBackend_HostAddress}}/api/admin/users/42/comment-restriction
+Authorization: Bearer {{staffAccessToken}}
+Content-Type: application/json
+
+{
+  "restrictedUntilUtc": null
+}

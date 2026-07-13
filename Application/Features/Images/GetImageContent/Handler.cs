@@ -6,7 +6,8 @@ using Service.Contracts;
 
 namespace Application.Features.Images.GetImageContent;
 
-public sealed class Handler(IRepositoryManager repositories, IImageStorage storage, IImageProcessor processor, IUserContext currentUser)
+public sealed class Handler(IRepositoryManager repositories, IImageStorage storage, IImageProcessor processor, IUserContext currentUser,
+    SemaphoreSlim jpegConversionLimiter)
     : IRequestHandler<Command, ImageContent>
 {
     public async Task<ImageContent> Handle(Command request, CancellationToken cancellationToken)
@@ -19,8 +20,13 @@ public sealed class Handler(IRepositoryManager repositories, IImageStorage stora
         var stream = await storage.OpenReadAsync(image.StorageKey, cancellationToken);
         if (!request.AsJpeg)
             return new ImageContent(stream, image.ContentType);
-        await using (stream)
-            return new ImageContent(await processor.ConvertToJpegAsync(stream, cancellationToken), "image/jpeg");
+        await jpegConversionLimiter.WaitAsync(cancellationToken);
+        try
+        {
+            await using (stream)
+                return new ImageContent(await processor.ConvertToJpegAsync(stream, cancellationToken), "image/jpeg");
+        }
+        finally { jpegConversionLimiter.Release(); }
     }
 }
 

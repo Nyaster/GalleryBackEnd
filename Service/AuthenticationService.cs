@@ -67,17 +67,12 @@ public sealed class AuthenticationService(
     public async Task<AuthenticationResult> RefreshAsync(string refreshToken, CancellationToken cancellationToken = default)
     {
         var tokenHash = HashToken(refreshToken);
-        var session = await repositories.AppUser.GetRefreshSessionAsync(tokenHash, true, cancellationToken);
         var now = clock.GetUtcNow();
-        if (session is null || session.RevokedAtUtc is not null || session.ExpiresAtUtc <= now)
+        var replacement = CreateRefreshSession(0, now);
+        var user = await repositories.AppUser.RotateRefreshSessionAsync(tokenHash, replacement.Session, now, cancellationToken);
+        if (user is null)
             throw new AppUserUnauthorizedException("Refresh session is invalid or expired.");
-
-        session.RevokedAtUtc = now;
-        session.RevokeReason = "rotated";
-        var result = await CreateSessionAsync(session.User, cancellationToken, save: false);
-        session.ReplacedBySessionId = Guid.Parse(result.RefreshToken.Split('.', 2)[0]);
-        await repositories.SaveAsync(cancellationToken);
-        return result;
+        return new AuthenticationResult(CreateJwtResponse(user, now), replacement.RawToken);
     }
 
     public async Task LogoutAsync(string refreshToken, CancellationToken cancellationToken = default)
@@ -93,21 +88,21 @@ public sealed class AuthenticationService(
     private async Task<AuthenticationResult> CreateSessionAsync(AppUser user, CancellationToken cancellationToken, bool save = true)
     {
         var now = clock.GetUtcNow();
-        var rawToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
-        var sessionId = Guid.NewGuid();
-        var refreshToken = $"{sessionId}.{rawToken}";
-        var session = new RefreshSession
-        {
-            Id = sessionId,
-            UserId = user.Id,
-            TokenHash = HashToken(refreshToken),
-            CreatedAtUtc = now,
-            ExpiresAtUtc = now.AddDays(options.Value.RefreshTokenDays)
-        };
+        var created = CreateRefreshSession(user.Id, now);
+        var session = created.Session;
         await repositories.AppUser.AddRefreshSessionAsync(session, cancellationToken);
         if (save)
             await repositories.SaveAsync(cancellationToken);
-        return new AuthenticationResult(CreateJwtResponse(user, now), refreshToken);
+        return new AuthenticationResult(CreateJwtResponse(user, now), created.RawToken);
+    }
+
+    private (RefreshSession Session, string RawToken) CreateRefreshSession(int userId, DateTimeOffset now)
+    {
+        var rawToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
+        var sessionId = Guid.NewGuid();
+        var refreshToken = $"{sessionId}.{rawToken}";
+        return (new RefreshSession { Id = sessionId, UserId = userId, FamilyId = Guid.NewGuid(), TokenHash = HashToken(refreshToken),
+            CreatedAtUtc = now, ExpiresAtUtc = now.AddDays(options.Value.RefreshTokenDays) }, refreshToken);
     }
 
     private JwtTokenResponse CreateJwtResponse(AppUser user, DateTimeOffset now)

@@ -7,4 +7,4 @@ public interface IImageParserService
     Task<ScrapeResult> RunAsync(ScrapeMode mode, CancellationToken cancellationToken = default);
 }
 
-public sealed record ScrapeResult(int ImagesDiscovered, int ImagesImported);
+public sealed record ScrapeResult(int ImagesDiscovered, int ImagesImported, bool CompletedWithErrors, int FailedItems);

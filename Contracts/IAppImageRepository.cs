@@ -7,7 +7,7 @@ public interface IAppImageRepository
 {
     Task<AppImage?> GetByIdAsync(int id, bool trackChanges, CancellationToken cancellationToken = default);
     Task<(List<AppImage> Images, int Total)> SearchAsync(SearchImageDto request, CancellationToken cancellationToken = default);
-    Task<List<AppImage>> GetUploadedByUserAsync(int userId, bool includeHidden, CancellationToken cancellationToken = default);
+    Task<(List<AppImage> Images, int Total)> GetUploadedByUserAsync(int userId, bool includeHidden, int page, int pageSize, CancellationToken cancellationToken = default);
     Task<List<AppImage>> GetRecommendationsAsync(int imageId, int limit, CancellationToken cancellationToken = default);
     Task<List<AppImage>> GetPendingAsync(int page, int pageSize, CancellationToken cancellationToken = default);
     Task<List<AppImage>> GetHiddenAsync(int page, int pageSize, CancellationToken cancellationToken = default);
