@@ -9,6 +9,6 @@ public interface IAppUserRepository
     Task<RefreshSession?> GetRefreshSessionAsync(byte[] tokenHash, bool trackChanges, CancellationToken cancellationToken = default);
     Task AddAsync(AppUser user, CancellationToken cancellationToken = default);
     Task AddRefreshSessionAsync(RefreshSession session, CancellationToken cancellationToken = default);
-    Task<AppUser?> RotateRefreshSessionAsync(byte[] tokenHash, RefreshSession replacement, DateTimeOffset now, CancellationToken cancellationToken = default);
+    Task<RefreshSessionRotationResult> RotateRefreshSessionAsync(byte[] tokenHash, RefreshSession replacement, DateTimeOffset now, CancellationToken cancellationToken = default);
     Task PurgeExpiredRefreshSessionsAsync(DateTimeOffset now, CancellationToken cancellationToken = default);
 }

@@ -1,0 +1,64 @@
+services:
+  database:
+    image: pgvector/pgvector:pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-gallery}
+      POSTGRES_USER: ${POSTGRES_USER:-gallery}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    image: gallery-api:${GALLERY_IMAGE_TAG:-latest}
+    build:
+      context: ..
+    depends_on:
+      database:
+        condition: service_healthy
+    environment: &api_environment
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__DefaultConnection: Host=database;Database=${POSTGRES_DB:-gallery};Username=${POSTGRES_USER:-gallery};Password=${POSTGRES_PASSWORD}
+      JwtConfig__ValidIssuer: ${PUBLIC_ORIGIN:?set PUBLIC_ORIGIN}
+      JwtConfig__ValidAudience: ${PUBLIC_ORIGIN:?set PUBLIC_ORIGIN}
+      JwtConfig__SecretKey: ${JWT_SECRET:?set JWT_SECRET to a random 32+ byte value}
+      JwtConfig__RefreshCookieSecure: "true"
+      Cors__ProductionOrigin: ${PUBLIC_ORIGIN:?set PUBLIC_ORIGIN}
+      ReverseProxy__TrustedProxies__0: ${TRUSTED_PROXY:-127.0.0.1}
+      BootstrapAdmin__Login: ${ADMIN_LOGIN:-}
+      BootstrapAdmin__Password: ${ADMIN_PASSWORD:-}
+      ParserSettings__Enabled: ${SCRAPER_ENABLED:-false}
+      ParserSettings__ParserLogin: ${SCRAPER_LOGIN:-}
+      ParserSettings__ParserPassword: ${SCRAPER_PASSWORD:-}
+      ParserSettings__AllowedImageHosts__0: ${SCRAPER_IMAGE_HOST:-lessonsinlovegame.com}
+      Embedding__Enabled: ${EMBEDDING_ENABLED:-true}
+      Embedding__ModelPath: /app/model/model.onnx
+      ImageStorage__RootPath: /app/Data/images
+      Observability__LogPath: /app/logs
+      Observability__RetentionDays: ${LOG_RETENTION_DAYS:-30}
+      Observability__SlowRequestMilliseconds: ${SLOW_REQUEST_MILLISECONDS:-1000}
+    command: ["--migrate"]
+
+  api:
+    image: gallery-api:${GALLERY_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      database:
+        condition: service_healthy
+    environment: *api_environment
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - gallery-images:/app/Data/images
+      - gallery-logs:/app/logs
+      - ${MODEL_PATH:?set MODEL_PATH to the host ONNX model path}:/app/model/model.onnx:ro
+
+volumes:
+  postgres-data:
+  gallery-images:
+  gallery-logs:

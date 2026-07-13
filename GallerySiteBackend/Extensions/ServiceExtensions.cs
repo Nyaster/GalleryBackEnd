@@ -1,4 +1,5 @@
 using System.Text;
+using GallerySiteBackend;
 using Contracts;
 using GallerySiteBackend.Configuration;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -43,6 +44,20 @@ public static class ServiceExtensions
                 RequireExpirationTime = true,
                 RequireSignedTokens = true,
                 ClockSkew = TimeSpan.FromSeconds(30)
+            };
+            options.Events = new JwtBearerEvents
+            {
+                OnAuthenticationFailed = context =>
+                {
+                    var logger = context.HttpContext.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger(LogCategories.Security);
+                    logger.LogWarning("JwtAuthenticationFailed {TimestampUtc} {TraceId} {Method} {Route} {ClientIp}",
+                        DateTimeOffset.UtcNow, context.HttpContext.TraceIdentifier, context.Request.Method,
+                        context.HttpContext.GetEndpoint() is Microsoft.AspNetCore.Routing.RouteEndpoint endpoint
+                            ? endpoint.RoutePattern.RawText ?? context.Request.Path.Value ?? "/"
+                            : context.Request.Path.Value ?? "/",
+                        context.HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown");
+                    return Task.CompletedTask;
+                }
             };
         });
     }

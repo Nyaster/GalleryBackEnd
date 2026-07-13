@@ -8,7 +8,7 @@ using Npgsql;
 
 namespace GallerySiteBackend;
 
-public sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logger) : IExceptionHandler
+public sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logger, ILoggerFactory loggerFactory) : IExceptionHandler
 {
     public async ValueTask<bool> TryHandleAsync(HttpContext context, Exception exception, CancellationToken cancellationToken)
     {
@@ -23,7 +23,21 @@ public sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logge
             DbUpdateException { InnerException: PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } } => StatusCodes.Status409Conflict,
             _ => StatusCodes.Status500InternalServerError
         };
-        logger.LogError(error, "Request {Method} {Path} failed with {StatusCode}", context.Request.Method, context.Request.Path, status);
+        var route = context.GetEndpoint() is Microsoft.AspNetCore.Routing.RouteEndpoint endpoint
+            ? endpoint.RoutePattern.RawText ?? context.Request.Path.Value
+            : context.Request.Path.Value;
+        if (status >= StatusCodes.Status500InternalServerError)
+            logger.LogError(error, "Request {Method} {Route} failed with {StatusCode} {TraceId}", context.Request.Method, route, status, context.TraceIdentifier);
+        else
+            logger.LogWarning(error, "Request {Method} {Route} failed with {StatusCode} {TraceId}", context.Request.Method, route, status, context.TraceIdentifier);
+        if (status is StatusCodes.Status401Unauthorized or StatusCodes.Status403Forbidden)
+        {
+            loggerFactory.CreateLogger(LogCategories.Security).LogWarning(
+                "AuthenticationOrAuthorizationFailed {TimestampUtc} {TraceId} {Method} {Route} {StatusCode} {ClientIp}",
+                DateTimeOffset.UtcNow, context.TraceIdentifier, context.Request.Method,
+                context.GetEndpoint() is Microsoft.AspNetCore.Routing.RouteEndpoint routeEndpoint ? routeEndpoint.RoutePattern.RawText ?? context.Request.Path.Value : context.Request.Path.Value,
+                status, context.Connection.RemoteIpAddress?.ToString() ?? "unknown");
+        }
         var detail = status == StatusCodes.Status500InternalServerError
             ? "An unexpected server error occurred."
             : error.Message;

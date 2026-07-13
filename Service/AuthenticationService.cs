@@ -8,6 +8,7 @@ using Entities.Exceptions;
 using Entities.Models;
 using GallerySiteBackend.Configuration;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Service.Contracts;
@@ -19,9 +20,11 @@ public sealed class AuthenticationService(
     IRepositoryManager repositories,
     IPasswordHasher<AppUser> passwordHasher,
     IOptions<JwtConfiguration> options,
-    TimeProvider clock) : IAuthenticationService
+    TimeProvider clock,
+    ILoggerFactory loggerFactory) : IAuthenticationService
 {
     private static readonly Regex LoginPattern = new("^[a-zA-Z0-9]+$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private readonly ILogger _securityLogger = loggerFactory.CreateLogger("GallerySiteBackend.Security");
 
     public async Task<AuthenticationResult> RegisterAsync(CreateUserDto request, CancellationToken cancellationToken = default)
     {
@@ -69,10 +72,14 @@ public sealed class AuthenticationService(
         var tokenHash = HashToken(refreshToken);
         var now = clock.GetUtcNow();
         var replacement = CreateRefreshSession(0, now);
-        var user = await repositories.AppUser.RotateRefreshSessionAsync(tokenHash, replacement.Session, now, cancellationToken);
-        if (user is null)
+        var rotation = await repositories.AppUser.RotateRefreshSessionAsync(tokenHash, replacement.Session, now, cancellationToken);
+        if (rotation.User is null)
+        {
+            _securityLogger.LogWarning("RefreshTokenRejected {TimestampUtc} {UserId} {FamilyRevoked}",
+                now, rotation.UserId, rotation.FamilyRevoked);
             throw new AppUserUnauthorizedException("Refresh session is invalid or expired.");
-        return new AuthenticationResult(CreateJwtResponse(user, now), replacement.RawToken);
+        }
+        return new AuthenticationResult(CreateJwtResponse(rotation.User, now), replacement.RawToken);
     }
 
     public async Task LogoutAsync(string refreshToken, CancellationToken cancellationToken = default)

@@ -20,6 +20,7 @@
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
         <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3"/>
+        <PackageReference Include="NLog.Extensions.Logging" Version="5.5.0" />
         <PackageReference Include="Pgvector.EntityFrameworkCore" Version="0.3.0" />
     </ItemGroup>
 

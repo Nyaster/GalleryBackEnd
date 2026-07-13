@@ -1,0 +1,47 @@
+services:
+  database:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_DB: gallery
+      POSTGRES_USER: gallery
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gallery -d gallery"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  api:
+    build: .
+    depends_on:
+      database:
+        condition: service_healthy
+    environment:
+      ConnectionStrings__DefaultConnection: Host=database;Database=gallery;Username=gallery;Password=${POSTGRES_PASSWORD}
+      JwtConfig__ValidIssuer: ${JWT_ISSUER:-https://api.example.test}
+      JwtConfig__ValidAudience: ${JWT_AUDIENCE:-https://app.example.test}
+      JwtConfig__SecretKey: ${JWT_SECRET:?set JWT_SECRET to a random 32+ byte value in .env}
+      JwtConfig__RefreshCookieSecure: "false"
+      Cors__AllowedOrigins__0: ${SPA_ORIGIN:-https://app.example.test}
+      BootstrapAdmin__Login: ${ADMIN_LOGIN:-}
+      BootstrapAdmin__Password: ${ADMIN_PASSWORD:-}
+      ParserSettings__Enabled: ${SCRAPER_ENABLED:-false}
+      ParserSettings__ParserLogin: ${SCRAPER_LOGIN:-}
+      ParserSettings__ParserPassword: ${SCRAPER_PASSWORD:-}
+      ParserSettings__LoginTimeoutSeconds: ${SCRAPER_LOGIN_TIMEOUT_SECONDS:-30}
+      ImageStorage__RootPath: /app/Data/images
+      Embedding__Enabled: "false"
+    ports:
+      - "8080:8080"
+    volumes:
+      - gallery-data:/app/Data
+      - gallery-logs:/app/logs
+
+volumes:
+  postgres-data:
+  gallery-data:
+  gallery-logs:

@@ -25,7 +25,7 @@ public sealed class AppUserRepository(RepositoryContext context) : IAppUserRepos
     public Task AddRefreshSessionAsync(RefreshSession session, CancellationToken cancellationToken = default)
         => context.RefreshSessions.AddAsync(session, cancellationToken).AsTask();
 
-    public async Task<AppUser?> RotateRefreshSessionAsync(byte[] tokenHash, RefreshSession replacement, DateTimeOffset now, CancellationToken cancellationToken = default)
+    public async Task<RefreshSessionRotationResult> RotateRefreshSessionAsync(byte[] tokenHash, RefreshSession replacement, DateTimeOffset now, CancellationToken cancellationToken = default)
     {
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         // SELECT ... FOR UPDATE is also non-composable. Keep the locked entity tracked, then
@@ -41,7 +41,7 @@ public sealed class AppUserRepository(RepositoryContext context) : IAppUserRepos
                     WHERE "FamilyId" = {session.FamilyId} AND "RevokedAtUtc" IS NULL
                     """, cancellationToken);
             await transaction.CommitAsync(cancellationToken);
-            return null;
+            return new RefreshSessionRotationResult(null, session?.UserId, session is not null);
         }
         session.RevokedAtUtc = now;
         session.RevokeReason = "rotated";
@@ -52,7 +52,7 @@ public sealed class AppUserRepository(RepositoryContext context) : IAppUserRepos
         await context.RefreshSessions.AddAsync(replacement, cancellationToken);
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return user;
+        return new RefreshSessionRotationResult(user, user.Id, false);
     }
 
     public Task PurgeExpiredRefreshSessionsAsync(DateTimeOffset now, CancellationToken cancellationToken = default)

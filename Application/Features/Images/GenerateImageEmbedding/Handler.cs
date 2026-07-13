@@ -1,4 +1,5 @@
 using Contracts;
+using System.Diagnostics;
 using Entities.Models;
 using MediatR;
 using Microsoft.Extensions.Logging;
@@ -16,6 +17,7 @@ public sealed class Handler(IRepositoryManager repositories, IImageStorage stora
     {
         var image = await repositories.AppImage.GetByIdAsync(request.ImageId, true, cancellationToken);
         if (image is null || image.EmbeddingStatus != EmbeddingStatus.Processing) return;
+        var stopwatch = Stopwatch.StartNew();
         try
         {
             if (!storage.Exists(image.StorageKey)) throw new FileNotFoundException("Image file does not exist.");
@@ -23,12 +25,15 @@ public sealed class Handler(IRepositoryManager repositories, IImageStorage stora
             image.Embedding = await generator.GenerateEmbeddingAsync(stream, cancellationToken);
             image.EmbeddingStatus = EmbeddingStatus.Ready;
             image.EmbeddingError = null;
+            logger.LogInformation("EmbeddingGenerationCompleted {ImageId} {AttemptCount} {ElapsedMilliseconds}", image.Id,
+                image.EmbeddingAttempts, Math.Round(stopwatch.Elapsed.TotalMilliseconds, 2));
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             image.EmbeddingStatus = image.EmbeddingAttempts >= options.Value.MaxAttempts ? EmbeddingStatus.Failed : EmbeddingStatus.Pending;
             image.EmbeddingError = exception.Message[..Math.Min(exception.Message.Length, 1024)];
-            logger.LogError(exception, "Embedding generation failed for image {ImageId}", image.Id);
+            logger.LogError(exception, "EmbeddingGenerationFailed {ImageId} {AttemptCount} {ElapsedMilliseconds}", image.Id,
+                image.EmbeddingAttempts, Math.Round(stopwatch.Elapsed.TotalMilliseconds, 2));
         }
         image.EmbeddingLeaseExpiresAtUtc = null;
         await repositories.SaveAsync(cancellationToken);

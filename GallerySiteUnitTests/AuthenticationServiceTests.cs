@@ -6,6 +6,7 @@ using Entities.Models;
 using GallerySiteBackend.Configuration;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Service;
 using Shared.DataTransferObjects;
@@ -85,18 +86,14 @@ public sealed class AuthenticationServiceTests
             ExpiresAtUtc = DateTimeOffset.UtcNow.AddDays(1)
         };
         var users = new Mock<IAppUserRepository>();
-        users.Setup(repo => repo.GetRefreshSessionAsync(It.IsAny<byte[]>(), true, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(existing);
         RefreshSession? replacement = null;
-        users.Setup(repo => repo.AddRefreshSessionAsync(It.IsAny<RefreshSession>(), It.IsAny<CancellationToken>()))
-            .Callback<RefreshSession, CancellationToken>((session, _) => replacement = session).Returns(Task.CompletedTask);
+        users.Setup(repo => repo.RotateRefreshSessionAsync(It.IsAny<byte[]>(), It.IsAny<RefreshSession>(), It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
+            .Callback<byte[], RefreshSession, DateTimeOffset, CancellationToken>((_, session, _, _) => replacement = session)
+            .ReturnsAsync(() => new RefreshSessionRotationResult(user, user.Id, false));
 
         var result = await CreateService(RepositoryMock(users).Object).RefreshAsync(refreshToken);
 
         Assert.NotNull(replacement);
-        Assert.NotNull(existing.RevokedAtUtc);
-        Assert.Equal("rotated", existing.RevokeReason);
-        Assert.Equal(replacement.Id, existing.ReplacedBySessionId);
         Assert.StartsWith(replacement.Id.ToString(), result.RefreshToken, StringComparison.Ordinal);
     }
 
@@ -109,5 +106,5 @@ public sealed class AuthenticationServiceTests
     }
 
     private static AuthenticationService CreateService(IRepositoryManager repositories)
-        => new(repositories, new PasswordHasher<AppUser>(), Options.Create(Jwt), TimeProvider.System);
+        => new(repositories, new PasswordHasher<AppUser>(), Options.Create(Jwt), TimeProvider.System, NullLoggerFactory.Instance);
 }
