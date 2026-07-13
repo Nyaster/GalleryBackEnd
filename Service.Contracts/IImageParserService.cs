@@ -4,7 +4,7 @@ namespace Service.Contracts;
 
 public interface IImageParserService
 {
-    Task<ScrapeResult> RunAsync(ScrapeMode mode, CancellationToken cancellationToken = default);
+    Task<ScrapeResult> RunAsync(ScrapeRun run, CancellationToken cancellationToken = default);
 }
 
 public sealed record ScrapeResult(int ImagesDiscovered, int ImagesImported, bool CompletedWithErrors, int FailedItems);

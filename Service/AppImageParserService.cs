@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Net;
+using System.Diagnostics;
 using AngleSharp;
 using AngleSharp.Dom;
 using AngleSharp.Html.Dom;
@@ -21,7 +22,7 @@ public sealed class AppImageParserService(
     TimeProvider clock,
     ILogger<AppImageParserService> logger) : IImageParserService
 {
-    public async Task<ScrapeResult> RunAsync(ScrapeMode mode, CancellationToken cancellationToken = default)
+    public async Task<ScrapeResult> RunAsync(ScrapeRun run, CancellationToken cancellationToken = default)
     {
         var settings = options.Value;
         if (!settings.Enabled)
@@ -30,39 +31,86 @@ public sealed class AppImageParserService(
             throw new InvalidOperationException("Parser credentials are not configured.");
 
         var context = BrowsingContext.New(Configuration.Default.WithDefaultLoader().WithDefaultCookies());
-        logger.LogInformation("Authenticating scraper with the source site");
-        await EnsureLoginAsync(context, settings, cancellationToken);
+        logger.LogInformation("Scraper authentication started");
+        try
+        {
+            await EnsureLoginAsync(context, settings, cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            logger.LogWarning("Scraper authentication failed {FailureType}", exception.GetType().Name);
+            throw;
+        }
         logger.LogInformation("Scraper authentication succeeded");
         var firstPage = await context.OpenAsync(settings.RequestsUrl, cancellationToken);
-        var pageCount = mode == ScrapeMode.Full ? GetPageCount(firstPage) : settings.IncrementalPages;
+        var pageCount = run.Mode == ScrapeMode.Full ? GetPageCount(firstPage) : settings.IncrementalPages;
         var candidates = new List<ScrapedCandidate>();
+        var mediaIds = new HashSet<int>();
+        run.TotalPages = Math.Max(pageCount, 1);
         for (var page = 1; page <= Math.Max(pageCount, 1); page++)
         {
             var document = page == 1 ? firstPage : await context.OpenAsync($"{settings.RequestsUrl}?page={page}", cancellationToken);
-            candidates.AddRange(ExtractCandidates(document, settings.SiteUrl));
+            var pageCandidates = ExtractCandidates(document, settings.SiteUrl).ToList();
+            foreach (var candidate in pageCandidates)
+                if (mediaIds.Add(candidate.MediaId)) candidates.Add(candidate);
+
+            run.ScannedPages = page;
+            run.ImagesDiscovered = candidates.Count;
+            logger.LogInformation("Scrape source page scanned {PageNumber} {TotalPages} {PageCandidates} {DiscoveredCandidates}",
+                page, run.TotalPages, pageCandidates.Count, run.ImagesDiscovered);
+            await SaveProgressAsync(run, "source-page", cancellationToken);
         }
-        candidates = candidates.DistinctBy(candidate => candidate.MediaId).ToList();
         var existing = await repositories.AppImage.GetByExternalMediaIdsAsync(candidates.Select(candidate => candidate.MediaId), false, cancellationToken);
         var existingIds = existing.Select(image => image.ExternalMediaId!.Value).ToHashSet();
         var newCandidates = candidates.Where(candidate => !existingIds.Contains(candidate.MediaId)).ToList();
-        var imported = 0;
-        var failed = 0;
+        var plannedCandidates = newCandidates.Take(run.MaxImages).ToList();
+        run.EligibleCandidates = newCandidates.Count;
+        run.PlannedDownloads = plannedCandidates.Count;
+        logger.LogInformation("Scrape candidate selection completed {DiscoveredCandidates} {EligibleCandidates} {PlannedDownloads} {ExistingCandidates}",
+            run.ImagesDiscovered, run.EligibleCandidates, run.PlannedDownloads, existingIds.Count);
+        await SaveProgressAsync(run, "candidate-selection", cancellationToken);
         var cookie = context.GetCookie(new Url(settings.SiteUrl));
 
-        foreach (var candidate in newCandidates)
+        for (var index = 0; index < plannedCandidates.Count; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            var candidate = plannedCandidates[index];
+            var elapsed = Stopwatch.StartNew();
+            logger.LogInformation("Scrape image import started {MediaId} {Host} {Path} {Ordinal}",
+                candidate.MediaId, candidate.ImageUrl.Host, candidate.ImageUrl.AbsolutePath, index + 1);
             try
             {
-                if (await ImportCandidateAsync(candidate, cookie, settings, cancellationToken)) imported++;
+                if (await ImportCandidateAsync(candidate, cookie, settings, cancellationToken)) run.ImagesImported++;
+                logger.LogInformation("Scrape image import completed {MediaId} {Host} {Path} {Ordinal} {ElapsedMilliseconds}",
+                    candidate.MediaId, candidate.ImageUrl.Host, candidate.ImageUrl.AbsolutePath, index + 1,
+                    Math.Round(elapsed.Elapsed.TotalMilliseconds, 2));
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
-                failed++;
-                logger.LogWarning(exception, "Skipping malformed or unavailable scraped image {MediaId}", candidate.MediaId);
+                run.FailedItems++;
+                run.CompletedWithErrors = true;
+                logger.LogWarning("Scrape image import failed {MediaId} {Host} {Path} {Ordinal} {ElapsedMilliseconds} {FailureType}",
+                    candidate.MediaId, candidate.ImageUrl.Host, candidate.ImageUrl.AbsolutePath, index + 1,
+                    Math.Round(elapsed.Elapsed.TotalMilliseconds, 2), exception.GetType().Name);
+            }
+            finally
+            {
+                run.ProcessedDownloads++;
+                await SaveProgressAsync(run, "download-attempt", CancellationToken.None);
             }
         }
-        return new ScrapeResult(candidates.Count, imported, failed > 0, failed);
+        return new ScrapeResult(run.ImagesDiscovered, run.ImagesImported, run.CompletedWithErrors, run.FailedItems);
+    }
+
+    private async Task SaveProgressAsync(ScrapeRun run, string checkpoint, CancellationToken cancellationToken)
+    {
+        var now = clock.GetUtcNow();
+        run.LastProgressAtUtc = now;
+        run.LeaseExpiresAtUtc = now.AddMinutes(30);
+        await repositories.SaveAsync(cancellationToken);
+        logger.LogInformation("Scrape progress checkpoint {Checkpoint} {ScannedPages} {TotalPages} {DiscoveredCandidates} {EligibleCandidates} {PlannedDownloads} {ProcessedDownloads} {ImagesImported} {FailedItems}",
+            checkpoint, run.ScannedPages, run.TotalPages, run.ImagesDiscovered, run.EligibleCandidates,
+            run.PlannedDownloads, run.ProcessedDownloads, run.ImagesImported, run.FailedItems);
     }
 
     private async Task<bool> ImportCandidateAsync(ScrapedCandidate candidate, string cookie, ParserSettings settings,
@@ -169,24 +217,65 @@ public sealed class AppImageParserService(
         return int.TryParse(digits, out var count) ? Math.Max((int)Math.Ceiling(count / 20d), 1) : 1;
     }
 
-    private static IEnumerable<ScrapedCandidate> ExtractCandidates(IDocument document, string siteUrl)
+    private IEnumerable<ScrapedCandidate> ExtractCandidates(IDocument document, string siteUrl)
     {
+        var elapsed = Stopwatch.StartNew();
+        var ordinal = 0;
         foreach (var element in document.QuerySelectorAll(".requests > .block:not(.hidden) > .block-inner"))
         {
-            var imagePath = element.QuerySelector("a")?.GetAttribute("href");
+            ordinal++;
+            var imagePath = element.QuerySelector("img[src]")?.GetAttribute("src");
             var mediaIdText = element.QuerySelector("div.like")?.GetAttribute("data-media-id");
             var dateText = element.QuerySelector(".overlay>p:nth-child(1)")?.TextContent;
             if (string.IsNullOrWhiteSpace(imagePath) || !int.TryParse(mediaIdText, out var mediaId) || dateText is null)
+            {
+                LogMalformedSourceItem(mediaIdText, null, ordinal, elapsed, "Missing image, media ID, or date.");
                 continue;
-            if (!Uri.TryCreate(new Uri(siteUrl), imagePath, out var imageUri) || imageUri.AbsolutePath.EndsWith(".gif", StringComparison.OrdinalIgnoreCase))
+            }
+            if (!Uri.TryCreate(siteUrl, UriKind.Absolute, out var siteUri) || !Uri.TryCreate(siteUri, imagePath, out var imageUri))
+            {
+                LogMalformedSourceItem(mediaIdText, null, ordinal, elapsed, "Image source is not a valid URI.");
                 continue;
+            }
+            if (imageUri.AbsolutePath.EndsWith(".gif", StringComparison.OrdinalIgnoreCase))
+            {
+                LogMalformedSourceItem(mediaIdText, imageUri, ordinal, elapsed, "GIF images are not imported.");
+                continue;
+            }
             var dateValue = dateText.Replace("Added:", string.Empty, StringComparison.OrdinalIgnoreCase).Trim();
             if (!DateTimeOffset.TryParseExact(dateValue, "M/d/yyyy", CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var date))
+            {
+                LogMalformedSourceItem(mediaIdText, imageUri, ordinal, elapsed, "Added date is not valid.");
                 continue;
+            }
             var rawTags = element.QuerySelector(".overlay > p.tags")?.TextContent ?? string.Empty;
             var tags = rawTags.Replace("tags:", string.Empty, StringComparison.OrdinalIgnoreCase).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-            yield return new ScrapedCandidate(mediaId, imageUri, date.ToUniversalTime(), tags);
+            yield return new ScrapedCandidate(mediaId, ToOriginalImageUri(imageUri), date.ToUniversalTime(), tags);
         }
+    }
+
+    private void LogMalformedSourceItem(string? mediaId, Uri? imageUri, int ordinal, Stopwatch elapsed, string reason)
+        => logger.LogWarning("Skipping malformed scrape source item {MediaId} {Host} {Path} {Ordinal} {ElapsedMilliseconds} {Reason}",
+            mediaId ?? "unknown", imageUri?.Host ?? "unknown", imageUri?.AbsolutePath ?? "/", ordinal,
+            Math.Round(elapsed.Elapsed.TotalMilliseconds, 2), reason);
+
+    private static Uri ToOriginalImageUri(Uri imageUri)
+    {
+        if (string.IsNullOrEmpty(imageUri.Query)) return imageUri;
+
+        var retainedParameters = imageUri.Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries)
+            .Where(parameter =>
+            {
+                var separator = parameter.IndexOf('=');
+                var encodedName = separator < 0 ? parameter : parameter[..separator];
+                var name = Uri.UnescapeDataString(encodedName);
+                return !string.Equals(name, "width", StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(name, "height", StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(name, "format", StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(name, "quality", StringComparison.OrdinalIgnoreCase);
+            });
+        var builder = new UriBuilder(imageUri) { Query = string.Join('&', retainedParameters) };
+        return builder.Uri;
     }
 
     private static CookieContainer CreateCookies(string rawCookies, string host)

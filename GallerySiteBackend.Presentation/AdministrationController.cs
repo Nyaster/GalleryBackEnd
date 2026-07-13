@@ -44,7 +44,7 @@ public sealed class AdministrationController(IMediator mediator) : ControllerBas
     [ProducesResponseType<ScrapeRunDto>(StatusCodes.Status202Accepted)]
     public async Task<ActionResult<ScrapeRunDto>> StartScrape(StartScrapeDto request, CancellationToken cancellationToken)
     {
-        var run = await mediator.Send(new Application.Features.Administration.StartScrape.Command(request.Mode), cancellationToken);
+        var run = await mediator.Send(new Application.Features.Administration.StartScrape.Command(request.Mode, request.MaxImages), cancellationToken);
         return AcceptedAtAction(nameof(GetScrape), new { id = run.Id }, run);
     }
 

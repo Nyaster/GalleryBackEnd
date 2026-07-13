@@ -4,4 +4,4 @@ using Shared.DataTransferObjects;
 
 namespace Application.Features.Administration.StartScrape;
 
-public sealed record Command(ScrapeMode Mode) : IRequest<ScrapeRunDto>;
+public sealed record Command(ScrapeMode Mode, int? MaxImages = null) : IRequest<ScrapeRunDto>;

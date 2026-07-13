@@ -10,9 +10,16 @@ public sealed class ScrapeRun
     public DateTimeOffset? LeaseExpiresAtUtc { get; set; }
     public int Attempts { get; set; }
     public DateTimeOffset? CompletedAtUtc { get; set; }
+    public int MaxImages { get; set; }
+    public int TotalPages { get; set; }
+    public int ScannedPages { get; set; }
     public int ImagesDiscovered { get; set; }
+    public int EligibleCandidates { get; set; }
+    public int PlannedDownloads { get; set; }
+    public int ProcessedDownloads { get; set; }
     public int ImagesImported { get; set; }
     public int FailedItems { get; set; }
+    public DateTimeOffset? LastProgressAtUtc { get; set; }
     public bool CompletedWithErrors { get; set; }
     public string? Error { get; set; }
 }

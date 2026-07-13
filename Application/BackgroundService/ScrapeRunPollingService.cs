@@ -37,31 +37,50 @@ public sealed class ScrapeRunPollingService(IServiceScopeFactory scopeFactory, I
         var run = await repositories.ClaimNextScrapeRunAsync(TimeProvider.System.GetUtcNow(), cancellationToken);
         if (run is null) return;
         var stopwatch = Stopwatch.StartNew();
+        if (run.Attempts > 1)
+        {
+            run.TotalPages = 0;
+            run.ScannedPages = 0;
+            run.ImagesDiscovered = 0;
+            run.EligibleCandidates = 0;
+            run.PlannedDownloads = 0;
+            run.ProcessedDownloads = 0;
+            run.ImagesImported = 0;
+            run.FailedItems = 0;
+            run.CompletedWithErrors = false;
+            run.Error = null;
+        }
+        using var logScope = logger.BeginScope(new Dictionary<string, object?>
+        {
+            ["ScrapeRunId"] = run.Id,
+            ["Attempt"] = run.Attempts,
+            ["Mode"] = run.Mode.ToString(),
+            ["MaxImages"] = run.MaxImages
+        });
+        logger.LogInformation("Scrape run claimed and started");
         try
         {
-            var result = await scope.ServiceProvider.GetRequiredService<IImageParserService>().RunAsync(run.Mode, cancellationToken);
-            run.ImagesDiscovered = result.ImagesDiscovered;
-            run.ImagesImported = result.ImagesImported;
-            run.FailedItems = result.FailedItems;
-            run.CompletedWithErrors = result.CompletedWithErrors;
+            await scope.ServiceProvider.GetRequiredService<IImageParserService>().RunAsync(run, cancellationToken);
             run.Status = BackgroundJobStatus.Completed;
             run.CompletedAtUtc = TimeProvider.System.GetUtcNow();
-            logger.LogInformation("ScrapeRunCompleted {ScrapeRunId} {AttemptCount} {ElapsedMilliseconds} {ImagesDiscovered} {ImagesImported} {FailedItems}",
-                run.Id, run.Attempts, Math.Round(stopwatch.Elapsed.TotalMilliseconds, 2), run.ImagesDiscovered, run.ImagesImported, run.FailedItems);
+            logger.LogInformation("Scrape run completed {ElapsedMilliseconds} {ImagesDiscovered} {EligibleCandidates} {PlannedDownloads} {ProcessedDownloads} {ImagesImported} {FailedItems}",
+                Math.Round(stopwatch.Elapsed.TotalMilliseconds, 2), run.ImagesDiscovered, run.EligibleCandidates,
+                run.PlannedDownloads, run.ProcessedDownloads, run.ImagesImported, run.FailedItems);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             run.Status = BackgroundJobStatus.Cancelled;
             run.CompletedAtUtc = TimeProvider.System.GetUtcNow();
+            logger.LogInformation("Scrape run cancelled {ElapsedMilliseconds}", Math.Round(stopwatch.Elapsed.TotalMilliseconds, 2));
         }
         catch (Exception exception)
         {
             run.Status = BackgroundJobStatus.Failed;
-            run.Error = exception.Message[..Math.Min(exception.Message.Length, 2048)];
+            run.Error = $"Scrape run failed with {exception.GetType().Name}.";
             run.CompletedAtUtc = TimeProvider.System.GetUtcNow();
-            logger.LogError(exception, "ScrapeRunFailed {ScrapeRunId} {AttemptCount} {ElapsedMilliseconds}", run.Id,
-                run.Attempts, Math.Round(stopwatch.Elapsed.TotalMilliseconds, 2));
+            logger.LogError("Scrape run failed {ElapsedMilliseconds} {FailureType}",
+                Math.Round(stopwatch.Elapsed.TotalMilliseconds, 2), exception.GetType().Name);
         }
-        await repositories.SaveAsync(cancellationToken);
+        await repositories.SaveAsync(CancellationToken.None);
     }
 }
