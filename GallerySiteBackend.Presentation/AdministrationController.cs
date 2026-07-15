@@ -11,6 +11,26 @@ namespace GallerySiteBackend.Presentation;
 [Route("api/admin")]
 public sealed class AdministrationController(IMediator mediator) : ControllerBase
 {
+    [HttpPut("announcement")]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult<AnnouncementDto>> UpdateAnnouncement(UpdateAnnouncementDto request, CancellationToken cancellationToken)
+        => Ok(await mediator.Send(new Application.Features.Announcements.UpdateAnnouncementCommand(request), cancellationToken));
+
+    [HttpDelete("announcement")]
+    [Authorize(Roles = "Admin")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> ClearAnnouncement(CancellationToken cancellationToken)
+    {
+        await mediator.Send(new Application.Features.Announcements.ClearAnnouncementCommand(), cancellationToken);
+        return NoContent();
+    }
+
+    [HttpGet("feedback")]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult<PageableFeedbackDto>> Feedback([FromQuery] int page = 1, [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
+        => Ok(await mediator.Send(new Application.Features.Announcements.GetFeedbackCommand(page, pageSize), cancellationToken));
+
     [HttpGet("images/pending")]
     [Authorize(Roles = "Admin,Moderator")]
     public async Task<ActionResult<List<AppImageDto>>> PendingImages([FromQuery] int page = 1, [FromQuery] int pageSize = 20,

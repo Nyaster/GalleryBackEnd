@@ -8,6 +8,8 @@ public interface IRepositoryManager
     IAppImageRepository AppImage { get; }
     IInteractionRepository Interactions { get; }
     IRankingRepository Rankings { get; }
+    IAnnouncementRepository Announcements { get; }
+    IFeedbackRepository Feedback { get; }
     Task<ScrapeRun?> GetScrapeRunAsync(Guid id, bool trackChanges, CancellationToken cancellationToken = default);
     Task<ScrapeRun?> ClaimNextScrapeRunAsync(DateTimeOffset now, CancellationToken cancellationToken = default);
     Task AddScrapeRunAsync(ScrapeRun run, CancellationToken cancellationToken = default);

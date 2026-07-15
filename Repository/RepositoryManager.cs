@@ -10,11 +10,15 @@ public sealed class RepositoryManager(RepositoryContext context) : IRepositoryMa
     private readonly Lazy<IAppUserRepository> _users = new(() => new AppUserRepository(context));
     private readonly Lazy<IInteractionRepository> _interactions = new(() => new InteractionRepository(context));
     private readonly Lazy<IRankingRepository> _rankings = new(() => new RankingRepository(context));
+    private readonly Lazy<IAnnouncementRepository> _announcements = new(() => new AnnouncementRepository(context));
+    private readonly Lazy<IFeedbackRepository> _feedback = new(() => new FeedbackRepository(context));
 
     public IAppUserRepository AppUser => _users.Value;
     public IAppImageRepository AppImage => _images.Value;
     public IInteractionRepository Interactions => _interactions.Value;
     public IRankingRepository Rankings => _rankings.Value;
+    public IAnnouncementRepository Announcements => _announcements.Value;
+    public IFeedbackRepository Feedback => _feedback.Value;
 
     public Task<ScrapeRun?> GetScrapeRunAsync(Guid id, bool trackChanges, CancellationToken cancellationToken = default)
     {
