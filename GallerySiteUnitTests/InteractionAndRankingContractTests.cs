@@ -12,6 +12,7 @@ public sealed class InteractionAndRankingContractTests
     [InlineData(typeof(ImageController), "CreateComment", "POST", "{imageId:int}/comments")]
     [InlineData(typeof(ImageController), "Like", "PUT", "{imageId:int}/likes/me")]
     [InlineData(typeof(ImageController), "Unlike", "DELETE", "{imageId:int}/likes/me")]
+    [InlineData(typeof(UserController), "LikedImages", "GET", "liked-images")]
     [InlineData(typeof(CommentsController), "Delete", "DELETE", "{commentId:int}")]
     [InlineData(typeof(RankingsController), "Get", "GET", "{period}")]
     [InlineData(typeof(AdministrationController), "DeleteComment", "DELETE", "comments/{commentId:int}")]

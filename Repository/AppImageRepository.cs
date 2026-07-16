@@ -49,6 +49,21 @@ public sealed class AppImageRepository(RepositoryContext context) : IAppImageRep
         return (images, total);
     }
 
+    public async Task<(List<AppImage> Images, int Total)> GetLikedByUserAsync(int userId, int page, int pageSize, CancellationToken cancellationToken = default)
+    {
+        var query = ImageQuery(false)
+            .Where(image => image.DeletedAtUtc == null && image.Visibility == ImageVisibility.Gallery &&
+                image.ModerationStatus == ModerationStatus.Approved)
+            .Where(image => image.Likes.Any(like => like.UserId == userId));
+        var total = await query.CountAsync(cancellationToken);
+        var size = Math.Clamp(pageSize, 1, 50);
+        var images = await query.OrderByDescending(image => image.Likes
+                .Where(like => like.UserId == userId).Select(like => like.CreatedAtUtc).Single())
+            .ThenByDescending(image => image.Id).Skip((Math.Max(page, 1) - 1) * size).Take(size)
+            .ToListAsync(cancellationToken);
+        return (images, total);
+    }
+
     public async Task<List<AppImage>> GetRecommendationsAsync(int imageId, int limit, CancellationToken cancellationToken = default)
     {
         var source = await context.Images.AsNoTracking().SingleOrDefaultAsync(image => image.Id == imageId, cancellationToken);

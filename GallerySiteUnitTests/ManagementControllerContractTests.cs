@@ -11,6 +11,7 @@ public sealed class ManagementControllerContractTests
     [InlineData(typeof(ImageController), "ReplaceTags", "PUT", "{id:int}/tags")]
     [InlineData(typeof(ImageController), "Hide", "DELETE", "{id:int}")]
     [InlineData(typeof(ImageController), "Restore", "POST", "{id:int}/restore")]
+    [InlineData(typeof(ImageController), "Publish", "POST", "{id:int}/publish")]
     [InlineData(typeof(AdministrationController), "Tags", "GET", "tags")]
     [InlineData(typeof(AdministrationController), "ChangeTagModeration", "PATCH", "tags/{id:int}/moderation")]
     [InlineData(typeof(AdministrationController), "HiddenImages", "GET", "images/hidden")]

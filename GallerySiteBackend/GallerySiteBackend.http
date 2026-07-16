@@ -13,6 +13,10 @@ Content-Type: application/json
 GET {{GallerySiteBackend_HostAddress}}/api/images?kind=All&sort=Newest&page=1&pageSize=20
 Authorization: Bearer {{accessToken}}
 
+### Read the authenticated user's currently public liked images, newest likes first.
+GET {{GallerySiteBackend_HostAddress}}/api/users/me/liked-images?page=1&pageSize=20
+Authorization: Bearer {{accessToken}}
+
 ### Upload a user image. An Admin must first grant a non-admin user upload access; new uploads are pending moderation.
 POST {{GallerySiteBackend_HostAddress}}/api/images
 Authorization: Bearer {{accessToken}}
@@ -59,6 +63,10 @@ Authorization: Bearer {{accessToken}}
 POST {{GallerySiteBackend_HostAddress}}/api/images/42/restore
 Authorization: Bearer {{accessToken}}
 
+### Publish an owned private image. This does not approve a pending or rejected image.
+POST {{GallerySiteBackend_HostAddress}}/api/images/42/publish
+Authorization: Bearer {{accessToken}}
+
 ### Staff tag review.
 GET {{GallerySiteBackend_HostAddress}}/api/admin/tags?status=Pending&page=1&pageSize=20
 Authorization: Bearer {{staffAccessToken}}
@@ -84,6 +92,36 @@ Content-Type: application/json
 {
   "content": "Great image!"
 }
+
+### Read the currently active global announcement. Both fields are null when none is active.
+GET {{GallerySiteBackend_HostAddress}}/api/announcement
+Authorization: Bearer {{accessToken}}
+
+### Submit authenticated-user feedback (five submissions per user per hour).
+POST {{GallerySiteBackend_HostAddress}}/api/feedback
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "content": "It would be helpful to have saved searches."
+}
+
+### Admin: publish or replace the global announcement.
+PUT {{GallerySiteBackend_HostAddress}}/api/admin/announcement
+Authorization: Bearer {{adminAccessToken}}
+Content-Type: application/json
+
+{
+  "content": "Scheduled maintenance begins at 22:00 UTC."
+}
+
+### Admin: view newest feedback first, or clear the announcement.
+GET {{GallerySiteBackend_HostAddress}}/api/admin/feedback?page=1&pageSize=20
+Authorization: Bearer {{adminAccessToken}}
+
+###
+DELETE {{GallerySiteBackend_HostAddress}}/api/admin/announcement
+Authorization: Bearer {{adminAccessToken}}
 
 ### Like an approved public image, then view the live ranking.
 PUT {{GallerySiteBackend_HostAddress}}/api/images/42/likes/me

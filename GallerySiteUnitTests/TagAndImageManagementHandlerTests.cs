@@ -113,6 +113,64 @@ public sealed class TagAndImageManagementHandlerTests
         Assert.Equal(ModerationStatus.Pending, image.ModerationStatus);
     }
 
+    [Theory]
+    [InlineData(ModerationStatus.Pending)]
+    [InlineData(ModerationStatus.Approved)]
+    [InlineData(ModerationStatus.Rejected)]
+    public async Task Publish_PrivateImage_PersistsGalleryVisibilityAndPreservesModeration(ModerationStatus status)
+    {
+        var image = Image(ownerId: 7, status, ImageVisibility.Private);
+        var (repositories, _) = Repositories(image);
+        var handler = new Application.Features.Images.PublishImage.Handler(repositories.Object, new TestUser(7));
+
+        var result = await handler.Handle(new Application.Features.Images.PublishImage.Command(1), CancellationToken.None);
+
+        Assert.Equal(ImageVisibility.Gallery, image.Visibility);
+        Assert.Equal(status, image.ModerationStatus);
+        Assert.Equal(ImageVisibility.Gallery, result.Visibility);
+        Assert.Equal(status, result.ModerationStatus);
+        repositories.Verify(repository => repository.SaveAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Publish_PrivateImage_AllowsStaffWhoDoesNotOwnIt()
+    {
+        var image = Image(ownerId: 7, ModerationStatus.Pending, ImageVisibility.Private);
+        var (repositories, _) = Repositories(image);
+        var handler = new Application.Features.Images.PublishImage.Handler(repositories.Object, new TestUser(9, AppUserRole.Moderator));
+
+        await handler.Handle(new Application.Features.Images.PublishImage.Command(1), CancellationToken.None);
+
+        Assert.Equal(ImageVisibility.Gallery, image.Visibility);
+        repositories.Verify(repository => repository.SaveAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Publish_OtherUser_ThrowsForbiddenAndDoesNotSave()
+    {
+        var image = Image(ownerId: 7, ModerationStatus.Approved, ImageVisibility.Private);
+        var (repositories, _) = Repositories(image);
+        var handler = new Application.Features.Images.PublishImage.Handler(repositories.Object, new TestUser(8));
+
+        await Assert.ThrowsAsync<AppForbiddenException>(() => handler.Handle(new Application.Features.Images.PublishImage.Command(1), CancellationToken.None));
+
+        Assert.Equal(ImageVisibility.Private, image.Visibility);
+        repositories.Verify(repository => repository.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Publish_GalleryImage_ThrowsBadRequestAndDoesNotSave()
+    {
+        var image = Image(ownerId: 7, ModerationStatus.Approved);
+        var (repositories, _) = Repositories(image);
+        var handler = new Application.Features.Images.PublishImage.Handler(repositories.Object, new TestUser(7));
+
+        await Assert.ThrowsAsync<Base400BadRequestException>(() => handler.Handle(new Application.Features.Images.PublishImage.Command(1), CancellationToken.None));
+
+        Assert.Equal(ImageVisibility.Gallery, image.Visibility);
+        repositories.Verify(repository => repository.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     private static (Mock<IRepositoryManager> Repositories, Mock<IAppImageRepository> Images) Repositories(AppImage image)
     {
         var repositories = new Mock<IRepositoryManager>();
@@ -123,13 +181,13 @@ public sealed class TagAndImageManagementHandlerTests
         return (repositories, images);
     }
 
-    private static AppImage Image(int ownerId, ModerationStatus status) => new UserMadeImage
+    private static AppImage Image(int ownerId, ModerationStatus status, ImageVisibility visibility = ImageVisibility.Gallery) => new UserMadeImage
     {
         Id = 1,
         Source = ImageSource.UserUpload,
         UploadedById = ownerId,
         UploadedAtUtc = DateTimeOffset.UtcNow,
-        Visibility = ImageVisibility.Gallery,
+        Visibility = visibility,
         ModerationStatus = status,
         StorageKey = "uploads/test.jpg",
         ContentType = "image/jpeg",

@@ -32,7 +32,7 @@ public sealed class ImageLikeEfConfiguration : IEntityTypeConfiguration<ImageLik
         builder.HasKey(like => new { like.ImageId, like.UserId });
         builder.HasOne(like => like.Image).WithMany(image => image.Likes).HasForeignKey(like => like.ImageId).OnDelete(DeleteBehavior.Cascade);
         builder.HasOne(like => like.User).WithMany(user => user.ImageLikes).HasForeignKey(like => like.UserId).OnDelete(DeleteBehavior.Cascade);
-        builder.HasIndex(like => like.UserId);
+        builder.HasIndex(like => new { like.UserId, like.CreatedAtUtc, like.ImageId });
     }
 }
 

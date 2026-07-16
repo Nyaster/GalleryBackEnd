@@ -63,6 +63,10 @@ public sealed class ImageController(IMediator mediator) : ControllerBase
     public async Task<ActionResult<AppImageDto>> Restore(int id, CancellationToken cancellationToken)
         => Ok(await mediator.Send(new Application.Features.Images.RestoreImage.Command(id), cancellationToken));
 
+    [HttpPost("{id:int}/publish")]
+    public async Task<ActionResult<AppImageDto>> Publish(int id, CancellationToken cancellationToken)
+        => Ok(await mediator.Send(new Application.Features.Images.PublishImage.Command(id), cancellationToken));
+
     [HttpGet("{imageId:int}/comments")]
     public async Task<ActionResult<PageableCommentsDto>> Comments(int imageId, [FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken cancellationToken = default)
         => Ok(await mediator.Send(new Application.Features.Images.Comments.GetCommentsCommand(imageId, page, pageSize), cancellationToken));

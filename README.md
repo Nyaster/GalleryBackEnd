@@ -39,7 +39,7 @@ After configuring scraper credentials and starting the API, log in with the boot
 curl -X POST http://localhost:8080/api/admin/scrape-runs \
   -H 'Authorization: Bearer <adminAccessToken>' \
   -H 'Content-Type: application/json' \
-  -d '{"mode":"Incremental"}'
+  -d '{"mode":"Incremental","maxImages":25}'
 ```
 
 The response is `202 Accepted` and contains the run `id`. Check its progress until it is `Completed`:
@@ -49,4 +49,4 @@ curl http://localhost:8080/api/admin/scrape-runs/<runId> \
   -H 'Authorization: Bearer <adminAccessToken>'
 ```
 
-Use `Incremental` for a one-time sample; it fetches at most `ParserSettings:IncrementalPages` pages (five by default). `Full` imports every available page and should be used only when that larger run is intended.
+`maxImages` is optional: it defaults to `ParserSettings:DefaultImagesPerRun` (100) and accepts values from 1 through 500. The run status reports live page and download counters while it is running. `Incremental` fetches at most `ParserSettings:IncrementalPages` pages (five by default); `Full` scans every source page before applying the download cap.
