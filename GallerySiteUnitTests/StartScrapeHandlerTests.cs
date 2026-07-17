@@ -29,16 +29,16 @@ public sealed class StartScrapeHandlerTests
     {
         var (handler, run) = CreateHandler();
 
-        var result = await handler.Handle(new Command(ScrapeMode.Full, 500), CancellationToken.None);
+        var result = await handler.Handle(new Command(ScrapeMode.Full, 2_000), CancellationToken.None);
 
-        Assert.Equal(500, result.MaxImages);
+        Assert.Equal(2_000, result.MaxImages);
         Assert.Equal(ScrapeMode.Full, run.Value!.Mode);
-        Assert.Equal(500, run.Value.MaxImages);
+        Assert.Equal(2_000, run.Value.MaxImages);
     }
 
     [Theory]
     [InlineData(0)]
-    [InlineData(501)]
+    [InlineData(2_001)]
     public async Task Handle_InvalidCap_ThrowsBadRequestWithoutQueueingRun(int maxImages)
     {
         var (handler, run) = CreateHandler();
@@ -49,7 +49,18 @@ public sealed class StartScrapeHandlerTests
         Assert.Null(run.Value);
     }
 
-    private static (Handler Handler, StrongBox<ScrapeRun?> Run) CreateHandler(int defaultImagesPerRun = 100)
+    [Fact]
+    public async Task Handle_DefaultAboveConfiguredCeiling_ThrowsWithoutQueueingRun()
+    {
+        var (handler, run) = CreateHandler(defaultImagesPerRun: 2_001, maximumImagesPerRun: 2_000);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => handler.Handle(
+            new Command(ScrapeMode.Incremental), CancellationToken.None));
+
+        Assert.Null(run.Value);
+    }
+
+    private static (Handler Handler, StrongBox<ScrapeRun?> Run) CreateHandler(int defaultImagesPerRun = 100, int maximumImagesPerRun = 2_000)
     {
         var run = new StrongBox<ScrapeRun?>();
         var repositories = new Mock<IRepositoryManager>();
@@ -58,7 +69,7 @@ public sealed class StartScrapeHandlerTests
             .Returns(Task.CompletedTask);
         repositories.Setup(repository => repository.SaveAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
         return (new Handler(repositories.Object, new AdminUser(), TimeProvider.System,
-            Options.Create(new ParserSettings { Enabled = true, DefaultImagesPerRun = defaultImagesPerRun })), run);
+            Options.Create(new ParserSettings { Enabled = true, DefaultImagesPerRun = defaultImagesPerRun, MaximumImagesPerRun = maximumImagesPerRun })), run);
     }
 
     private sealed class AdminUser : IUserContext

@@ -49,4 +49,4 @@ curl http://localhost:8080/api/admin/scrape-runs/<runId> \
   -H 'Authorization: Bearer <adminAccessToken>'
 ```
 
-`maxImages` is optional: it defaults to `ParserSettings:DefaultImagesPerRun` (100) and accepts values from 1 through 500. The run status reports live page and download counters while it is running. `Incremental` fetches at most `ParserSettings:IncrementalPages` pages (five by default); `Full` scans every source page before applying the download cap.
+`maxImages` is optional: it defaults to `ParserSettings:DefaultImagesPerRun` (100) and accepts values from 1 through `ParserSettings:MaximumImagesPerRun` (2,000 by default). In Docker, set `SCRAPER_MAX_IMAGES_PER_RUN` in `.env` and restart the API to change that ceiling. The run status reports live page and download counters while it is running. `Incremental` fetches at most `ParserSettings:IncrementalPages` pages (five by default); `Full` scans every source page before applying the download cap.

@@ -4,6 +4,8 @@ namespace Service;
 
 public sealed class ParserSettings
 {
+    public const int AbsoluteMaximumImagesPerRun = 10_000;
+
     public bool Enabled { get; init; }
     [Required] public string SiteUrl { get; init; } = "https://lessonsinlovegame.com";
     [Required] public string LoginUrl { get; init; } = "https://lessonsinlovegame.com/account/login/";
@@ -14,6 +16,7 @@ public sealed class ParserSettings
     [Range(1, 10)] public int DownloadConcurrency { get; init; } = 3;
     [Range(1, 100)] public int IncrementalPages { get; init; } = 5;
     [Range(1, 100)] public int MaximumDownloadMegabytes { get; init; } = 25;
-    [Range(1, 500)] public int DefaultImagesPerRun { get; init; } = 100;
+    [Range(1, AbsoluteMaximumImagesPerRun)] public int MaximumImagesPerRun { get; init; } = 2_000;
+    [Range(1, AbsoluteMaximumImagesPerRun)] public int DefaultImagesPerRun { get; init; } = 100;
     public string[] AllowedImageHosts { get; init; } = [];
 }
