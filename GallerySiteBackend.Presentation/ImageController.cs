@@ -44,8 +44,9 @@ public sealed class ImageController(IMediator mediator) : ControllerBase
         => Ok(await mediator.Send(new Application.Features.Images.GetImageBySearch.Command(new SearchImageDto(tags, kind, sort, page, pageSize)), cancellationToken));
 
     [HttpGet("{id:int}/recommendations")]
-    public async Task<ActionResult<List<AppImageDto>>> Recommendations(int id, [FromQuery] int limit = 20, CancellationToken cancellationToken = default)
-        => Ok(await mediator.Send(new Application.Features.Images.GetImageRecommendation.Command(id, limit), cancellationToken));
+    public async Task<ActionResult<PageableRecommendationsDto>> Recommendations(int id, [FromQuery] int page = 1, [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
+        => Ok(await mediator.Send(new Application.Features.Images.GetImageRecommendation.Command(id, page, pageSize), cancellationToken));
 
     [HttpPut("{id:int}/tags")]
     public async Task<ActionResult<AppImageDto>> ReplaceTags(int id, ReplaceImageTagsDto request, CancellationToken cancellationToken)

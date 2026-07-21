@@ -1,7 +1,9 @@
 using Entities.Models;
 using GallerySiteBackend.Presentation;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Routing;
+using Shared.DataTransferObjects;
 
 namespace GallerySiteUnitTests;
 
@@ -10,6 +12,7 @@ public sealed class InteractionAndRankingContractTests
     [Theory]
     [InlineData(typeof(ImageController), "Comments", "GET", "{imageId:int}/comments")]
     [InlineData(typeof(ImageController), "CreateComment", "POST", "{imageId:int}/comments")]
+    [InlineData(typeof(ImageController), "Recommendations", "GET", "{id:int}/recommendations")]
     [InlineData(typeof(ImageController), "Like", "PUT", "{imageId:int}/likes/me")]
     [InlineData(typeof(ImageController), "Unlike", "DELETE", "{imageId:int}/likes/me")]
     [InlineData(typeof(UserController), "LikedImages", "GET", "liked-images")]
@@ -46,6 +49,17 @@ public sealed class InteractionAndRankingContractTests
         Assert.Equal(new DateTimeOffset(2026, 7, 15, 0, 0, 0, TimeSpan.Zero), RankingPeriodBounds.Current(RankingPeriod.Daily, now).StartUtc);
         Assert.Equal(new DateTimeOffset(2026, 7, 13, 0, 0, 0, TimeSpan.Zero), RankingPeriodBounds.Current(RankingPeriod.Weekly, now).StartUtc);
         Assert.Equal(new DateTimeOffset(2026, 7, 1, 0, 0, 0, TimeSpan.Zero), RankingPeriodBounds.Current(RankingPeriod.Monthly, now).StartUtc);
+    }
+
+    [Fact]
+    public void Recommendations_UsesPaginatedResponseContract()
+    {
+        var method = typeof(ImageController).GetMethod("Recommendations") ?? throw new InvalidOperationException("Recommendations was not found.");
+
+        Assert.Equal(typeof(Task<ActionResult<PageableRecommendationsDto>>), method.ReturnType);
+        var parameters = method.GetParameters();
+        Assert.Equal("page", parameters[1].Name);
+        Assert.Equal("pageSize", parameters[2].Name);
     }
 
     [Fact]

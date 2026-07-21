@@ -17,6 +17,10 @@ Authorization: Bearer {{accessToken}}
 GET {{GallerySiteBackend_HostAddress}}/api/users/me/liked-images?page=1&pageSize=20
 Authorization: Bearer {{accessToken}}
 
+### Read a page of recommendations for an image. Request the next page to load more cards.
+GET {{GallerySiteBackend_HostAddress}}/api/images/42/recommendations?page=1&pageSize=20
+Authorization: Bearer {{accessToken}}
+
 ### Upload a user image. An Admin must first grant a non-admin user upload access; new uploads are pending moderation.
 POST {{GallerySiteBackend_HostAddress}}/api/images
 Authorization: Bearer {{accessToken}}

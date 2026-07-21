@@ -3,4 +3,4 @@ using Shared.DataTransferObjects;
 
 namespace Application.Features.Images.GetImageRecommendation;
 
-public sealed record Command(int Id, int Limit = 20) : IRequest<List<AppImageDto>>;
+public sealed record Command(int Id, int Page = 1, int PageSize = 20) : IRequest<PageableRecommendationsDto>;

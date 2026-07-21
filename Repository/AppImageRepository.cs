@@ -64,15 +64,20 @@ public sealed class AppImageRepository(RepositoryContext context) : IAppImageRep
         return (images, total);
     }
 
-    public async Task<List<AppImage>> GetRecommendationsAsync(int imageId, int limit, CancellationToken cancellationToken = default)
+    public async Task<(List<AppImage> Images, int Total)> GetRecommendationsAsync(int imageId, int page, int pageSize, CancellationToken cancellationToken = default)
     {
         var source = await context.Images.AsNoTracking().SingleOrDefaultAsync(image => image.Id == imageId, cancellationToken);
         if (source?.Embedding is null)
-            return [];
-        return await ImageQuery(false).Where(IsDiscoverable())
+            return ([], 0);
+        var size = Math.Clamp(pageSize, 1, 50);
+        var normalizedPage = Math.Max(page, 1);
+        var query = ImageQuery(false).Where(IsDiscoverable())
             .Where(image => image.Id != imageId && image.Embedding != null)
             .OrderBy(image => image.Embedding!.L2Distance(source.Embedding))
-            .Take(Math.Clamp(limit, 1, 50)).ToListAsync(cancellationToken);
+            .ThenBy(image => image.Id);
+        var total = await query.CountAsync(cancellationToken);
+        var images = await query.Skip((normalizedPage - 1) * size).Take(size).ToListAsync(cancellationToken);
+        return (images, total);
     }
 
     public Task<List<AppImage>> GetPendingAsync(int page, int pageSize, CancellationToken cancellationToken = default)
