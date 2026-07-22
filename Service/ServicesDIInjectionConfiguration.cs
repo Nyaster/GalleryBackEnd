@@ -13,6 +13,7 @@ public static class ServicesDiInjectionConfiguration
         services.AddSingleton<IPasswordHasher<AppUser>, PasswordHasher<AppUser>>();
         services.AddSingleton<IImageStorage, LocalImageStorage>();
         services.AddSingleton<IImageProcessor, SkiaImageProcessor>();
+        services.AddSingleton<IImageDerivativeCache, LocalImageDerivativeCache>();
         services.AddScoped<IImageParserService, AppImageParserService>();
     }
 }

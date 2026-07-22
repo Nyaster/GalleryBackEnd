@@ -6,8 +6,8 @@ using Service.Contracts;
 
 namespace Application.Features.Images.GetImageContent;
 
-public sealed class Handler(IRepositoryManager repositories, IImageStorage storage, IImageProcessor processor, IUserContext currentUser,
-    SemaphoreSlim jpegConversionLimiter)
+public sealed class Handler(IRepositoryManager repositories, IImageStorage storage, IImageProcessor processor,
+    IImageDerivativeCache derivativeCache, IUserContext currentUser)
     : IRequestHandler<Command, ImageContent>
 {
     public async Task<ImageContent> Handle(Command request, CancellationToken cancellationToken)
@@ -17,16 +17,12 @@ public sealed class Handler(IRepositoryManager repositories, IImageStorage stora
         ImageAuthorization.EnsureReadable(image, currentUser);
         if (!storage.Exists(image.StorageKey))
             throw new InvalidOperationException("Image data is unavailable.");
-        var stream = await storage.OpenReadAsync(image.StorageKey, cancellationToken);
-        if (!request.AsJpeg)
-            return new ImageContent(stream, image.ContentType);
-        await jpegConversionLimiter.WaitAsync(cancellationToken);
-        try
-        {
-            await using (stream)
-                return new ImageContent(await processor.ConvertToJpegAsync(stream, cancellationToken), "image/jpeg");
-        }
-        finally { jpegConversionLimiter.Release(); }
+        if (!request.AsJpeg || string.Equals(image.ContentType, "image/jpeg", StringComparison.OrdinalIgnoreCase))
+            return new ImageContent(await storage.OpenReadAsync(image.StorageKey, cancellationToken), image.ContentType);
+
+        var stream = await derivativeCache.GetOrCreateAsync(image.StorageKey, ImageDerivativeVariants.JpegV1,
+            processor.ConvertToJpegAsync, cancellationToken);
+        return new ImageContent(stream, "image/jpeg");
     }
 }
 

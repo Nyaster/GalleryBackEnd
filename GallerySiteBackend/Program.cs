@@ -40,7 +40,6 @@ builder.Services.AddControllers().AddJsonOptions(options =>
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IUserContext, HttpUserContext>();
 builder.Services.AddSingleton(TimeProvider.System);
-builder.Services.AddSingleton(new SemaphoreSlim(1, 1));
 builder.Services.AddOptions<ObservabilityOptions>().Bind(builder.Configuration.GetSection("Observability"))
     .ValidateDataAnnotations().ValidateOnStart();
 

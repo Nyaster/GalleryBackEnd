@@ -12,10 +12,18 @@ public sealed class LocalImageStorage(IOptions<ImageStorageOptions> options) : I
         var tempDirectory = Path.Combine(_rootPath, ".tmp");
         Directory.CreateDirectory(tempDirectory);
         var path = Path.Combine(tempDirectory, $"{Guid.NewGuid():N}.upload");
-        await using var destination = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None, 64 * 1024,
-            FileOptions.Asynchronous | FileOptions.SequentialScan);
-        await source.CopyToAsync(destination, cancellationToken);
-        return path;
+        try
+        {
+            await using var destination = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None, 64 * 1024,
+                FileOptions.Asynchronous | FileOptions.SequentialScan);
+            await source.CopyToAsync(destination, cancellationToken);
+            return path;
+        }
+        catch
+        {
+            if (File.Exists(path)) File.Delete(path);
+            throw;
+        }
     }
 
     public Task MoveTemporaryToFinalAsync(string temporaryPath, string storageKey, CancellationToken cancellationToken = default)
