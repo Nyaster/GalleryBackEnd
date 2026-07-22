@@ -59,6 +59,18 @@ public sealed class AdministrationController(IMediator mediator) : ControllerBas
     public async Task<ActionResult<AdminTagDto>> ChangeTagModeration(int id, TagModerationDto request, CancellationToken cancellationToken)
         => Ok(await mediator.Send(new Application.Features.Administration.ChangeTagModeration.Command(id, request.Status), cancellationToken));
 
+    [HttpGet("tag-changes")]
+    [Authorize(Roles = "Admin,Moderator")]
+    public async Task<ActionResult<PageableImageTagChangesDto>> TagChanges([FromQuery] Entities.Models.ImageTagChangeStatus? status = null,
+        [FromQuery] int? imageId = null, [FromQuery] int? editedByUserId = null, [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20, CancellationToken cancellationToken = default)
+        => Ok(await mediator.Send(new Application.Features.Administration.GetImageTagChanges.Command(status, imageId, editedByUserId, page, pageSize), cancellationToken));
+
+    [HttpPatch("tag-changes/{id:long}/moderation")]
+    [Authorize(Roles = "Admin,Moderator")]
+    public async Task<ActionResult<ImageTagChangeDto>> ModerateTagChange(long id, TagChangeModerationDto request, CancellationToken cancellationToken)
+        => Ok(await mediator.Send(new Application.Features.Administration.ModerateImageTagChange.Command(id, request.Decision!.Value, request.Note), cancellationToken));
+
     [HttpPost("scrape-runs")]
     [Authorize(Roles = "Admin")]
     [ProducesResponseType<ScrapeRunDto>(StatusCodes.Status202Accepted)]

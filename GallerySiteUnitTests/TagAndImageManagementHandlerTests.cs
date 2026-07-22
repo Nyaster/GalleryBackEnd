@@ -14,7 +14,7 @@ namespace GallerySiteUnitTests;
 public sealed class TagAndImageManagementHandlerTests
 {
     [Fact]
-    public async Task ReplaceTags_OwnerEdit_SetsImagePending()
+    public async Task ReplaceTags_OwnerEdit_CreatesPendingChangeWithoutChangingImage()
     {
         var image = Image(ownerId: 7, ModerationStatus.Approved);
         var tags = new List<ImageTag> { Tag("new-tag", TagModerationStatus.Pending) };
@@ -23,10 +23,11 @@ public sealed class TagAndImageManagementHandlerTests
             .ReturnsAsync(tags);
         var handler = new Application.Features.Images.ReplaceImageTags.Handler(repositories.Object, new TestUser(7), TimeProvider.System);
 
-        await handler.Handle(new Application.Features.Images.ReplaceImageTags.Command(1, new ReplaceImageTagsDto(["new-tag"])), CancellationToken.None);
+        var result = await handler.Handle(new Application.Features.Images.ReplaceImageTags.Command(1, new ReplaceImageTagsDto(["new-tag"])), CancellationToken.None);
 
-        Assert.Equal(ModerationStatus.Pending, image.ModerationStatus);
-        Assert.Same(tags, image.Tags);
+        Assert.Equal(ModerationStatus.Approved, image.ModerationStatus);
+        Assert.Empty(image.Tags);
+        Assert.Equal(ImageTagChangeStatus.Pending, result.Status);
         repositories.Verify(repository => repository.SaveAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -64,18 +65,33 @@ public sealed class TagAndImageManagementHandlerTests
     public async Task ChangeTagModeration_Rejected_RemovesAllImageLinks()
     {
         var tag = Tag("blocked", TagModerationStatus.Pending);
-        tag.AppImages.Add(Image(ownerId: 7, ModerationStatus.Approved));
+        var image = Image(ownerId: 7, ModerationStatus.Approved);
+        image.Tags.Add(tag);
+        tag.AppImages.Add(image);
         var repositories = new Mock<IRepositoryManager>();
+        var transaction = ConfigureTransaction(repositories);
         var images = new Mock<IAppImageRepository>();
+        var tagChanges = new Mock<IImageTagChangeRepository>();
         repositories.SetupGet(repository => repository.AppImage).Returns(images.Object);
+        repositories.SetupGet(repository => repository.ImageTagChanges).Returns(tagChanges.Object);
         images.Setup(repository => repository.GetTagByIdAsync(tag.Id, true, It.IsAny<CancellationToken>())).ReturnsAsync(tag);
-        var handler = new Application.Features.Administration.ChangeTagModeration.Handler(repositories.Object, new TestUser(9, AppUserRole.Admin));
+        tagChanges.Setup(repository => repository.GetPendingContainingTagAsync(tag.NormalizedName, It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        List<ImageTagChange>? recorded = null;
+        tagChanges.Setup(repository => repository.AddRangeAsync(It.IsAny<IEnumerable<ImageTagChange>>(), It.IsAny<CancellationToken>()))
+            .Callback<IEnumerable<ImageTagChange>, CancellationToken>((changes, _) => recorded = changes.ToList()).Returns(Task.CompletedTask);
+        var handler = new Application.Features.Administration.ChangeTagModeration.Handler(repositories.Object, new TestUser(9, AppUserRole.Admin), TimeProvider.System);
 
         var result = await handler.Handle(new Application.Features.Administration.ChangeTagModeration.Command(tag.Id, TagModerationStatus.Rejected), CancellationToken.None);
 
         Assert.Equal(TagModerationStatus.Rejected, result.Status);
         Assert.Equal(0, result.LinkedImageCount);
         Assert.Empty(tag.AppImages);
+        Assert.Empty(image.Tags);
+        var audit = Assert.Single(recorded!);
+        Assert.Equal(ImageTagChangeKind.GlobalTagRejection, audit.Kind);
+        Assert.Equal(["blocked"], audit.PreviousTags);
+        Assert.Empty(audit.ProposedTags);
+        transaction.Verify(value => value.CommitAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -84,16 +100,50 @@ public sealed class TagAndImageManagementHandlerTests
         var tag = Tag("review", TagModerationStatus.Pending);
         tag.AppImages.Add(Image(ownerId: 7, ModerationStatus.Pending));
         var repositories = new Mock<IRepositoryManager>();
+        ConfigureTransaction(repositories);
         var images = new Mock<IAppImageRepository>();
         repositories.SetupGet(repository => repository.AppImage).Returns(images.Object);
         images.Setup(repository => repository.GetTagByIdAsync(tag.Id, true, It.IsAny<CancellationToken>())).ReturnsAsync(tag);
-        var handler = new Application.Features.Administration.ChangeTagModeration.Handler(repositories.Object, new TestUser(9, AppUserRole.Moderator));
+        var handler = new Application.Features.Administration.ChangeTagModeration.Handler(repositories.Object, new TestUser(9, AppUserRole.Moderator), TimeProvider.System);
 
         var result = await handler.Handle(new Application.Features.Administration.ChangeTagModeration.Command(tag.Id, TagModerationStatus.Approved), CancellationToken.None);
 
         Assert.Equal(TagModerationStatus.Approved, result.Status);
         Assert.Equal(1, result.LinkedImageCount);
         Assert.Single(tag.AppImages);
+    }
+
+    [Fact]
+    public async Task ChangeTagModeration_Rejected_AutoRejectsPendingChangesContainingTag()
+    {
+        var tag = Tag("blocked", TagModerationStatus.Pending);
+        var pending = new ImageTagChange
+        {
+            Id = 4,
+            ImageId = 1,
+            PreviousTags = ["safe"],
+            ProposedTags = ["blocked"],
+            Kind = ImageTagChangeKind.Replacement,
+            Status = ImageTagChangeStatus.Pending,
+            EditedByLogin = "owner",
+            CreatedAtUtc = DateTimeOffset.UtcNow
+        };
+        var repositories = new Mock<IRepositoryManager>();
+        ConfigureTransaction(repositories);
+        var images = new Mock<IAppImageRepository>();
+        var tagChanges = new Mock<IImageTagChangeRepository>();
+        repositories.SetupGet(repository => repository.AppImage).Returns(images.Object);
+        repositories.SetupGet(repository => repository.ImageTagChanges).Returns(tagChanges.Object);
+        images.Setup(repository => repository.GetTagByIdAsync(tag.Id, true, It.IsAny<CancellationToken>())).ReturnsAsync(tag);
+        tagChanges.Setup(repository => repository.GetPendingContainingTagAsync(tag.NormalizedName, It.IsAny<CancellationToken>())).ReturnsAsync([pending]);
+        tagChanges.Setup(repository => repository.AddRangeAsync(It.IsAny<IEnumerable<ImageTagChange>>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+        var handler = new Application.Features.Administration.ChangeTagModeration.Handler(repositories.Object, new TestUser(9, AppUserRole.Admin), TimeProvider.System);
+
+        await handler.Handle(new Application.Features.Administration.ChangeTagModeration.Command(tag.Id, TagModerationStatus.Rejected), CancellationToken.None);
+
+        Assert.Equal(ImageTagChangeStatus.Rejected, pending.Status);
+        Assert.Equal(9, pending.ReviewedByUserId);
+        Assert.Contains("automatically", pending.ReviewNote);
     }
 
     [Fact]
@@ -175,10 +225,24 @@ public sealed class TagAndImageManagementHandlerTests
     {
         var repositories = new Mock<IRepositoryManager>();
         var images = new Mock<IAppImageRepository>();
+        var tagChanges = new Mock<IImageTagChangeRepository>();
         repositories.SetupGet(repository => repository.AppImage).Returns(images.Object);
+        repositories.SetupGet(repository => repository.ImageTagChanges).Returns(tagChanges.Object);
         images.Setup(repository => repository.GetByIdAsync(image.Id, true, It.IsAny<CancellationToken>())).ReturnsAsync(image);
+        tagChanges.Setup(repository => repository.GetPendingForImageAsync(image.Id, It.IsAny<CancellationToken>())).ReturnsAsync((ImageTagChange?)null);
+        tagChanges.Setup(repository => repository.AddAsync(It.IsAny<ImageTagChange>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
         repositories.Setup(repository => repository.SaveAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+        ConfigureTransaction(repositories);
         return (repositories, images);
+    }
+
+    private static Mock<IRepositoryTransaction> ConfigureTransaction(Mock<IRepositoryManager> repositories)
+    {
+        var transaction = new Mock<IRepositoryTransaction>();
+        transaction.Setup(value => value.CommitAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+        transaction.Setup(value => value.RollbackAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+        repositories.Setup(repository => repository.BeginSerializableTransactionAsync(It.IsAny<CancellationToken>())).ReturnsAsync(transaction.Object);
+        return transaction;
     }
 
     private static AppImage Image(int ownerId, ModerationStatus status, ImageVisibility visibility = ImageVisibility.Gallery) => new UserMadeImage

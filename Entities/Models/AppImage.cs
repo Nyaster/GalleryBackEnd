@@ -18,6 +18,7 @@ public abstract class AppImage
     public int Width { get; set; }
     public int Height { get; set; }
     public List<ImageTag> Tags { get; set; } = [];
+    public List<ImageTagChange> TagChanges { get; set; } = [];
     public List<Comment> Comments { get; set; } = [];
     public List<ImageLike> Likes { get; set; } = [];
     public Vector? Embedding { get; set; }

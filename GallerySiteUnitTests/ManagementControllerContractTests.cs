@@ -9,11 +9,14 @@ public sealed class ManagementControllerContractTests
 {
     [Theory]
     [InlineData(typeof(ImageController), "ReplaceTags", "PUT", "{id:int}/tags")]
+    [InlineData(typeof(ImageController), "TagChanges", "GET", "{id:int}/tag-changes")]
     [InlineData(typeof(ImageController), "Hide", "DELETE", "{id:int}")]
     [InlineData(typeof(ImageController), "Restore", "POST", "{id:int}/restore")]
     [InlineData(typeof(ImageController), "Publish", "POST", "{id:int}/publish")]
     [InlineData(typeof(AdministrationController), "Tags", "GET", "tags")]
     [InlineData(typeof(AdministrationController), "ChangeTagModeration", "PATCH", "tags/{id:int}/moderation")]
+    [InlineData(typeof(AdministrationController), "TagChanges", "GET", "tag-changes")]
+    [InlineData(typeof(AdministrationController), "ModerateTagChange", "PATCH", "tag-changes/{id:long}/moderation")]
     [InlineData(typeof(AdministrationController), "HiddenImages", "GET", "images/hidden")]
     [InlineData(typeof(AdministrationController), "GetUploadPermission", "GET", "users/{id:int}/upload-permission")]
     [InlineData(typeof(AdministrationController), "UpdateUploadPermission", "PUT", "users/{id:int}/upload-permission")]
@@ -31,6 +34,8 @@ public sealed class ManagementControllerContractTests
     [InlineData("ChangeModeration")]
     [InlineData("Tags")]
     [InlineData("ChangeTagModeration")]
+    [InlineData("TagChanges")]
+    [InlineData("ModerateTagChange")]
     [InlineData("HiddenImages")]
     public void StaffEndpoints_AllowAdminAndModerator(string methodName)
     {

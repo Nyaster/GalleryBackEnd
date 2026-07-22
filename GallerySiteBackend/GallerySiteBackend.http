@@ -50,7 +50,7 @@ Content-Type: application/json
   "canUploadImages": true
 }
 
-### Replace all tags on an owned image.
+### Propose a replacement of all tags on an owned image. The response is 202 until staff approves it.
 PUT {{GallerySiteBackend_HostAddress}}/api/images/42/tags
 Authorization: Bearer {{accessToken}}
 Content-Type: application/json
@@ -58,6 +58,10 @@ Content-Type: application/json
 {
   "tags": ["example", "portrait"]
 }
+
+### Read tag-change history for an owned image.
+GET {{GallerySiteBackend_HostAddress}}/api/images/42/tag-changes?page=1&pageSize=20
+Authorization: Bearer {{accessToken}}
 
 ### Hide then restore an owned image.
 DELETE {{GallerySiteBackend_HostAddress}}/api/images/42
@@ -82,6 +86,20 @@ Content-Type: application/json
 
 {
   "status": "Approved"
+}
+
+### Staff: inspect pending owner tag-change proposals and approve one.
+GET {{GallerySiteBackend_HostAddress}}/api/admin/tag-changes?status=Pending&page=1&pageSize=20
+Authorization: Bearer {{staffAccessToken}}
+
+###
+PATCH {{GallerySiteBackend_HostAddress}}/api/admin/tag-changes/1/moderation
+Authorization: Bearer {{staffAccessToken}}
+Content-Type: application/json
+
+{
+  "decision": "Approve",
+  "note": "Approved after review."
 }
 
 ### Staff hidden-image queue.

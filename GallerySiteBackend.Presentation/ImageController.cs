@@ -49,8 +49,20 @@ public sealed class ImageController(IMediator mediator) : ControllerBase
         => Ok(await mediator.Send(new Application.Features.Images.GetImageRecommendation.Command(id, page, pageSize), cancellationToken));
 
     [HttpPut("{id:int}/tags")]
-    public async Task<ActionResult<AppImageDto>> ReplaceTags(int id, ReplaceImageTagsDto request, CancellationToken cancellationToken)
-        => Ok(await mediator.Send(new Application.Features.Images.ReplaceImageTags.Command(id, request), cancellationToken));
+    [ProducesResponseType<ImageTagChangeDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ImageTagChangeDto>(StatusCodes.Status202Accepted)]
+    public async Task<ActionResult<ImageTagChangeDto>> ReplaceTags(int id, ReplaceImageTagsDto request, CancellationToken cancellationToken)
+    {
+        var change = await mediator.Send(new Application.Features.Images.ReplaceImageTags.Command(id, request), cancellationToken);
+        return change.Status == Entities.Models.ImageTagChangeStatus.Pending
+            ? AcceptedAtAction(nameof(TagChanges), new { id }, change)
+            : Ok(change);
+    }
+
+    [HttpGet("{id:int}/tag-changes")]
+    public async Task<ActionResult<PageableImageTagChangesDto>> TagChanges(int id, [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20, CancellationToken cancellationToken = default)
+        => Ok(await mediator.Send(new Application.Features.Images.GetImageTagChanges.Command(id, page, pageSize), cancellationToken));
 
     [HttpDelete("{id:int}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]

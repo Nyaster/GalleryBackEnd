@@ -7,6 +7,7 @@ namespace Repository;
 public sealed class RepositoryContext(DbContextOptions<RepositoryContext> options) : DbContext(options)
 {
     public DbSet<ImageTag> Tags => Set<ImageTag>();
+    public DbSet<ImageTagChange> ImageTagChanges => Set<ImageTagChange>();
     public DbSet<AppImage> Images => Set<AppImage>();
     public DbSet<AppUser> AppUsers => Set<AppUser>();
     public DbSet<RefreshSession> RefreshSessions => Set<RefreshSession>();

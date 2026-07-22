@@ -1,12 +1,14 @@
 using Contracts;
 using Entities.Models;
 using Microsoft.EntityFrameworkCore;
+using System.Data;
 
 namespace Repository;
 
 public sealed class RepositoryManager(RepositoryContext context) : IRepositoryManager
 {
     private readonly Lazy<IAppImageRepository> _images = new(() => new AppImageRepository(context));
+    private readonly Lazy<IImageTagChangeRepository> _tagChanges = new(() => new ImageTagChangeRepository(context));
     private readonly Lazy<IAppUserRepository> _users = new(() => new AppUserRepository(context));
     private readonly Lazy<IInteractionRepository> _interactions = new(() => new InteractionRepository(context));
     private readonly Lazy<IRankingRepository> _rankings = new(() => new RankingRepository(context));
@@ -15,6 +17,7 @@ public sealed class RepositoryManager(RepositoryContext context) : IRepositoryMa
 
     public IAppUserRepository AppUser => _users.Value;
     public IAppImageRepository AppImage => _images.Value;
+    public IImageTagChangeRepository ImageTagChanges => _tagChanges.Value;
     public IInteractionRepository Interactions => _interactions.Value;
     public IRankingRepository Rankings => _rankings.Value;
     public IAnnouncementRepository Announcements => _announcements.Value;
@@ -44,6 +47,9 @@ public sealed class RepositoryManager(RepositoryContext context) : IRepositoryMa
 
     public Task AddScrapeRunAsync(ScrapeRun run, CancellationToken cancellationToken = default)
         => context.ScrapeRuns.AddAsync(run, cancellationToken).AsTask();
+
+    public async Task<IRepositoryTransaction> BeginSerializableTransactionAsync(CancellationToken cancellationToken = default)
+        => new RepositoryTransaction(await context.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken));
 
     public Task SaveAsync(CancellationToken cancellationToken = default) => context.SaveChangesAsync(cancellationToken);
 }

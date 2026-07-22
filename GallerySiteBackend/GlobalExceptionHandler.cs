@@ -20,6 +20,8 @@ public sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logge
             AppForbiddenException => StatusCodes.Status403Forbidden,
             Base404ReturnException => StatusCodes.Status404NotFound,
             Base409ConflictException => StatusCodes.Status409Conflict,
+            PostgresException { SqlState: PostgresErrorCodes.SerializationFailure } => StatusCodes.Status409Conflict,
+            DbUpdateException { InnerException: PostgresException { SqlState: PostgresErrorCodes.SerializationFailure } } => StatusCodes.Status409Conflict,
             DbUpdateException { InnerException: PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } } => StatusCodes.Status409Conflict,
             _ => StatusCodes.Status500InternalServerError
         };
@@ -38,9 +40,12 @@ public sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logge
                 context.GetEndpoint() is Microsoft.AspNetCore.Routing.RouteEndpoint routeEndpoint ? routeEndpoint.RoutePattern.RawText ?? context.Request.Path.Value : context.Request.Path.Value,
                 status, context.Connection.RemoteIpAddress?.ToString() ?? "unknown");
         }
-        var detail = status == StatusCodes.Status500InternalServerError
-            ? "An unexpected server error occurred."
-            : error.Message;
+        var detail = status switch
+        {
+            StatusCodes.Status500InternalServerError => "An unexpected server error occurred.",
+            StatusCodes.Status409Conflict when IsSerializationFailure(error) => "A concurrent update was detected. Refetch the resource and retry if appropriate.",
+            _ => error.Message
+        };
         var problem = new ProblemDetails
         {
             Status = status,
@@ -53,4 +58,8 @@ public sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logge
         await context.Response.WriteAsJsonAsync(problem, cancellationToken);
         return true;
     }
+
+    private static bool IsSerializationFailure(Exception error)
+        => error is PostgresException { SqlState: PostgresErrorCodes.SerializationFailure }
+            or DbUpdateException { InnerException: PostgresException { SqlState: PostgresErrorCodes.SerializationFailure } };
 }

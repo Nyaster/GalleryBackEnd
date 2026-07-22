@@ -136,7 +136,7 @@ public sealed class AppImageRepository(RepositoryContext context) : IAppImageRep
     public Task<ImageTag?> GetTagByIdAsync(int id, bool trackChanges, CancellationToken cancellationToken = default)
     {
         var query = trackChanges ? context.Tags : context.Tags.AsNoTracking();
-        return query.Include(tag => tag.AppImages).SingleOrDefaultAsync(tag => tag.Id == id, cancellationToken);
+        return query.Include(tag => tag.AppImages).ThenInclude(image => image.Tags).SingleOrDefaultAsync(tag => tag.Id == id, cancellationToken);
     }
 
     public Task<List<AppImage>> GetByExternalMediaIdsAsync(IEnumerable<int> mediaIds, bool trackChanges, CancellationToken cancellationToken = default)
