@@ -33,12 +33,17 @@ public sealed class ImageController(IMediator mediator) : ControllerBase
     public async Task<IActionResult> GetContent(int id, [FromQuery] string format = "original",
         CancellationToken cancellationToken = default)
     {
-        if (!string.Equals(format, "original", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(format, "jpeg", StringComparison.OrdinalIgnoreCase))
-            return BadRequest("format must be 'original' or 'jpeg'.");
-        var content =
-            await mediator.Send(new Command(id, string.Equals(format, "jpeg", StringComparison.OrdinalIgnoreCase)),
-                cancellationToken);
+        var contentFormat = format.ToLowerInvariant() switch
+        {
+            "original" => ImageContentFormat.Original,
+            "jpeg" => ImageContentFormat.Jpeg,
+            "preview" => ImageContentFormat.Preview,
+            _ => (ImageContentFormat?)null
+        };
+        if (contentFormat is null)
+            return BadRequest("format must be 'original', 'jpeg', or 'preview'.");
+
+        var content = await mediator.Send(new Command(id, contentFormat.Value), cancellationToken);
         Response.Headers.CacheControl = "private, max-age=3600";
         return File(content.Stream, content.ContentType);
     }

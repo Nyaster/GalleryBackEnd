@@ -17,12 +17,21 @@ public sealed class Handler(IRepositoryManager repositories, IImageStorage stora
         ImageAuthorization.EnsureReadable(image, currentUser);
         if (!storage.Exists(image.StorageKey))
             throw new InvalidOperationException("Image data is unavailable.");
-        if (!request.AsJpeg || string.Equals(image.ContentType, "image/jpeg", StringComparison.OrdinalIgnoreCase))
-            return new ImageContent(await storage.OpenReadAsync(image.StorageKey, cancellationToken), image.ContentType);
 
-        var stream = await derivativeCache.GetOrCreateAsync(image.StorageKey, ImageDerivativeVariants.JpegV1,
-            processor.ConvertToJpegAsync, cancellationToken);
-        return new ImageContent(stream, "image/jpeg");
+        return request.Format switch
+        {
+            ImageContentFormat.Original => new ImageContent(
+                await storage.OpenReadAsync(image.StorageKey, cancellationToken), image.ContentType),
+            ImageContentFormat.Jpeg when string.Equals(image.ContentType, "image/jpeg", StringComparison.OrdinalIgnoreCase) =>
+                new ImageContent(await storage.OpenReadAsync(image.StorageKey, cancellationToken), image.ContentType),
+            ImageContentFormat.Jpeg => new ImageContent(
+                await derivativeCache.GetOrCreateAsync(image.StorageKey, ImageDerivativeVariants.JpegV1,
+                    processor.ConvertToJpegAsync, cancellationToken), "image/jpeg"),
+            ImageContentFormat.Preview => new ImageContent(
+                await derivativeCache.GetOrCreateAsync(image.StorageKey, ImageDerivativeVariants.PreviewJpeg768V1,
+                    processor.CreatePreviewJpegAsync, cancellationToken), "image/jpeg"),
+            _ => throw new ArgumentOutOfRangeException(nameof(request), request.Format, "Unsupported image content format.")
+        };
     }
 }
 

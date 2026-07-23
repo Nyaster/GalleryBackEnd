@@ -22,7 +22,7 @@ public sealed class GetImageContentHandlerTests
         var cache = new Mock<IImageDerivativeCache>();
         var handler = new Handler(repositories.Object, storage.Object, processor.Object, cache.Object, new TestUser(7));
 
-        var result = await handler.Handle(new Command(image.Id, true), CancellationToken.None);
+        var result = await handler.Handle(new Command(image.Id, ImageContentFormat.Jpeg), CancellationToken.None);
 
         Assert.Equal("image/jpeg", result.ContentType);
         await using (result.Stream)
@@ -46,7 +46,7 @@ public sealed class GetImageContentHandlerTests
             .ReturnsAsync(() => new MemoryStream([4, 5]));
         var handler = new Handler(repositories.Object, storage.Object, processor.Object, cache.Object, new TestUser(7));
 
-        var result = await handler.Handle(new Command(image.Id, true), CancellationToken.None);
+        var result = await handler.Handle(new Command(image.Id, ImageContentFormat.Jpeg), CancellationToken.None);
 
         Assert.Equal("image/jpeg", result.ContentType);
         await using (result.Stream)
@@ -65,11 +65,34 @@ public sealed class GetImageContentHandlerTests
         var handler = new Handler(Repositories(image).Object, storage.Object, new Mock<IImageProcessor>().Object,
             cache.Object, new TestUser(8));
 
-        await Assert.ThrowsAsync<AppForbiddenException>(() => handler.Handle(new Command(image.Id, true), CancellationToken.None));
+        await Assert.ThrowsAsync<AppForbiddenException>(() => handler.Handle(new Command(image.Id, ImageContentFormat.Jpeg), CancellationToken.None));
 
         storage.Verify(service => service.Exists(It.IsAny<string>()), Times.Never);
         cache.Verify(service => service.GetOrCreateAsync(It.IsAny<string>(), It.IsAny<ImageDerivativeVariant>(),
             It.IsAny<Func<Stream, CancellationToken, Task<Stream>>>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Handle_PreviewRequested_UsesPreviewDerivativeCache()
+    {
+        var image = Image("image/jpeg", uploadedById: 7);
+        var repositories = Repositories(image);
+        var storage = new Mock<IImageStorage>();
+        storage.Setup(service => service.Exists(image.StorageKey)).Returns(true);
+        var processor = new Mock<IImageProcessor>();
+        var cache = new Mock<IImageDerivativeCache>();
+        cache.Setup(service => service.GetOrCreateAsync(image.StorageKey, ImageDerivativeVariants.PreviewJpeg768V1,
+                It.IsAny<Func<Stream, CancellationToken, Task<Stream>>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => new MemoryStream([6, 7]));
+        var handler = new Handler(repositories.Object, storage.Object, processor.Object, cache.Object, new TestUser(7));
+
+        var result = await handler.Handle(new Command(image.Id, ImageContentFormat.Preview), CancellationToken.None);
+
+        Assert.Equal("image/jpeg", result.ContentType);
+        await using (result.Stream)
+            Assert.Equal([6, 7], await ReadAsync(result.Stream));
+        cache.Verify(service => service.GetOrCreateAsync(image.StorageKey, ImageDerivativeVariants.PreviewJpeg768V1,
+            It.IsAny<Func<Stream, CancellationToken, Task<Stream>>>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     private static Mock<IRepositoryManager> Repositories(AppImage image)
