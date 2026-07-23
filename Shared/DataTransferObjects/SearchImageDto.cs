@@ -8,7 +8,8 @@ public sealed record SearchImageDto(
     ImageSort Sort = ImageSort.Newest,
     int Page = 1,
     int PageSize = 20,
-    IReadOnlyList<AiUsageClassification>? AiUsage = null);
+    IReadOnlyList<AiUsageClassification>? AiUsage = null,
+    string? RandomSeed = null);
 
 public enum ImageKind { All, Official, Fan }
-public enum ImageSort { Newest, Oldest, MediaId }
+public enum ImageSort { Newest, Oldest, MediaId, Random }

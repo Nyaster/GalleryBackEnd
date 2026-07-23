@@ -26,6 +26,9 @@ public sealed class RepositoryContext(DbContextOptions<RepositoryContext> option
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasPostgresExtension("vector");
+        modelBuilder.HasDbFunction(typeof(PostgreSqlHashFunctions).GetMethod(nameof(PostgreSqlHashFunctions.HashInt4Extended))!)
+            .HasName("hashint4extended")
+            .IsBuiltIn();
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppImageEfConfiguration).Assembly);
         base.OnModelCreating(modelBuilder);
     }

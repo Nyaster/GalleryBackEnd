@@ -15,6 +15,9 @@ public sealed class AppImageRepository(RepositoryContext context) : IAppImageRep
     {
         var page = Math.Max(request.Page, 1);
         var pageSize = Math.Clamp(request.PageSize, 1, 50);
+        var hasRandomSeed = RandomSortSeed.TryGetValue(request.RandomSeed, out var randomSeed);
+        if (request.Sort == ImageSort.Random && !hasRandomSeed)
+            throw new InvalidOperationException("A valid random sort seed is required.");
         var query = ImageQuery(false).Where(IsDiscoverable());
         query = request.Kind switch
         {
@@ -29,12 +32,7 @@ public sealed class AppImageRepository(RepositoryContext context) : IAppImageRep
             query = query.Where(image => normalizedTags.All(tag => image.Tags.Any(imageTag =>
                 imageTag.NormalizedName == tag && imageTag.ModerationStatus == TagModerationStatus.Approved)));
 
-        query = request.Sort switch
-        {
-            ImageSort.Oldest => query.OrderBy(image => image.UploadedAtUtc).ThenBy(image => image.Id),
-            ImageSort.MediaId => query.OrderByDescending(image => image.ExternalMediaId).ThenByDescending(image => image.UploadedAtUtc),
-            _ => query.OrderByDescending(image => image.UploadedAtUtc).ThenByDescending(image => image.Id)
-        };
+        query = ApplySort(query, request.Sort, randomSeed);
         var total = await query.CountAsync(cancellationToken);
         var images = await query.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(cancellationToken);
         return (images, total);
@@ -181,6 +179,15 @@ public sealed class AppImageRepository(RepositoryContext context) : IAppImageRep
 
     private static System.Linq.Expressions.Expression<Func<AppImage, bool>> IsDiscoverable()
         => image => image.DeletedAtUtc == null && image.Visibility == ImageVisibility.Gallery && image.ModerationStatus == ModerationStatus.Approved;
+
+    internal static IQueryable<AppImage> ApplySort(IQueryable<AppImage> query, ImageSort sort, long randomSeed)
+        => sort switch
+        {
+            ImageSort.Oldest => query.OrderBy(image => image.UploadedAtUtc).ThenBy(image => image.Id),
+            ImageSort.MediaId => query.OrderByDescending(image => image.ExternalMediaId).ThenByDescending(image => image.UploadedAtUtc),
+            ImageSort.Random => query.OrderBy(image => PostgreSqlHashFunctions.HashInt4Extended(image.Id, randomSeed)).ThenBy(image => image.Id),
+            _ => query.OrderByDescending(image => image.UploadedAtUtc).ThenByDescending(image => image.Id)
+        };
 
     private static IQueryable<AppImage> ApplyAiUsageFilter(IQueryable<AppImage> query, IReadOnlyList<AiUsageClassification>? aiUsage)
     {

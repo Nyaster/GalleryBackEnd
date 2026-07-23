@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Shared.DataTransferObjects;
 
 public sealed record PageableImagesDto(
@@ -5,4 +7,5 @@ public sealed record PageableImagesDto(
     int PageSize,
     int Total,
     ImageSort Sort,
-    IReadOnlyList<AppImageDto> Images);
+    IReadOnlyList<AppImageDto> Images,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? RandomSeed = null);
