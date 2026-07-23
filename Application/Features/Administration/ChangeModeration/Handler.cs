@@ -16,7 +16,11 @@ public sealed class Handler(IRepositoryManager repositories, IUserContext curren
         var image = await repositories.AppImage.GetByIdAsync(request.ImageId, true, cancellationToken)
             ?? throw new Base404ReturnException("Image not found.");
         if (image.DeletedAtUtc is not null) throw new Base404ReturnException("Image not found.");
+        if (request.AiUsage == AiUsageClassification.Unknown)
+            throw new Base400BadRequestException("aiUsage cannot be Unknown.");
         image.ModerationStatus = request.Status;
+        if (request.AiUsage is not null)
+            image.AiUsage = request.AiUsage.Value;
         await repositories.SaveAsync(cancellationToken);
         return ImageDtoMapper.ToDto(image, currentUser);
     }

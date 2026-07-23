@@ -40,7 +40,7 @@ public sealed class AdministrationController(IMediator mediator) : ControllerBas
     [HttpPatch("images/{id:int}/moderation")]
     [Authorize(Roles = "Admin,Moderator")]
     public async Task<ActionResult<AppImageDto>> ChangeModeration(int id, ChangeModerationDto request, CancellationToken cancellationToken)
-        => Ok(await mediator.Send(new Application.Features.Administration.ChangeModeration.Command(id, request.Status), cancellationToken));
+        => Ok(await mediator.Send(new Application.Features.Administration.ChangeModeration.Command(id, request.Status, request.AiUsage), cancellationToken));
 
     [HttpGet("images/hidden")]
     [Authorize(Roles = "Admin,Moderator")]

@@ -12,6 +12,7 @@ public abstract class AppImage
     public DateTimeOffset UploadedAtUtc { get; set; }
     public ImageVisibility Visibility { get; set; }
     public ModerationStatus ModerationStatus { get; set; }
+    public AiUsageClassification AiUsage { get; set; }
     public DateTimeOffset? DeletedAtUtc { get; set; }
     public required string StorageKey { get; set; }
     public required string ContentType { get; set; }
@@ -45,6 +46,14 @@ public enum ModerationStatus
     Pending,
     Approved,
     Rejected
+}
+
+public enum AiUsageClassification
+{
+    Unknown,
+    HumanMade,
+    AiAssisted,
+    AiGenerated
 }
 
 public enum EmbeddingStatus

@@ -13,7 +13,7 @@ public sealed class Handler(IRepositoryManager repositories, IUserContext curren
         currentUser.RequireAuthenticated();
         var page = Math.Max(request.Page, 1);
         var pageSize = Math.Clamp(request.PageSize, 1, 50);
-        var result = await repositories.AppImage.GetLikedByUserAsync(currentUser.UserId!.Value, page, pageSize, cancellationToken);
+        var result = await repositories.AppImage.GetLikedByUserAsync(currentUser.UserId!.Value, page, pageSize, cancellationToken, request.AiUsage);
         return new PageableLikedImagesDto(page, pageSize, result.Total,
             result.Images.Select(image => ImageDtoMapper.ToDto(image, currentUser)).ToList());
     }

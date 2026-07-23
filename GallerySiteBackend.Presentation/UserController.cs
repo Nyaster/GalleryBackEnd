@@ -17,6 +17,8 @@ public sealed class UserController(IMediator mediator) : ControllerBase
 
     [HttpGet("liked-images")]
     public async Task<ActionResult<PageableLikedImagesDto>> LikedImages([FromQuery] int page = 1, [FromQuery] int pageSize = 20,
+        [FromQuery] List<string>? aiUsage = null,
         CancellationToken cancellationToken = default)
-        => Ok(await mediator.Send(new Application.Features.Images.GetLikedImages.Command(page, pageSize), cancellationToken));
+        => Ok(await mediator.Send(new Application.Features.Images.GetLikedImages.Command(
+            page, pageSize, AiUsageFilterParser.Parse(aiUsage)), cancellationToken));
 }

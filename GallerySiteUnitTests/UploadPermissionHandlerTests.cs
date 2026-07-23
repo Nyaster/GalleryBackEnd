@@ -52,6 +52,21 @@ public sealed class UploadPermissionHandlerTests
         users.Verify(repository => repository.GetByIdAsync(It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    [Theory]
+    [InlineData(AiUsageClassification.Unknown)]
+    [InlineData((AiUsageClassification)999)]
+    public async Task UploadImage_InvalidAiUsage_RejectsBeforeFileProcessing(AiUsageClassification aiUsage)
+    {
+        var storage = new Mock<IImageStorage>();
+        var handler = UploadHandler(Repositories(new Mock<IAppUserRepository>()).Object, new TestUser(7, AppUserRole.Admin), storage);
+
+        await Assert.ThrowsAsync<ImageUploadValidationError>(() => handler.Handle(
+            new Application.Features.Images.UploadImage.Command(new AppImageCreationDto { AiUsage = aiUsage }),
+            CancellationToken.None));
+
+        storage.Verify(service => service.SaveTemporaryAsync(It.IsAny<Stream>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     [Fact]
     public async Task UploadImage_MissingCurrentUserRecord_ThrowsForbidden()
     {

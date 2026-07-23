@@ -13,6 +13,7 @@ public sealed record AppImageDto(
     int Height,
     ImageVisibility Visibility,
     ModerationStatus ModerationStatus,
+    AiUsageClassification AiUsage,
     IReadOnlyList<string>? PendingTags = null,
     DateTimeOffset? HiddenAtUtc = null,
     int LikeCount = 0,

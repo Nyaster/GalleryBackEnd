@@ -40,13 +40,17 @@ public sealed class ImageController(IMediator mediator) : ControllerBase
     [HttpGet]
     public async Task<ActionResult<PageableImagesDto>> Search([FromQuery] List<string>? tags, [FromQuery] ImageKind kind = ImageKind.All,
         [FromQuery] ImageSort sort = ImageSort.Newest, [FromQuery] int page = 1, [FromQuery] int pageSize = 20,
+        [FromQuery] List<string>? aiUsage = null,
         CancellationToken cancellationToken = default)
-        => Ok(await mediator.Send(new Application.Features.Images.GetImageBySearch.Command(new SearchImageDto(tags, kind, sort, page, pageSize)), cancellationToken));
+        => Ok(await mediator.Send(new Application.Features.Images.GetImageBySearch.Command(
+            new SearchImageDto(tags, kind, sort, page, pageSize, AiUsageFilterParser.Parse(aiUsage))), cancellationToken));
 
     [HttpGet("{id:int}/recommendations")]
     public async Task<ActionResult<PageableRecommendationsDto>> Recommendations(int id, [FromQuery] int page = 1, [FromQuery] int pageSize = 20,
+        [FromQuery] List<string>? aiUsage = null,
         CancellationToken cancellationToken = default)
-        => Ok(await mediator.Send(new Application.Features.Images.GetImageRecommendation.Command(id, page, pageSize), cancellationToken));
+        => Ok(await mediator.Send(new Application.Features.Images.GetImageRecommendation.Command(
+            id, page, pageSize, AiUsageFilterParser.Parse(aiUsage)), cancellationToken));
 
     [HttpPut("{id:int}/tags")]
     [ProducesResponseType<ImageTagChangeDto>(StatusCodes.Status200OK)]

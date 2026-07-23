@@ -18,7 +18,7 @@ public sealed class Handler(IRepositoryManager repositories, IUserContext curren
             throw new Base409ConflictException("Recommendations are not ready for this image.");
         var page = Math.Max(request.Page, 1);
         var pageSize = Math.Clamp(request.PageSize, 1, 50);
-        var result = await repositories.AppImage.GetRecommendationsAsync(image.Id, page, pageSize, cancellationToken);
+        var result = await repositories.AppImage.GetRecommendationsAsync(image.Id, page, pageSize, cancellationToken, request.AiUsage);
         return new PageableRecommendationsDto(page, pageSize, result.Total,
             result.Images.Select(recommendation => ImageDtoMapper.ToDto(recommendation, currentUser)).ToList());
     }

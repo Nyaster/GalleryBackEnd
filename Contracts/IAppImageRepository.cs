@@ -8,8 +8,8 @@ public interface IAppImageRepository
     Task<AppImage?> GetByIdAsync(int id, bool trackChanges, CancellationToken cancellationToken = default);
     Task<(List<AppImage> Images, int Total)> SearchAsync(SearchImageDto request, CancellationToken cancellationToken = default);
     Task<(List<AppImage> Images, int Total)> GetUploadedByUserAsync(int userId, bool includeHidden, int page, int pageSize, CancellationToken cancellationToken = default);
-    Task<(List<AppImage> Images, int Total)> GetLikedByUserAsync(int userId, int page, int pageSize, CancellationToken cancellationToken = default);
-    Task<(List<AppImage> Images, int Total)> GetRecommendationsAsync(int imageId, int page, int pageSize, CancellationToken cancellationToken = default);
+    Task<(List<AppImage> Images, int Total)> GetLikedByUserAsync(int userId, int page, int pageSize, CancellationToken cancellationToken = default, IReadOnlyList<AiUsageClassification>? aiUsage = null);
+    Task<(List<AppImage> Images, int Total)> GetRecommendationsAsync(int imageId, int page, int pageSize, CancellationToken cancellationToken = default, IReadOnlyList<AiUsageClassification>? aiUsage = null);
     Task<List<AppImage>> GetPendingAsync(int page, int pageSize, CancellationToken cancellationToken = default);
     Task<List<AppImage>> GetHiddenAsync(int page, int pageSize, CancellationToken cancellationToken = default);
     Task<List<ImageTag>> GetByNormalizedNamesAsync(IEnumerable<string> normalizedTags, CancellationToken cancellationToken = default);

@@ -143,6 +143,7 @@ public sealed class AppImageParserService(
                 UploadedAtUtc = candidate.UploadedAtUtc,
                 Visibility = ImageVisibility.Gallery,
                 ModerationStatus = ModerationStatus.Approved,
+                AiUsage = AiUsageClassification.HumanMade,
                 StorageKey = storageKey,
                 ContentType = inspected.ContentType,
                 Width = inspected.Width,

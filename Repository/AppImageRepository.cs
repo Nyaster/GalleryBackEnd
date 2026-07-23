@@ -22,6 +22,7 @@ public sealed class AppImageRepository(RepositoryContext context) : IAppImageRep
             ImageKind.Fan => query.Where(image => image.Source == ImageSource.UserUpload),
             _ => query
         };
+        query = ApplyAiUsageFilter(query, request.AiUsage);
 
         var normalizedTags = NormalizeTags(request.Tags);
         if (normalizedTags.Count > 0)
@@ -49,12 +50,13 @@ public sealed class AppImageRepository(RepositoryContext context) : IAppImageRep
         return (images, total);
     }
 
-    public async Task<(List<AppImage> Images, int Total)> GetLikedByUserAsync(int userId, int page, int pageSize, CancellationToken cancellationToken = default)
+    public async Task<(List<AppImage> Images, int Total)> GetLikedByUserAsync(int userId, int page, int pageSize, CancellationToken cancellationToken = default, IReadOnlyList<AiUsageClassification>? aiUsage = null)
     {
         var query = ImageQuery(false)
             .Where(image => image.DeletedAtUtc == null && image.Visibility == ImageVisibility.Gallery &&
                 image.ModerationStatus == ModerationStatus.Approved)
             .Where(image => image.Likes.Any(like => like.UserId == userId));
+        query = ApplyAiUsageFilter(query, aiUsage);
         var total = await query.CountAsync(cancellationToken);
         var size = Math.Clamp(pageSize, 1, 50);
         var images = await query.OrderByDescending(image => image.Likes
@@ -64,7 +66,7 @@ public sealed class AppImageRepository(RepositoryContext context) : IAppImageRep
         return (images, total);
     }
 
-    public async Task<(List<AppImage> Images, int Total)> GetRecommendationsAsync(int imageId, int page, int pageSize, CancellationToken cancellationToken = default)
+    public async Task<(List<AppImage> Images, int Total)> GetRecommendationsAsync(int imageId, int page, int pageSize, CancellationToken cancellationToken = default, IReadOnlyList<AiUsageClassification>? aiUsage = null)
     {
         var source = await context.Images.AsNoTracking().SingleOrDefaultAsync(image => image.Id == imageId, cancellationToken);
         if (source?.Embedding is null)
@@ -72,7 +74,9 @@ public sealed class AppImageRepository(RepositoryContext context) : IAppImageRep
         var size = Math.Clamp(pageSize, 1, 50);
         var normalizedPage = Math.Max(page, 1);
         var query = ImageQuery(false).Where(IsDiscoverable())
-            .Where(image => image.Id != imageId && image.Embedding != null)
+            .Where(image => image.Id != imageId && image.Embedding != null);
+        query = ApplyAiUsageFilter(query, aiUsage);
+        query = query
             .OrderBy(image => image.Embedding!.L2Distance(source.Embedding))
             .ThenBy(image => image.Id);
         var total = await query.CountAsync(cancellationToken);
@@ -177,6 +181,14 @@ public sealed class AppImageRepository(RepositoryContext context) : IAppImageRep
 
     private static System.Linq.Expressions.Expression<Func<AppImage, bool>> IsDiscoverable()
         => image => image.DeletedAtUtc == null && image.Visibility == ImageVisibility.Gallery && image.ModerationStatus == ModerationStatus.Approved;
+
+    private static IQueryable<AppImage> ApplyAiUsageFilter(IQueryable<AppImage> query, IReadOnlyList<AiUsageClassification>? aiUsage)
+    {
+        if (aiUsage is null || aiUsage.Count == 0)
+            return query;
+        var values = aiUsage.Distinct().ToArray();
+        return query.Where(image => values.Contains(image.AiUsage));
+    }
 
     private static List<string> NormalizeTags(IReadOnlyList<string>? tags)
         => tags?.Select(NormalizeTag).Where(tag => tag.Length > 0).Distinct().Take(20).ToList() ?? [];

@@ -32,6 +32,10 @@ public sealed class Handler(
                 throw new AppForbiddenException("You do not have permission to upload images.");
         }
 
+        if (request.Request.AiUsage == AiUsageClassification.Unknown ||
+            !Enum.IsDefined(request.Request.AiUsage))
+            throw new ImageUploadValidationError("aiUsage must be HumanMade, AiAssisted, or AiGenerated.");
+
         var file = request.Request.ImageFile ?? throw new Entities.Exceptions.ImageUploadValidationError("An image file is required.");
         if (file.Length <= 0)
             throw new Entities.Exceptions.ImageUploadValidationError("The uploaded file is empty.");
@@ -59,6 +63,7 @@ public sealed class Handler(
                 UploadedAtUtc = now,
                 Visibility = request.Request.IsPrivate ? ImageVisibility.Private : ImageVisibility.Gallery,
                 ModerationStatus = ModerationStatus.Pending,
+                AiUsage = request.Request.AiUsage,
                 StorageKey = storageKey,
                 ContentType = inspected.ContentType,
                 Width = inspected.Width,

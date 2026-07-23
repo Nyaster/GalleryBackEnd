@@ -20,6 +20,7 @@ internal static class ImageDtoMapper
         image.Height,
         image.Visibility,
         image.ModerationStatus,
+        image.AiUsage,
         canSeePendingTags ? image.Tags.Where(tag => tag.ModerationStatus == TagModerationStatus.Pending).OrderBy(tag => tag.Name).Select(tag => tag.Name).ToArray() : null,
         image.DeletedAtUtc,
         image.Likes.Count,

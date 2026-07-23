@@ -15,6 +15,7 @@ public sealed class AppImageEfConfiguration : IEntityTypeConfiguration<AppImage>
         builder.Property(image => image.Source).HasConversion<string>().IsRequired();
         builder.Property(image => image.Visibility).HasConversion<string>().IsRequired();
         builder.Property(image => image.ModerationStatus).HasConversion<string>().IsRequired();
+        builder.Property(image => image.AiUsage).HasConversion<string>().IsRequired();
         builder.Property(image => image.EmbeddingStatus).HasConversion<string>().IsRequired();
         builder.Property(image => image.StorageKey).HasMaxLength(260).IsRequired();
         builder.Property(image => image.ContentType).HasMaxLength(100).IsRequired();
@@ -28,6 +29,7 @@ public sealed class AppImageEfConfiguration : IEntityTypeConfiguration<AppImage>
             .IsUnique()
             .HasFilter("\"ExternalMediaId\" IS NOT NULL");
         builder.HasIndex(image => new { image.ModerationStatus, image.Visibility, image.UploadedAtUtc });
+        builder.HasIndex(image => new { image.AiUsage, image.ModerationStatus, image.Visibility, image.UploadedAtUtc });
         builder.HasIndex(image => image.DeletedAtUtc);
         builder.HasIndex(image => image.Embedding)
             .HasMethod("hnsw")
