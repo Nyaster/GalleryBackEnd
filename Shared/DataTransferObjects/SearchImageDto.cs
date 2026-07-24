@@ -9,7 +9,8 @@ public sealed record SearchImageDto(
     int Page = 1,
     int PageSize = 20,
     IReadOnlyList<AiUsageClassification>? AiUsage = null,
-    string? RandomSeed = null);
+    string? RandomSeed = null,
+    IReadOnlyList<string>? ExcludedTags = null);
 
 public enum ImageKind { All, Official, Fan }
 public enum ImageSort { Newest, Oldest, MediaId, Random }

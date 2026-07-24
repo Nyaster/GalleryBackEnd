@@ -54,9 +54,11 @@ public sealed class ImageController(IMediator mediator) : ControllerBase
         [FromQuery] ImageSort sort = ImageSort.Newest, [FromQuery] int page = 1, [FromQuery] int pageSize = 20,
         [FromQuery] List<string>? aiUsage = null,
         [FromQuery] string? randomSeed = null,
+        [FromQuery] List<string>? excludedTags = null,
         CancellationToken cancellationToken = default)
         => Ok(await mediator.Send(new Application.Features.Images.GetImageBySearch.Command(
-                new SearchImageDto(tags, kind, sort, page, pageSize, AiUsageFilterParser.Parse(aiUsage), randomSeed)),
+                new SearchImageDto(tags, kind, sort, page, pageSize, AiUsageFilterParser.Parse(aiUsage), randomSeed,
+                    excludedTags)),
             cancellationToken));
 
     [HttpGet("{id:int}/recommendations")]

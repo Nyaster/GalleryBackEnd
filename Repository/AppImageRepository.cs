@@ -27,10 +27,7 @@ public sealed class AppImageRepository(RepositoryContext context) : IAppImageRep
         };
         query = ApplyAiUsageFilter(query, request.AiUsage);
 
-        var normalizedTags = NormalizeTags(request.Tags);
-        if (normalizedTags.Count > 0)
-            query = query.Where(image => normalizedTags.All(tag => image.Tags.Any(imageTag =>
-                imageTag.NormalizedName == tag && imageTag.ModerationStatus == TagModerationStatus.Approved)));
+        query = ApplyTagFilters(query, request.Tags, request.ExcludedTags);
 
         query = ApplySort(query, request.Sort, randomSeed);
         var total = await query.CountAsync(cancellationToken);
@@ -195,6 +192,24 @@ public sealed class AppImageRepository(RepositoryContext context) : IAppImageRep
             return query;
         var values = aiUsage.Distinct().ToArray();
         return query.Where(image => values.Contains(image.AiUsage));
+    }
+
+    internal static IQueryable<AppImage> ApplyTagFilters(IQueryable<AppImage> query,
+        IReadOnlyList<string>? tags, IReadOnlyList<string>? excludedTags)
+    {
+        var normalizedTags = NormalizeTags(tags);
+        var normalizedExcludedTags = NormalizeTags(excludedTags);
+
+        if (normalizedTags.Count > 0)
+            query = query.Where(image => normalizedTags.All(tag => image.Tags.Any(imageTag =>
+                imageTag.NormalizedName == tag && imageTag.ModerationStatus == TagModerationStatus.Approved)));
+
+        if (normalizedExcludedTags.Count > 0)
+            query = query.Where(image => !image.Tags.Any(imageTag =>
+                normalizedExcludedTags.Contains(imageTag.NormalizedName) &&
+                imageTag.ModerationStatus == TagModerationStatus.Approved));
+
+        return query;
     }
 
     private static List<string> NormalizeTags(IReadOnlyList<string>? tags)

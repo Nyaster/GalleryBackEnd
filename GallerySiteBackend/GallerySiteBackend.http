@@ -13,6 +13,23 @@ Content-Type: application/json
 GET {{GallerySiteBackend_HostAddress}}/api/images?kind=All&sort=Newest&page=1&pageSize=20
 Authorization: Bearer {{accessToken}}
 
+### Require every positive tag and exclude images matching any approved excluded tag.
+GET {{GallerySiteBackend_HostAddress}}/api/images?tags=portrait&excludedTags=summer&excludedTags=winter&page=1&pageSize=20
+Authorization: Bearer {{accessToken}}
+
+### Read a cached 768px JPEG preview for a gallery card.
+GET {{GallerySiteBackend_HostAddress}}/api/images/42/content?format=preview
+Authorization: Bearer {{accessToken}}
+
+### Start a stable random gallery sequence. Copy randomSeed from the response into the request below.
+GET {{GallerySiteBackend_HostAddress}}/api/images?kind=All&sort=Random&page=1&pageSize=20
+Authorization: Bearer {{accessToken}}
+
+@randomSeed = replace-with-randomSeed-from-the-response
+### Continue the same random sequence without duplicate page navigation.
+GET {{GallerySiteBackend_HostAddress}}/api/images?kind=All&sort=Random&randomSeed={{randomSeed}}&page=2&pageSize=20
+Authorization: Bearer {{accessToken}}
+
 ### Read the authenticated user's currently public liked images, newest likes first.
 GET {{GallerySiteBackend_HostAddress}}/api/users/me/liked-images?page=1&pageSize=20
 Authorization: Bearer {{accessToken}}
@@ -35,7 +52,15 @@ Content-Type: image/jpeg
 Content-Disposition: form-data; name="tags"
 
 example
+--GalleryBoundary
+Content-Disposition: form-data; name="aiUsage"
+
+HumanMade
 --GalleryBoundary--
+
+### Filter discovery by one or more AI-usage classifications (OR semantics).
+GET {{GallerySiteBackend_HostAddress}}/api/images?aiUsage=HumanMade&aiUsage=AiAssisted&page=1&pageSize=20
+Authorization: Bearer {{accessToken}}
 
 ### Admin: inspect a user's effective image-upload access.
 GET {{GallerySiteBackend_HostAddress}}/api/admin/users/42/upload-permission
