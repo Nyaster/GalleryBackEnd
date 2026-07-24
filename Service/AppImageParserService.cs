@@ -60,7 +60,8 @@ public sealed class AppImageParserService(
                 page, run.TotalPages, pageCandidates.Count, run.ImagesDiscovered);
             await SaveProgressAsync(run, "source-page", cancellationToken);
         }
-        var existing = await repositories.AppImage.GetByExternalMediaIdsAsync(candidates.Select(candidate => candidate.MediaId), false, cancellationToken);
+        var existing = await repositories.AppImage.GetByExternalMediaIdsAsync(candidates.Select(candidate => candidate.MediaId), true, cancellationToken);
+        await SynchronizeExistingImagesAsync(existing, candidates, cancellationToken);
         var existingIds = existing.Select(image => image.ExternalMediaId!.Value).ToHashSet();
         var newCandidates = candidates.Where(candidate => !existingIds.Contains(candidate.MediaId)).ToList();
         var plannedCandidates = newCandidates.Take(run.MaxImages).ToList();
@@ -101,6 +102,46 @@ public sealed class AppImageParserService(
         }
         return new ScrapeResult(run.ImagesDiscovered, run.ImagesImported, run.CompletedWithErrors, run.FailedItems);
     }
+
+    private async Task SynchronizeExistingImagesAsync(IReadOnlyList<AppImage> existingImages,
+        IReadOnlyList<ScrapedCandidate> candidates, CancellationToken cancellationToken)
+    {
+        if (existingImages.Count == 0) return;
+
+        var candidatesByMediaId = candidates.ToDictionary(candidate => candidate.MediaId);
+        var sourceTagsByMediaId = candidatesByMediaId.ToDictionary(pair => pair.Key,
+            pair => NormalizeTags(pair.Value.Tags));
+        var tagsByName = new Dictionary<string, ImageTag>(StringComparer.Ordinal);
+        var now = clock.GetUtcNow();
+        foreach (var tagNames in sourceTagsByMediaId.Values.SelectMany(tags => tags).Distinct().Chunk(20))
+            foreach (var tag in await repositories.AppImage.GetOrCreateTagsAsync(tagNames, now, cancellationToken))
+                tagsByName[tag.NormalizedName] = tag;
+
+        var changedImages = 0;
+        foreach (var image in existingImages)
+        {
+            var source = candidatesByMediaId[image.ExternalMediaId!.Value];
+            var sourceTags = sourceTagsByMediaId[source.MediaId]
+                .Select(tagName => tagsByName[tagName]).ToList();
+            var tagsChanged = !HaveSameTags(image.Tags, sourceTags);
+            var uploadedAtChanged = image.UploadedAtUtc != source.UploadedAtUtc;
+            if (!tagsChanged && !uploadedAtChanged) continue;
+
+            image.Tags = sourceTags;
+            image.UploadedAtUtc = source.UploadedAtUtc;
+            changedImages++;
+        }
+
+        if (changedImages > 0)
+            logger.LogInformation("Synchronized source metadata for {UpdatedImages} existing scraped images", changedImages);
+    }
+
+    private static List<string> NormalizeTags(IReadOnlyList<string> tags)
+        => tags.Select(tag => tag.Trim().ToLowerInvariant()).Where(tag => tag.Length > 0).Distinct().Take(20).ToList();
+
+    private static bool HaveSameTags(IReadOnlyList<ImageTag> currentTags, IReadOnlyList<ImageTag> sourceTags)
+        => currentTags.Select(tag => tag.NormalizedName).Order(StringComparer.Ordinal)
+            .SequenceEqual(sourceTags.Select(tag => tag.NormalizedName).Order(StringComparer.Ordinal), StringComparer.Ordinal);
 
     private async Task SaveProgressAsync(ScrapeRun run, string checkpoint, CancellationToken cancellationToken)
     {
