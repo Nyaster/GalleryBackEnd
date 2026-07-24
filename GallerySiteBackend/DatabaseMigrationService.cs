@@ -9,6 +9,8 @@ namespace GallerySiteBackend;
 
 public static class DatabaseMigrationService
 {
+    private static readonly TimeSpan MigrationCommandTimeout = TimeSpan.FromMinutes(10);
+
     public static async Task MigrateAsync(IServiceProvider services, ILogger logger, CancellationToken cancellationToken)
     {
         await using var scope = services.CreateAsyncScope();
@@ -16,6 +18,7 @@ public static class DatabaseMigrationService
         var bootstrapAdmin = scope.ServiceProvider.GetRequiredService<IOptions<BootstrapAdminOptions>>();
         var passwordHasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher<AppUser>>();
         logger.LogInformation("Applying pending database migrations");
+        database.Database.SetCommandTimeout(MigrationCommandTimeout);
         await database.Database.MigrateAsync(cancellationToken);
         await SeedBootstrapAdminAsync(database, bootstrapAdmin.Value, passwordHasher, logger, cancellationToken);
     }
