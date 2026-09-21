@@ -23,15 +23,19 @@ public sealed class AuthenticationService(
     TimeProvider clock,
     ILoggerFactory loggerFactory) : IAuthenticationService
 {
-    private static readonly Regex LoginPattern = new("^[a-zA-Z0-9]+$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex LoginPattern =
+        new("^[a-zA-Z0-9]+$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
     private readonly ILogger _securityLogger = loggerFactory.CreateLogger("GallerySiteBackend.Security");
 
-    public async Task<AuthenticationResult> RegisterAsync(CreateUserDto request, CancellationToken cancellationToken = default)
+    public async Task<AuthenticationResult> RegisterAsync(CreateUserDto request,
+        CancellationToken cancellationToken = default)
     {
         var login = NormalizeLogin(request.Login);
         if (!LoginPattern.IsMatch(login))
             throw new InvalidLoginException("Login may contain only letters and digits.");
 
+        await using var transaction = await repositories.BeginTransactionAsync(cancellationToken);
         if (await repositories.AppUser.GetByNormalizedLoginAsync(login, false, cancellationToken) is not null)
             throw new UserArleadyExistException("This login is already registered.");
 
@@ -45,13 +49,17 @@ public sealed class AuthenticationService(
         user.PasswordHash = passwordHasher.HashPassword(user, request.Password);
         await repositories.AppUser.AddAsync(user, cancellationToken);
         await repositories.SaveAsync(cancellationToken);
-        return await CreateSessionAsync(user, cancellationToken);
+        var result = await CreateSessionAsync(user, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return result;
     }
 
-    public async Task<AuthenticationResult> LoginAsync(AppLoginDto request, CancellationToken cancellationToken = default)
+    public async Task<AuthenticationResult> LoginAsync(AppLoginDto request,
+        CancellationToken cancellationToken = default)
     {
         var normalizedLogin = NormalizeLogin(request.Login);
-        var user = await repositories.AppUser.GetByNormalizedLoginAsync(normalizedLogin, true, cancellationToken);
+        await using var transaction = await repositories.BeginTransactionAsync(cancellationToken);
+        var user = await repositories.AppUser.LockByNormalizedLoginAsync(normalizedLogin, cancellationToken);
         if (user is null)
             throw new AppUserUnauthorizedException("Invalid login or password.");
 
@@ -64,27 +72,35 @@ public sealed class AuthenticationService(
             user.PasswordHash = passwordHasher.HashPassword(user, request.Password);
             await repositories.SaveAsync(cancellationToken);
         }
-        return await CreateSessionAsync(user, cancellationToken);
+
+        var result = await CreateSessionAsync(user, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return result;
     }
 
-    public async Task<AuthenticationResult> RefreshAsync(string refreshToken, CancellationToken cancellationToken = default)
+    public async Task<AuthenticationResult> RefreshAsync(string refreshToken,
+        CancellationToken cancellationToken = default)
     {
         var tokenHash = HashToken(refreshToken);
         var now = clock.GetUtcNow();
         var replacement = CreateRefreshSession(0, now);
-        var rotation = await repositories.AppUser.RotateRefreshSessionAsync(tokenHash, replacement.Session, now, cancellationToken);
+        var rotation =
+            await repositories.AppUser.RotateRefreshSessionAsync(tokenHash, replacement.Session, now,
+                cancellationToken);
         if (rotation.User is null)
         {
             _securityLogger.LogWarning("RefreshTokenRejected {TimestampUtc} {UserId} {FamilyRevoked}",
                 now, rotation.UserId, rotation.FamilyRevoked);
             throw new AppUserUnauthorizedException("Refresh session is invalid or expired.");
         }
+
         return new AuthenticationResult(CreateJwtResponse(rotation.User, now), replacement.RawToken);
     }
 
     public async Task LogoutAsync(string refreshToken, CancellationToken cancellationToken = default)
     {
-        var session = await repositories.AppUser.GetRefreshSessionAsync(HashToken(refreshToken), true, cancellationToken);
+        var session =
+            await repositories.AppUser.GetRefreshSessionAsync(HashToken(refreshToken), true, cancellationToken);
         if (session is null || session.RevokedAtUtc is not null)
             return;
         session.RevokedAtUtc = clock.GetUtcNow();
@@ -92,7 +108,8 @@ public sealed class AuthenticationService(
         await repositories.SaveAsync(cancellationToken);
     }
 
-    private async Task<AuthenticationResult> CreateSessionAsync(AppUser user, CancellationToken cancellationToken, bool save = true)
+    private async Task<AuthenticationResult> CreateSessionAsync(AppUser user, CancellationToken cancellationToken,
+        bool save = true)
     {
         var now = clock.GetUtcNow();
         var created = CreateRefreshSession(user.Id, now);
@@ -108,8 +125,11 @@ public sealed class AuthenticationService(
         var rawToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
         var sessionId = Guid.NewGuid();
         var refreshToken = $"{sessionId}.{rawToken}";
-        return (new RefreshSession { Id = sessionId, UserId = userId, FamilyId = Guid.NewGuid(), TokenHash = HashToken(refreshToken),
-            CreatedAtUtc = now, ExpiresAtUtc = now.AddDays(options.Value.RefreshTokenDays) }, refreshToken);
+        return (new RefreshSession
+        {
+            Id = sessionId, UserId = userId, FamilyId = Guid.NewGuid(), TokenHash = HashToken(refreshToken),
+            CreatedAtUtc = now, ExpiresAtUtc = now.AddDays(options.Value.RefreshTokenDays)
+        }, refreshToken);
     }
 
     private JwtTokenResponse CreateJwtResponse(AppUser user, DateTimeOffset now)
@@ -122,12 +142,14 @@ public sealed class AuthenticationService(
             new(ClaimTypes.NameIdentifier, user.Id.ToString()),
             new(ClaimTypes.Name, user.Login)
         };
+        claims.Add(new Claim("auth_version",
+            user.AuthenticationVersion.ToString(System.Globalization.CultureInfo.InvariantCulture)));
         claims.AddRange(user.Roles.Select(role => new Claim(ClaimTypes.Role, role.ToString())));
         var signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(config.SecretKey));
         var token = new JwtSecurityToken(config.ValidIssuer, config.ValidAudience, claims, now.UtcDateTime,
             expires.UtcDateTime, new SigningCredentials(signingKey, SecurityAlgorithms.HmacSha256));
         return new JwtTokenResponse(new JwtSecurityTokenHandler().WriteToken(token), expires,
-            new AppUserDto(user.Id, user.Login, user.Roles.Select(role => role.ToString()).ToArray()));
+            AppUserDto.FromUser(user));
     }
 
     private static string NormalizeLogin(string login) => login.Trim().ToUpperInvariant();

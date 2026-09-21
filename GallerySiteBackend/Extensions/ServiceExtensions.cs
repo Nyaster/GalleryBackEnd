@@ -28,10 +28,11 @@ public static class ServiceExtensions
 
     public static void ConfigureJwtToken(this IServiceCollection services, IConfiguration configuration)
     {
-        var config = configuration.GetSection("JwtConfig").Get<JwtConfiguration>()
-            ?? throw new InvalidOperationException("JwtConfig is required.");
         services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(options =>
         {
+            // Resolve after host configuration is complete, like the options used to issue JWTs.
+            var config = configuration.GetSection("JwtConfig").Get<JwtConfiguration>()
+                         ?? throw new InvalidOperationException("JwtConfig is required.");
             options.TokenValidationParameters = new TokenValidationParameters
             {
                 ValidateIssuer = true,
@@ -47,9 +48,28 @@ public static class ServiceExtensions
             };
             options.Events = new JwtBearerEvents
             {
+                OnTokenValidated = async context =>
+                {
+                    var id = context.Principal?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                    var rawVersion = context.Principal?.FindFirst("auth_version")?.Value;
+                    if (!int.TryParse(id, out var userId) ||
+                        (rawVersion is not null && !int.TryParse(rawVersion, out _)))
+                    {
+                        context.Fail("Invalid account session.");
+                        return;
+                    }
+
+                    var version = rawVersion is null ? 0 : int.Parse(rawVersion);
+                    var repositories = context.HttpContext.RequestServices.GetRequiredService<IRepositoryManager>();
+                    var storedVersion = await repositories.AppUser.GetAuthenticationVersionAsync(userId,
+                        context.HttpContext.RequestAborted);
+                    if (storedVersion is null || storedVersion != version)
+                        context.Fail("Invalid account session.");
+                },
                 OnAuthenticationFailed = context =>
                 {
-                    var logger = context.HttpContext.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger(LogCategories.Security);
+                    var logger = context.HttpContext.RequestServices.GetRequiredService<ILoggerFactory>()
+                        .CreateLogger(LogCategories.Security);
                     logger.LogWarning("JwtAuthenticationFailed {TimestampUtc} {TraceId} {Method} {Route} {ClientIp}",
                         DateTimeOffset.UtcNow, context.HttpContext.TraceIdentifier, context.Request.Method,
                         context.HttpContext.GetEndpoint() is Microsoft.AspNetCore.Routing.RouteEndpoint endpoint

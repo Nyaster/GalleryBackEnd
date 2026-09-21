@@ -31,11 +31,17 @@ public sealed class AuthenticationServiceTests
         var repositories = RepositoryMock(users);
         AppUser? createdUser = null;
         RefreshSession? createdSession = null;
-        users.Setup(repo => repo.GetByNormalizedLoginAsync("GALLERYUSER", false, It.IsAny<CancellationToken>())).ReturnsAsync((AppUser?)null);
+        users.Setup(repo => repo.GetByNormalizedLoginAsync("GALLERYUSER", false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((AppUser?)null);
         users.Setup(repo => repo.AddAsync(It.IsAny<AppUser>(), It.IsAny<CancellationToken>()))
-            .Callback<AppUser, CancellationToken>((user, _) => { user.Id = 42; createdUser = user; }).Returns(Task.CompletedTask);
+            .Callback<AppUser, CancellationToken>((user, _) =>
+            {
+                user.Id = 42;
+                createdUser = user;
+            }).Returns(Task.CompletedTask);
         users.Setup(repo => repo.AddRefreshSessionAsync(It.IsAny<RefreshSession>(), It.IsAny<CancellationToken>()))
-            .Callback<RefreshSession, CancellationToken>((session, _) => createdSession = session).Returns(Task.CompletedTask);
+            .Callback<RefreshSession, CancellationToken>((session, _) => createdSession = session)
+            .Returns(Task.CompletedTask);
 
         var service = CreateService(repositories.Object);
         var result = await service.RegisterAsync(new CreateUserDto("GalleryUser", "a-long-and-valid-password"));
@@ -55,10 +61,12 @@ public sealed class AuthenticationServiceTests
     public async Task LoginAsync_UnknownLogin_ReturnsSameUnauthorizedErrorAsBadPassword()
     {
         var users = new Mock<IAppUserRepository>();
-        users.Setup(repo => repo.GetByNormalizedLoginAsync("MISSINGUSER", true, It.IsAny<CancellationToken>())).ReturnsAsync((AppUser?)null);
+        users.Setup(repo => repo.LockByNormalizedLoginAsync("MISSINGUSER", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((AppUser?)null);
 
         var exception = await Assert.ThrowsAsync<AppUserUnauthorizedException>(() =>
-            CreateService(RepositoryMock(users).Object).LoginAsync(new AppLoginDto("MissingUser", "a-long-and-valid-password")));
+            CreateService(RepositoryMock(users).Object)
+                .LoginAsync(new AppLoginDto("MissingUser", "a-long-and-valid-password")));
 
         Assert.Equal("Invalid login or password.", exception.Message);
     }
@@ -87,8 +95,10 @@ public sealed class AuthenticationServiceTests
         };
         var users = new Mock<IAppUserRepository>();
         RefreshSession? replacement = null;
-        users.Setup(repo => repo.RotateRefreshSessionAsync(It.IsAny<byte[]>(), It.IsAny<RefreshSession>(), It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
-            .Callback<byte[], RefreshSession, DateTimeOffset, CancellationToken>((_, session, _, _) => replacement = session)
+        users.Setup(repo => repo.RotateRefreshSessionAsync(It.IsAny<byte[]>(), It.IsAny<RefreshSession>(),
+                It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
+            .Callback<byte[], RefreshSession, DateTimeOffset, CancellationToken>((_, session, _, _) =>
+                replacement = session)
             .ReturnsAsync(() => new RefreshSessionRotationResult(user, user.Id, false));
 
         var result = await CreateService(RepositoryMock(users).Object).RefreshAsync(refreshToken);
@@ -102,9 +112,12 @@ public sealed class AuthenticationServiceTests
         var repositories = new Mock<IRepositoryManager>();
         repositories.SetupGet(repo => repo.AppUser).Returns(users.Object);
         repositories.Setup(repo => repo.SaveAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+        repositories.Setup(repo => repo.BeginTransactionAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Mock<IRepositoryTransaction>().Object);
         return repositories;
     }
 
     private static AuthenticationService CreateService(IRepositoryManager repositories)
-        => new(repositories, new PasswordHasher<AppUser>(), Options.Create(Jwt), TimeProvider.System, NullLoggerFactory.Instance);
+        => new(repositories, new PasswordHasher<AppUser>(), Options.Create(Jwt), TimeProvider.System,
+            NullLoggerFactory.Instance);
 }

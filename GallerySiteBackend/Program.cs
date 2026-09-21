@@ -5,6 +5,7 @@ using GallerySiteBackend.Configuration;
 using GallerySiteBackend.Extensions;
 using GallerySiteBackend.Presentation;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authorization.Policy;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
@@ -40,6 +41,13 @@ builder.Services.AddControllers().AddJsonOptions(options =>
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IUserContext, HttpUserContext>();
 builder.Services.AddSingleton(TimeProvider.System);
+var authenticatorKeyPath = builder.Configuration["Authenticator:KeyRingPath"]
+    ?? Path.Combine(builder.Environment.ContentRootPath, "Data", "auth-keys");
+var authenticatorKeyDirectory = OperatingSystem.IsWindows()
+    ? Directory.CreateDirectory(authenticatorKeyPath)
+    : Directory.CreateDirectory(authenticatorKeyPath, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+builder.Services.AddDataProtection().SetApplicationName("Lilgallery")
+    .PersistKeysToFileSystem(authenticatorKeyDirectory);
 builder.Services.AddOptions<ObservabilityOptions>().Bind(builder.Configuration.GetSection("Observability"))
     .ValidateDataAnnotations().ValidateOnStart();
 

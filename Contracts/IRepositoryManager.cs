@@ -15,5 +15,6 @@ public interface IRepositoryManager
     Task<ScrapeRun?> ClaimNextScrapeRunAsync(DateTimeOffset now, CancellationToken cancellationToken = default);
     Task AddScrapeRunAsync(ScrapeRun run, CancellationToken cancellationToken = default);
     Task<IRepositoryTransaction> BeginSerializableTransactionAsync(CancellationToken cancellationToken = default);
+    Task<IRepositoryTransaction> BeginTransactionAsync(CancellationToken cancellationToken = default);
     Task SaveAsync(CancellationToken cancellationToken = default);
 }

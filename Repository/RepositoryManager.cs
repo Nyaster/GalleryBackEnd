@@ -51,5 +51,8 @@ public sealed class RepositoryManager(RepositoryContext context) : IRepositoryMa
     public async Task<IRepositoryTransaction> BeginSerializableTransactionAsync(CancellationToken cancellationToken = default)
         => new RepositoryTransaction(await context.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken));
 
+    public async Task<IRepositoryTransaction> BeginTransactionAsync(CancellationToken cancellationToken = default)
+        => new RepositoryTransaction(await context.Database.BeginTransactionAsync(cancellationToken));
+
     public Task SaveAsync(CancellationToken cancellationToken = default) => context.SaveChangesAsync(cancellationToken);
 }
