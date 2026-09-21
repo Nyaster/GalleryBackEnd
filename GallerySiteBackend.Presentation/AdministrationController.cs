@@ -94,7 +94,7 @@ public sealed class AdministrationController(IMediator mediator) : ControllerBas
     [Authorize(Roles = "Admin")]
     public async Task<ActionResult<UploadPermissionDto>> UpdateUploadPermission(int id, UpdateUploadPermissionDto request,
         CancellationToken cancellationToken)
-        => Ok(await mediator.Send(new Application.Features.Administration.UpdateUserUploadPermission.Command(id, request.CanUploadImages), cancellationToken));
+        => Ok(await mediator.Send(new Application.Features.Administration.UpdateUserUploadPermission.Command(id, request.CanUploadImages, request.UploadsBlocked), cancellationToken));
 
     [HttpDelete("comments/{commentId:int}")]
     [Authorize(Roles = "Admin,Moderator")]

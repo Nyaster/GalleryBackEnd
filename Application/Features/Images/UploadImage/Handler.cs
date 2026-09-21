@@ -28,7 +28,7 @@ public sealed class Handler(
                 throw new AppForbiddenException("You do not have permission to upload images.");
 
             var user = await repositories.AppUser.GetByIdAsync(userId.Value, false, cancellationToken);
-            if (user is null || !user.CanUploadImages)
+            if (user is null || !UploadAccess.IsAllowed(user))
                 throw new AppForbiddenException("You do not have permission to upload images.");
         }
 

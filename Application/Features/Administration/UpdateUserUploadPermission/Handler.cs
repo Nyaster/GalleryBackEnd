@@ -14,6 +14,8 @@ public sealed class Handler(IRepositoryManager repositories, IUserContext curren
         var user = await repositories.AppUser.GetByIdAsync(request.UserId, true, cancellationToken)
             ?? throw new Base404ReturnException("User not found.");
         user.CanUploadImages = request.CanUploadImages;
+        if (request.UploadsBlocked is { } blocked)
+            user.UploadsBlocked = blocked;
         await repositories.SaveAsync(cancellationToken);
         return GetUserUploadPermission.Handler.ToDto(user);
     }

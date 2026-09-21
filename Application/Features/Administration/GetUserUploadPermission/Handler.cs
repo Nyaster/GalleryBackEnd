@@ -24,5 +24,6 @@ public sealed class Handler(IRepositoryManager repositories, IUserContext curren
     }
 
     internal static UploadPermissionDto ToDto(AppUser user)
-        => new(user.Id, user.Login, user.CanUploadImages || user.Roles.Contains(AppUserRole.Admin));
+        => new(user.Id, user.Login, UploadAccess.IsAllowed(user), user.CanUploadImages,
+            user.AuthenticatorEnabledAtUtc is not null, user.UploadsBlocked);
 }
