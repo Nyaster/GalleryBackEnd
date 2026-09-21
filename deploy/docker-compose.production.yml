@@ -35,6 +35,7 @@ services:
       ParserSettings__Enabled: ${SCRAPER_ENABLED:-false}
       ParserSettings__ParserLogin: ${SCRAPER_LOGIN:-}
       ParserSettings__ParserPassword: ${SCRAPER_PASSWORD:-}
+      ParserSettings__MaximumImagesPerRun: ${SCRAPER_MAX_IMAGES_PER_RUN:-2000}
       ParserSettings__AllowedImageHosts__0: ${SCRAPER_IMAGE_HOST:-lessonsinlovegame.com}
       Embedding__Enabled: ${EMBEDDING_ENABLED:-true}
       Embedding__ModelPath: /app/model/model.onnx
