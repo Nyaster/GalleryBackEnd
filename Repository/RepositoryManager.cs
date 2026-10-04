@@ -12,6 +12,7 @@ public sealed class RepositoryManager(RepositoryContext context) : IRepositoryMa
     private readonly Lazy<IAppUserRepository> _users = new(() => new AppUserRepository(context));
     private readonly Lazy<IInteractionRepository> _interactions = new(() => new InteractionRepository(context));
     private readonly Lazy<IRankingRepository> _rankings = new(() => new RankingRepository(context));
+    private readonly Lazy<IDiscoveryRepository> _discovery = new(() => new DiscoveryRepository(context));
     private readonly Lazy<IAnnouncementRepository> _announcements = new(() => new AnnouncementRepository(context));
     private readonly Lazy<IFeedbackRepository> _feedback = new(() => new FeedbackRepository(context));
 
@@ -20,6 +21,7 @@ public sealed class RepositoryManager(RepositoryContext context) : IRepositoryMa
     public IImageTagChangeRepository ImageTagChanges => _tagChanges.Value;
     public IInteractionRepository Interactions => _interactions.Value;
     public IRankingRepository Rankings => _rankings.Value;
+    public IDiscoveryRepository Discovery => _discovery.Value;
     public IAnnouncementRepository Announcements => _announcements.Value;
     public IFeedbackRepository Feedback => _feedback.Value;
 
@@ -29,27 +31,30 @@ public sealed class RepositoryManager(RepositoryContext context) : IRepositoryMa
         return query.SingleOrDefaultAsync(run => run.Id == id, cancellationToken);
     }
 
-    public async Task<ScrapeRun?> ClaimNextScrapeRunAsync(DateTimeOffset now, CancellationToken cancellationToken = default)
+    public async Task<ScrapeRun?> ClaimNextScrapeRunAsync(DateTimeOffset now,
+        CancellationToken cancellationToken = default)
     {
         var leaseExpires = now.AddMinutes(30);
         // UPDATE ... RETURNING is deliberately non-composable PostgreSQL SQL. Materialize it
         // before selecting the sole returned row so EF does not append LIMIT/OFFSET to it.
         return context.ScrapeRuns.FromSqlInterpolated($"""
-            UPDATE "ScrapeRuns" SET "Status" = {"Running"}, "StartedAtUtc" = {now}, "LeaseExpiresAtUtc" = {leaseExpires},
-                "Attempts" = "Attempts" + 1
-            WHERE "Id" = (
-                SELECT "Id" FROM "ScrapeRuns"
-                WHERE "Status" = {"Queued"} OR ("Status" = {"Running"} AND "LeaseExpiresAtUtc" < {now})
-                ORDER BY "CreatedAtUtc" FOR UPDATE SKIP LOCKED LIMIT 1
-            ) RETURNING *
-            """).AsEnumerable().SingleOrDefault();
+                                                       UPDATE "ScrapeRuns" SET "Status" = {"Running"}, "StartedAtUtc" = {now}, "LeaseExpiresAtUtc" = {leaseExpires},
+                                                           "Attempts" = "Attempts" + 1
+                                                       WHERE "Id" = (
+                                                           SELECT "Id" FROM "ScrapeRuns"
+                                                           WHERE "Status" = {"Queued"} OR ("Status" = {"Running"} AND "LeaseExpiresAtUtc" < {now})
+                                                           ORDER BY "CreatedAtUtc" FOR UPDATE SKIP LOCKED LIMIT 1
+                                                       ) RETURNING *
+                                                       """).AsEnumerable().SingleOrDefault();
     }
 
     public Task AddScrapeRunAsync(ScrapeRun run, CancellationToken cancellationToken = default)
         => context.ScrapeRuns.AddAsync(run, cancellationToken).AsTask();
 
-    public async Task<IRepositoryTransaction> BeginSerializableTransactionAsync(CancellationToken cancellationToken = default)
-        => new RepositoryTransaction(await context.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken));
+    public async Task<IRepositoryTransaction> BeginSerializableTransactionAsync(
+        CancellationToken cancellationToken = default)
+        => new RepositoryTransaction(
+            await context.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken));
 
     public async Task<IRepositoryTransaction> BeginTransactionAsync(CancellationToken cancellationToken = default)
         => new RepositoryTransaction(await context.Database.BeginTransactionAsync(cancellationToken));

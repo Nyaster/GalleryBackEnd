@@ -9,6 +9,7 @@ public interface IRepositoryManager
     IImageTagChangeRepository ImageTagChanges { get; }
     IInteractionRepository Interactions { get; }
     IRankingRepository Rankings { get; }
+    IDiscoveryRepository Discovery { get; }
     IAnnouncementRepository Announcements { get; }
     IFeedbackRepository Feedback { get; }
     Task<ScrapeRun?> GetScrapeRunAsync(Guid id, bool trackChanges, CancellationToken cancellationToken = default);
