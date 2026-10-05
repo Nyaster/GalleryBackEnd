@@ -43,6 +43,7 @@ public sealed class Handler(
             throw new Entities.Exceptions.ImageUploadValidationError($"Image size may not exceed {storageOptions.Value.MaximumUploadMegabytes} MB.");
         string? temporaryPath = null;
         string? storageKey = null;
+        var saved = false;
         try
         {
             await using var source = file.OpenReadStream();
@@ -73,12 +74,14 @@ public sealed class Handler(
             };
             await repositories.AppImage.AddAsync(image, cancellationToken);
             await repositories.SaveAsync(cancellationToken);
-            image.UploadedBy = new AppUser { Id = currentUser.UserId!.Value, Login = currentUser.Login!, NormalizedLogin = string.Empty, PasswordHash = string.Empty };
-            return ImageDtoMapper.ToDto(image, currentUser);
+            saved = true;
+            var card = await repositories.AppImage.GetCardByIdAsync(image.Id, ImageAuthorization.GetViewer(currentUser), cancellationToken)
+                ?? throw new InvalidOperationException("The saved image could not be read.");
+            return ImageDtoMapper.ToDto(card);
         }
         catch
         {
-            if (storageKey is not null)
+            if (storageKey is not null && !saved)
                 await storage.DeleteAsync(storageKey, cancellationToken);
             throw;
         }

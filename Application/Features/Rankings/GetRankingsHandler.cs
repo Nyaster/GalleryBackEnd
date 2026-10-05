@@ -8,46 +8,35 @@ using Shared.DataTransferObjects;
 
 namespace Application.Features.Rankings;
 
-public sealed class GetRankingsHandler(IRepositoryManager repositories, IUserContext currentUser, TimeProvider clock) : IRequestHandler<GetRankingsCommand, PageableRankingsDto>
+public sealed class GetRankingsHandler(IRepositoryManager repositories, IUserContext currentUser, TimeProvider clock)
+    : IRequestHandler<GetRankingsCommand, PageableRankingsDto>
 {
     public async Task<PageableRankingsDto> Handle(GetRankingsCommand request, CancellationToken cancellationToken)
     {
         currentUser.RequireAuthenticated();
-        var now = clock.GetUtcNow();
-        var current = RankingPeriodBounds.Current(request.Period, now);
+        var current = RankingPeriodBounds.Current(request.Period, clock.GetUtcNow());
         var page = Math.Max(request.Page, 1);
         var pageSize = Math.Clamp(request.PageSize, 1, 50);
+        var viewer = ImageAuthorization.GetViewer(currentUser);
         if (request.PeriodStartUtc is null)
-            return await Live(request.Period, current.StartUtc, current.EndUtc, page, pageSize, request.AiUsage, cancellationToken);
+        {
+            var live = await repositories.Rankings.GetLivePageAsync(current.StartUtc, current.EndUtc,
+                page, pageSize, viewer, request.AiUsage, cancellationToken);
+            return Response(request.Period, current.StartUtc, current.EndUtc, false, page, pageSize, live);
+        }
         var start = request.PeriodStartUtc.Value.ToUniversalTime();
         if (request.PeriodStartUtc.Value.Offset != TimeSpan.Zero || !RankingPeriodBounds.IsBoundary(request.Period, start) || start >= current.StartUtc)
             throw new Base400BadRequestException("periodStartUtc must be the start of a completed UTC period.");
-        var snapshot = await repositories.Rankings.GetSnapshotAsync(request.Period, start, false, cancellationToken)
+        var snapshot = await repositories.Rankings.GetSnapshotAsync(request.Period, start, cancellationToken)
             ?? throw new Base404ReturnException("Ranking archive not found.");
-        var entries = await repositories.Rankings.GetSnapshotEntriesAsync(snapshot.Id, cancellationToken);
-        var filtered = entries.Where(item => IsDiscoverable(item.Image) && MatchesAiUsage(item.Image, request.AiUsage))
-            .OrderBy(item => item.Entry.Rank).ToList();
-        return Page(request.Period, snapshot.PeriodStartUtc, snapshot.PeriodEndUtc, true, page, pageSize, filtered.Select(item =>
-            new RankingEntryDto(item.Entry.Rank, item.Entry.LikeDelta, ImageDtoMapper.ToDto(item.Image, currentUser))).ToList());
+        var archive = await repositories.Rankings.GetArchivePageAsync(snapshot.Id, page, pageSize, viewer,
+            request.AiUsage, cancellationToken);
+        return Response(request.Period, snapshot.PeriodStartUtc, snapshot.PeriodEndUtc, true, page, pageSize, archive);
     }
 
-    private async Task<PageableRankingsDto> Live(RankingPeriod period, DateTimeOffset start, DateTimeOffset end, int page, int pageSize,
-        IReadOnlyList<AiUsageClassification>? aiUsage, CancellationToken cancellationToken)
-    {
-        var scores = await repositories.Rankings.GetLiveScoresAsync(start, end, cancellationToken);
-        var images = await repositories.Rankings.GetDiscoverableImagesAsync(scores.Select(score => score.ImageId), cancellationToken);
-        var byId = images.ToDictionary(image => image.Id);
-        var globallyRanked = scores.Where(score => byId.ContainsKey(score.ImageId)).OrderByDescending(score => score.LikeDelta)
-            .ThenByDescending(score => score.UploadedAtUtc).ThenByDescending(score => score.ImageId)
-            .Select((score, index) => new { Score = score, Rank = index + 1 });
-        var entries = globallyRanked.Where(item => MatchesAiUsage(byId[item.Score.ImageId], aiUsage))
-            .Select(item => new RankingEntryDto(item.Rank, item.Score.LikeDelta, ImageDtoMapper.ToDto(byId[item.Score.ImageId], currentUser))).ToList();
-        return Page(period, start, end, false, page, pageSize, entries);
-    }
-
-    private static PageableRankingsDto Page(RankingPeriod period, DateTimeOffset start, DateTimeOffset end, bool archived, int page, int pageSize, List<RankingEntryDto> entries)
-        => new(period, start, end, archived, page, pageSize, entries.Count, entries.Skip((page - 1) * pageSize).Take(pageSize).ToArray());
-    private static bool IsDiscoverable(AppImage image) => image.DeletedAtUtc is null && image.Visibility == ImageVisibility.Gallery && image.ModerationStatus == ModerationStatus.Approved;
-    private static bool MatchesAiUsage(AppImage image, IReadOnlyList<AiUsageClassification>? aiUsage)
-        => aiUsage is null || aiUsage.Count == 0 || aiUsage.Contains(image.AiUsage);
+    private static PageableRankingsDto Response(RankingPeriod period, DateTimeOffset start, DateTimeOffset end,
+        bool archived, int page, int pageSize, RankingPage result)
+        => new(period, start, end, archived, page, pageSize, result.Total,
+            result.Entries.Select(entry => new RankingEntryDto(entry.Rank, entry.LikeDelta,
+                ImageDtoMapper.ToDto(entry.Image))).ToArray());
 }

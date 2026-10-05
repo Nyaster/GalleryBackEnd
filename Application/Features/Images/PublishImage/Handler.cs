@@ -20,6 +20,8 @@ public sealed class Handler(IRepositoryManager repositories, IUserContext curren
 
         image.Visibility = ImageVisibility.Gallery;
         await repositories.SaveAsync(cancellationToken);
-        return ImageDtoMapper.ToDto(image, currentUser);
+        var card = await repositories.AppImage.GetCardByIdAsync(image.Id, ImageAuthorization.GetViewer(currentUser), cancellationToken)
+            ?? throw new InvalidOperationException("The saved image could not be read.");
+        return ImageDtoMapper.ToDto(card);
     }
 }

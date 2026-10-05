@@ -229,6 +229,9 @@ public sealed class TagAndImageManagementHandlerTests
         repositories.SetupGet(repository => repository.AppImage).Returns(images.Object);
         repositories.SetupGet(repository => repository.ImageTagChanges).Returns(tagChanges.Object);
         images.Setup(repository => repository.GetByIdAsync(image.Id, true, It.IsAny<CancellationToken>())).ReturnsAsync(image);
+        images.Setup(repository => repository.GetWithTagsByIdAsync(image.Id, It.IsAny<CancellationToken>())).ReturnsAsync(image);
+        images.Setup(repository => repository.GetCardByIdAsync(image.Id, It.IsAny<ImageViewer>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((int id, ImageViewer viewer, CancellationToken token) => ImageReadTestData.Card(image, viewer));
         tagChanges.Setup(repository => repository.GetPendingForImageAsync(image.Id, It.IsAny<CancellationToken>())).ReturnsAsync((ImageTagChange?)null);
         tagChanges.Setup(repository => repository.AddAsync(It.IsAny<ImageTagChange>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
         repositories.Setup(repository => repository.SaveAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);

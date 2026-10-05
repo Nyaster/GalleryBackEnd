@@ -148,7 +148,7 @@ public sealed class TagChangeAuthorizationAndConcurrencyTests
         var changes = new Mock<IImageTagChangeRepository>();
         repositories.SetupGet(value => value.AppImage).Returns(images.Object);
         repositories.SetupGet(value => value.ImageTagChanges).Returns(changes.Object);
-        images.Setup(value => value.GetByIdAsync(image.Id, false, It.IsAny<CancellationToken>())).ReturnsAsync(image);
+        images.Setup(value => value.GetMetadataByIdAsync(image.Id, It.IsAny<CancellationToken>())).ReturnsAsync(() => ImageReadTestData.Metadata(image));
         changes.Setup(value => value.GetAsync(image.Id, null, null, 1, 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync((new List<ImageTagChange> { Change(image.Id, [], ["new"]) }, 1));
         var handler = new Application.Features.Images.GetImageTagChanges.Handler(repositories.Object, user);
@@ -165,7 +165,7 @@ public sealed class TagChangeAuthorizationAndConcurrencyTests
         repositories.SetupGet(value => value.AppImage).Returns(images.Object);
         repositories.SetupGet(value => value.ImageTagChanges).Returns(changes.Object);
         repositories.Setup(value => value.SaveAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-        images.Setup(value => value.GetByIdAsync(image.Id, true, It.IsAny<CancellationToken>())).ReturnsAsync(image);
+        images.Setup(value => value.GetWithTagsByIdAsync(image.Id, It.IsAny<CancellationToken>())).ReturnsAsync(image);
         changes.Setup(value => value.GetPendingForImageAsync(image.Id, It.IsAny<CancellationToken>())).ReturnsAsync((ImageTagChange?)null);
         return (repositories, images, changes, transaction);
     }

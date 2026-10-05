@@ -18,8 +18,8 @@ public sealed class RandomImageSearchTests
     {
         var (handler, images) = CreateHandler();
         SearchImageDto? captured = null;
-        images.Setup(repository => repository.SearchAsync(It.IsAny<SearchImageDto>(), It.IsAny<CancellationToken>()))
-            .Callback<SearchImageDto, CancellationToken>((request, _) => captured = request)
+        images.Setup(repository => repository.SearchAsync(It.IsAny<SearchImageDto>(), It.IsAny<ImageViewer>(), It.IsAny<CancellationToken>()))
+            .Callback<SearchImageDto, ImageViewer, CancellationToken>((request, _, _) => captured = request)
             .ReturnsAsync(([], 3));
 
         var result = await handler.Handle(new Command(new SearchImageDto(null, Sort: ImageSort.Random)), CancellationToken.None);
@@ -60,7 +60,7 @@ public sealed class RandomImageSearchTests
     {
         const string randomSeed = "AAAAAAAAAAA";
         var (handler, images) = CreateHandler();
-        images.Setup(repository => repository.SearchAsync(It.Is<SearchImageDto>(request => request.RandomSeed == randomSeed), It.IsAny<CancellationToken>()))
+        images.Setup(repository => repository.SearchAsync(It.Is<SearchImageDto>(request => request.RandomSeed == randomSeed), It.IsAny<ImageViewer>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(([], 0));
 
         var result = await handler.Handle(new Command(new SearchImageDto(null, Sort: ImageSort.Random, RandomSeed: randomSeed)), CancellationToken.None);
@@ -73,7 +73,7 @@ public sealed class RandomImageSearchTests
     {
         var (handler, images) = CreateHandler();
         images.Setup(repository => repository.SearchAsync(It.Is<SearchImageDto>(request => request.Sort == ImageSort.Newest && request.RandomSeed == null),
-                It.IsAny<CancellationToken>()))
+                It.IsAny<ImageViewer>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(([], 0));
 
         var result = await handler.Handle(new Command(new SearchImageDto(null, RandomSeed: "not-a-valid-seed")), CancellationToken.None);

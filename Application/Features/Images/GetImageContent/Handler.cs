@@ -12,7 +12,7 @@ public sealed class Handler(IRepositoryManager repositories, IImageStorage stora
 {
     public async Task<ImageContent> Handle(Command request, CancellationToken cancellationToken)
     {
-        var image = await repositories.AppImage.GetByIdAsync(request.Id, false, cancellationToken)
+        var image = await repositories.AppImage.GetMetadataByIdAsync(request.Id, cancellationToken)
             ?? throw new Base404ReturnException("Image not found.");
         ImageAuthorization.EnsureReadable(image, currentUser);
         if (!storage.Exists(image.StorageKey))

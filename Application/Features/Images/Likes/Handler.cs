@@ -13,7 +13,7 @@ public sealed class Handler(IRepositoryManager repositories, IUserContext curren
     public async Task<LikeSummaryDto> Handle(SetLikeCommand request, CancellationToken cancellationToken)
     {
         currentUser.RequireAuthenticated();
-        var image = await repositories.AppImage.GetByIdAsync(request.ImageId, false, cancellationToken) ?? throw new Base404ReturnException("Image not found.");
+        var image = await repositories.AppImage.GetMetadataByIdAsync(request.ImageId, cancellationToken) ?? throw new Base404ReturnException("Image not found.");
         GetCommentsHandler.EnsurePublic(image);
         var userId = currentUser.UserId!.Value;
         await repositories.Interactions.SetLikeAsync(image.Id, userId, request.IsLiked, clock.GetUtcNow(), cancellationToken);

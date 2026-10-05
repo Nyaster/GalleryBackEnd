@@ -102,7 +102,7 @@ public sealed class ImageTagChangeHandlerTests
         var transaction = new Mock<IRepositoryTransaction>();
         repositories.SetupGet(repository => repository.AppImage).Returns(images.Object);
         repositories.SetupGet(repository => repository.ImageTagChanges).Returns(changes.Object);
-        images.Setup(repository => repository.GetByIdAsync(image.Id, true, It.IsAny<CancellationToken>())).ReturnsAsync(image);
+        images.Setup(repository => repository.GetWithTagsByIdAsync(image.Id, It.IsAny<CancellationToken>())).ReturnsAsync(image);
         changes.Setup(repository => repository.GetPendingForImageAsync(image.Id, It.IsAny<CancellationToken>())).ReturnsAsync((ImageTagChange?)null);
         repositories.Setup(repository => repository.SaveAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
         repositories.Setup(repository => repository.BeginSerializableTransactionAsync(It.IsAny<CancellationToken>())).ReturnsAsync(transaction.Object);

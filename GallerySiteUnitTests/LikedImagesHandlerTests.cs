@@ -39,8 +39,8 @@ public sealed class LikedImagesHandlerTests
         var repositories = new Mock<IRepositoryManager>();
         var images = new Mock<IAppImageRepository>();
         repositories.SetupGet(repository => repository.AppImage).Returns(images.Object);
-        images.Setup(repository => repository.GetLikedByUserAsync(7, 1, 50, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(([likedImage], 3));
+        images.Setup(repository => repository.GetLikedByUserAsync(7, 1, 50, It.IsAny<ImageViewer>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(([ImageReadTestData.Card(likedImage)], 3));
         var handler = new Application.Features.Images.GetLikedImages.Handler(repositories.Object, new TestUser(7));
 
         var result = await handler.Handle(new Application.Features.Images.GetLikedImages.Command(0, 500), CancellationToken.None);

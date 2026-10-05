@@ -11,7 +11,7 @@ public sealed class Handler(IRepositoryManager repositories, IUserContext curren
 {
     public async Task<PageableImageTagChangesDto> Handle(Command request, CancellationToken cancellationToken)
     {
-        var image = await repositories.AppImage.GetByIdAsync(request.ImageId, false, cancellationToken)
+        var image = await repositories.AppImage.GetMetadataByIdAsync(request.ImageId, cancellationToken)
             ?? throw new Base404ReturnException("Image not found.");
         ImageAuthorization.EnsureCanManage(image, currentUser);
         var page = Math.Max(request.Page, 1);

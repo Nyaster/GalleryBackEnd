@@ -18,7 +18,7 @@ public sealed class Handler(IRepositoryManager repositories, IUserContext curren
         {
             var change = await repositories.ImageTagChanges.GetByIdAsync(request.ChangeId, true, cancellationToken)
                 ?? throw new Base404ReturnException("Tag change not found.");
-            var image = await repositories.AppImage.GetByIdAsync(change.ImageId, true, cancellationToken)
+            var image = await repositories.AppImage.GetWithTagsByIdAsync(change.ImageId, cancellationToken)
                 ?? throw new Base404ReturnException("Image not found.");
             var now = clock.GetUtcNow();
             var note = ImageTagChangeMapper.NormalizeNote(request.Note);

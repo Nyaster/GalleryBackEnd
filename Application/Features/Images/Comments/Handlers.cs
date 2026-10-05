@@ -13,7 +13,7 @@ public sealed class GetCommentsHandler(IRepositoryManager repositories, IUserCon
     public async Task<PageableCommentsDto> Handle(GetCommentsCommand request, CancellationToken cancellationToken)
     {
         currentUser.RequireAuthenticated();
-        var image = await repositories.AppImage.GetByIdAsync(request.ImageId, false, cancellationToken) ?? throw new Base404ReturnException("Image not found.");
+        var image = await repositories.AppImage.GetMetadataByIdAsync(request.ImageId, cancellationToken) ?? throw new Base404ReturnException("Image not found.");
         EnsurePublic(image);
         var page = Math.Max(request.Page, 1);
         var pageSize = Math.Clamp(request.PageSize, 1, 50);
@@ -24,7 +24,7 @@ public sealed class GetCommentsHandler(IRepositoryManager repositories, IUserCon
     internal static CommentDto ToDto(Comment comment) => new(comment.Id, comment.ImageId, comment.AuthorId,
         comment.Author?.Login ?? string.Empty, comment.Content, comment.CreatedAtUtc);
 
-    internal static void EnsurePublic(AppImage image)
+    internal static void EnsurePublic(ImageMetadata image)
     {
         if (image.DeletedAtUtc is not null || image.Visibility != ImageVisibility.Gallery || image.ModerationStatus != ModerationStatus.Approved)
             throw new Base404ReturnException("Image not found.");
@@ -38,7 +38,7 @@ public sealed class CreateCommentHandler(IRepositoryManager repositories, IUserC
         currentUser.RequireAuthenticated();
         var content = request.Request.Content?.Trim();
         if (content is null || content.Length is < 1 or > 2000) throw new Base400BadRequestException("Comment content must be between 1 and 2,000 characters.");
-        var image = await repositories.AppImage.GetByIdAsync(request.ImageId, false, cancellationToken) ?? throw new Base404ReturnException("Image not found.");
+        var image = await repositories.AppImage.GetMetadataByIdAsync(request.ImageId, cancellationToken) ?? throw new Base404ReturnException("Image not found.");
         GetCommentsHandler.EnsurePublic(image);
         var now = clock.GetUtcNow();
         var restriction = await repositories.Interactions.GetCommentRestrictionAsync(currentUser.UserId!.Value, false, cancellationToken);

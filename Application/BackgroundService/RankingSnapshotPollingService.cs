@@ -20,12 +20,13 @@ public sealed class RankingSnapshotPollingService(IServiceScopeFactory scopeFact
         } while (await timer.WaitForNextTickAsync(stoppingToken));
     }
 
-    private async Task CreateMissingSnapshotsAsync(CancellationToken cancellationToken)
+    internal async Task CreateMissingSnapshotsAsync(CancellationToken cancellationToken)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var repositories = scope.ServiceProvider.GetRequiredService<IRepositoryManager>();
         var firstActivity = await repositories.Rankings.GetEarliestLikeActivityUtcAsync(cancellationToken);
         if (firstActivity is null) return;
+        var existing = (await repositories.Rankings.GetSnapshotKeysAsync(cancellationToken)).ToHashSet();
         var now = clock.GetUtcNow();
         foreach (var period in Enum.GetValues<RankingPeriod>())
         {
@@ -33,23 +34,12 @@ public sealed class RankingSnapshotPollingService(IServiceScopeFactory scopeFact
             var currentStart = RankingPeriodBounds.Current(period, now).StartUtc;
             while (start < currentStart)
             {
-                if (await repositories.Rankings.GetSnapshotAsync(period, start, false, cancellationToken) is null)
-                    await CreateSnapshotAsync(repositories, period, start, cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!existing.Contains(new RankingSnapshotKey(period, start)))
+                    await repositories.Rankings.TryCreateSnapshotAsync(period, start,
+                        RankingPeriodBounds.Next(period, start), now, cancellationToken);
                 start = RankingPeriodBounds.Next(period, start);
             }
         }
-    }
-
-    private async Task CreateSnapshotAsync(IRepositoryManager repositories, RankingPeriod period, DateTimeOffset start, CancellationToken cancellationToken)
-    {
-        var end = RankingPeriodBounds.Next(period, start);
-        var scores = await repositories.Rankings.GetLiveScoresAsync(start, end, cancellationToken);
-        var images = await repositories.Rankings.GetDiscoverableImagesAsync(scores.Select(score => score.ImageId), cancellationToken);
-        var visible = images.ToDictionary(image => image.Id);
-        var entries = scores.Where(score => visible.ContainsKey(score.ImageId)).OrderByDescending(score => score.LikeDelta)
-            .ThenByDescending(score => score.UploadedAtUtc).ThenByDescending(score => score.ImageId).Select((score, index) => new RankingSnapshotEntry
-            { ImageId = score.ImageId, Rank = index + 1, LikeDelta = score.LikeDelta }).ToList();
-        await repositories.Rankings.AddSnapshotAsync(new RankingSnapshot { Period = period, PeriodStartUtc = start, PeriodEndUtc = end, CreatedAtUtc = clock.GetUtcNow(), Entries = entries }, cancellationToken);
-        await repositories.SaveAsync(cancellationToken);
     }
 }

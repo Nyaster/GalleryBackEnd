@@ -12,7 +12,7 @@ public sealed class Handler(IRepositoryManager repositories, IUserContext curren
     public async Task<List<AppImageDto>> Handle(Command request, CancellationToken cancellationToken)
     {
         if (!ImageAuthorization.IsStaff(currentUser)) throw new AppForbiddenException("Staff access is required.");
-        var images = await repositories.AppImage.GetHiddenAsync(request.Page, request.PageSize, cancellationToken);
-        return images.Select(image => ImageDtoMapper.ToDto(image, currentUser)).ToList();
+        var images = await repositories.AppImage.GetHiddenAsync(request.Page, request.PageSize, ImageAuthorization.GetViewer(currentUser), cancellationToken);
+        return images.Select(image => ImageDtoMapper.ToDto(image)).ToList();
     }
 }

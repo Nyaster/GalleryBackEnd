@@ -23,8 +23,8 @@ public sealed class RecommendationHandlerTests
             CreatedAtUtc = DateTimeOffset.UtcNow
         };
         var (repositories, images) = Repositories(source);
-        images.Setup(repository => repository.GetRecommendationsAsync(1, 1, 50, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(([recommendation], 51));
+        images.Setup(repository => repository.GetRecommendationsAsync(1, 1, 50, It.IsAny<ImageViewer>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(([ImageReadTestData.Card(recommendation)], 51));
         var handler = new Application.Features.Images.GetImageRecommendation.Handler(repositories.Object, new TestUser(7));
 
         var result = await handler.Handle(new Application.Features.Images.GetImageRecommendation.Command(1, 0, 500), CancellationToken.None);
@@ -43,7 +43,7 @@ public sealed class RecommendationHandlerTests
         var repositories = new Mock<IRepositoryManager>();
         var images = new Mock<IAppImageRepository>();
         repositories.SetupGet(repository => repository.AppImage).Returns(images.Object);
-        images.Setup(repository => repository.GetByIdAsync(1, false, It.IsAny<CancellationToken>())).ReturnsAsync((AppImage?)null);
+        images.Setup(repository => repository.GetMetadataByIdAsync(1, It.IsAny<CancellationToken>())).ReturnsAsync((ImageMetadata?)null);
         var handler = new Application.Features.Images.GetImageRecommendation.Handler(repositories.Object, new TestUser(7));
 
         await Assert.ThrowsAsync<Base404ReturnException>(() => handler.Handle(
@@ -77,7 +77,7 @@ public sealed class RecommendationHandlerTests
         var repositories = new Mock<IRepositoryManager>();
         var images = new Mock<IAppImageRepository>();
         repositories.SetupGet(repository => repository.AppImage).Returns(images.Object);
-        images.Setup(repository => repository.GetByIdAsync(image.Id, false, It.IsAny<CancellationToken>())).ReturnsAsync(image);
+        images.Setup(repository => repository.GetMetadataByIdAsync(image.Id, It.IsAny<CancellationToken>())).ReturnsAsync(() => ImageReadTestData.Metadata(image));
         return (repositories, images);
     }
 

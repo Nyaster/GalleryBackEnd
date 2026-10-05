@@ -15,7 +15,7 @@ public sealed class Handler(IRepositoryManager repositories, IUserContext curren
         await using var transaction = await repositories.BeginSerializableTransactionAsync(cancellationToken);
         try
         {
-            var image = await repositories.AppImage.GetByIdAsync(request.ImageId, true, cancellationToken)
+            var image = await repositories.AppImage.GetWithTagsByIdAsync(request.ImageId, cancellationToken)
                 ?? throw new Base404ReturnException("Image not found.");
             ImageAuthorization.EnsureCanManage(image, currentUser);
 
