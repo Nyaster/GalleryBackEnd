@@ -8,7 +8,9 @@ namespace Service;
 public sealed class LocalImageDerivativeCache(IImageStorage storage, ILogger<LocalImageDerivativeCache> logger)
     : IImageDerivativeCache, IDisposable
 {
-    private readonly SemaphoreSlim _conversionGate = new(1, 1);
+    private readonly SemaphoreSlim _conversionLimit = new(2, 2);
+    private readonly Lock _gateLock = new();
+    private readonly Dictionary<string, ConversionGate> _conversionGates = new(StringComparer.Ordinal);
 
     public async Task<Stream> GetOrCreateAsync(
         string sourceStorageKey,
@@ -24,14 +26,27 @@ public sealed class LocalImageDerivativeCache(IImageStorage storage, ILogger<Loc
         if (storage.Exists(cacheStorageKey))
             return await storage.OpenReadAsync(cacheStorageKey, cancellationToken);
 
-        await _conversionGate.WaitAsync(cancellationToken);
+        var gate = RentGate(cacheStorageKey);
+        var acquired = false;
         try
         {
+            await gate.Semaphore.WaitAsync(cancellationToken);
+            acquired = true;
             if (storage.Exists(cacheStorageKey))
                 return await storage.OpenReadAsync(cacheStorageKey, cancellationToken);
 
-            await using var source = await storage.OpenReadAsync(sourceStorageKey, cancellationToken);
-            var generated = await factory(source, cancellationToken);
+            Stream generated;
+            await _conversionLimit.WaitAsync(cancellationToken);
+            try
+            {
+                await using var source = await storage.OpenReadAsync(sourceStorageKey, cancellationToken);
+                // Converters can do synchronous CPU work before returning a task.
+                generated = await Task.Run(() => factory(source, cancellationToken), cancellationToken);
+            }
+            finally
+            {
+                _conversionLimit.Release();
+            }
             Stream? response = null;
             try
             {
@@ -46,8 +61,41 @@ public sealed class LocalImageDerivativeCache(IImageStorage storage, ILogger<Loc
         }
         finally
         {
-            _conversionGate.Release();
+            if (acquired) gate.Semaphore.Release();
+            ReturnGate(cacheStorageKey, gate);
         }
+    }
+
+    private ConversionGate RentGate(string cacheStorageKey)
+    {
+        lock (_gateLock)
+        {
+            if (!_conversionGates.TryGetValue(cacheStorageKey, out var gate))
+            {
+                gate = new ConversionGate();
+                _conversionGates.Add(cacheStorageKey, gate);
+            }
+            gate.Users++;
+            return gate;
+        }
+    }
+
+    private void ReturnGate(string cacheStorageKey, ConversionGate gate)
+    {
+        lock (_gateLock)
+        {
+            if (--gate.Users == 0)
+            {
+                _conversionGates.Remove(cacheStorageKey);
+                gate.Semaphore.Dispose();
+            }
+        }
+    }
+
+    private sealed class ConversionGate
+    {
+        public SemaphoreSlim Semaphore { get; } = new(1, 1);
+        public int Users { get; set; }
     }
 
     private async Task<Stream> StoreBestEffortAsync(Stream generated, string cacheStorageKey, string sourceStorageKey,
@@ -131,5 +179,5 @@ public sealed class LocalImageDerivativeCache(IImageStorage storage, ILogger<Loc
         return Path.Combine(".derivatives", variant.CacheKey, hash[..2], $"{hash}{variant.Extension}");
     }
 
-    public void Dispose() => _conversionGate.Dispose();
+    public void Dispose() => _conversionLimit.Dispose();
 }
