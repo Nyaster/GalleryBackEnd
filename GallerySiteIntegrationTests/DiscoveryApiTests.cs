@@ -259,6 +259,52 @@ public sealed class DiscoveryApiTests(PostgresFixture database) : IClassFixture<
             collection == DiscoveryCollection.MostLiked ? winner.PeriodLikeCount : winner.PeriodCommentCount);
     }
 
+    [Theory]
+    [InlineData(DiscoveryCollection.MostLiked)]
+    [InlineData(DiscoveryCollection.MostCommented)]
+    [InlineData(DiscoveryCollection.NewUploads)]
+    public async Task GetDiscovery_SmallPage_LoadsCardDetailsOnlyForSelectedImages(DiscoveryCollection collection)
+    {
+        var seed = await SeedAsync();
+        var capture = new QueryCapture();
+        await using var context = database.CreateContext(capture);
+        var repository = new DiscoveryRepository(context);
+
+        var result = await repository.GetCollectionAsync(collection, seed.Start, seed.Start.AddDays(1),
+            seed.Viewer.Id, 2, 2);
+
+        Assert.Equal(8, result.GalleryTotal);
+        Assert.Equal(collection == DiscoveryCollection.NewUploads ? 3 : 5, result.Total);
+        Assert.Equal(collection == DiscoveryCollection.NewUploads
+                ? new[] { seed.StartUpload.Id }
+                : new[] { seed.NewerTieHigh.Id, seed.NewerTieLow.Id },
+            result.Entries.Select(entry => entry.Image.Id));
+        Assert.Equal(4, capture.Reads.Count);
+        var pageQuery = capture.Reads[2];
+        Assert.Contains("LIMIT", pageQuery);
+        Assert.Contains("OFFSET", pageQuery);
+        Assert.DoesNotContain("Tags", pageQuery);
+        Assert.DoesNotContain("AppUsers", pageQuery);
+        Assert.DoesNotContain("Embedding", pageQuery);
+        Assert.DoesNotContain("StorageKey", pageQuery);
+        if (collection != DiscoveryCollection.NewUploads)
+            Assert.Contains("GROUP BY", pageQuery);
+        var cardIds = Assert.Single(capture.IdParameters);
+        Assert.Equal(result.Entries.Select(entry => entry.Image.Id), cardIds);
+        Assert.Contains("Tags", capture.Reads[3]);
+        Assert.DoesNotContain("GROUP BY", capture.Reads[3]);
+        Assert.Empty(capture.Entities);
+        Assert.Empty(context.ChangeTracker.Entries());
+
+        capture.Clear();
+        var beyond = await repository.GetCollectionAsync(collection, seed.Start, seed.Start.AddDays(1),
+            seed.Viewer.Id, int.MaxValue, 50);
+        Assert.Equal(result.Total, beyond.Total);
+        Assert.Empty(beyond.Entries);
+        Assert.Equal(2, capture.Reads.Count);
+        Assert.Empty(capture.IdParameters);
+    }
+
     private static async Task<PageableDiscoveryDto> ReadAsync(HttpClient client, string url)
     {
         using var response = await client.GetAsync(url);

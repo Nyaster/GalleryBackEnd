@@ -13,6 +13,8 @@ public sealed class CommentEfConfiguration : IEntityTypeConfiguration<Comment>
         builder.HasOne(comment => comment.Image).WithMany(image => image.Comments).HasForeignKey(comment => comment.ImageId).OnDelete(DeleteBehavior.Cascade);
         builder.HasOne(comment => comment.Author).WithMany(user => user.Comments).HasForeignKey(comment => comment.AuthorId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(comment => new { comment.ImageId, comment.DeletedAtUtc, comment.CreatedAtUtc, comment.Id });
+        builder.HasIndex(comment => new { comment.CreatedAtUtc, comment.ImageId })
+            .HasFilter("\"DeletedAtUtc\" IS NULL");
     }
 }
 
@@ -33,6 +35,7 @@ public sealed class ImageLikeEfConfiguration : IEntityTypeConfiguration<ImageLik
         builder.HasOne(like => like.Image).WithMany(image => image.Likes).HasForeignKey(like => like.ImageId).OnDelete(DeleteBehavior.Cascade);
         builder.HasOne(like => like.User).WithMany(user => user.ImageLikes).HasForeignKey(like => like.UserId).OnDelete(DeleteBehavior.Cascade);
         builder.HasIndex(like => new { like.UserId, like.CreatedAtUtc, like.ImageId });
+        builder.HasIndex(like => new { like.CreatedAtUtc, like.ImageId });
     }
 }
 
