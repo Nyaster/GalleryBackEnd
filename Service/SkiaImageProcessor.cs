@@ -50,12 +50,31 @@ public sealed class SkiaImageProcessor(IOptions<ImageStorageOptions> options) : 
     public Task<Stream> CreatePreviewJpegAsync(Stream source, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        using var bitmap = SKBitmap.Decode(source) ?? throw new ImageUploadValidationError("Image content cannot be decoded.");
-        var scale = Math.Min(1d, PreviewMaximumLongEdge / (double)Math.Max(bitmap.Width, bitmap.Height));
-        var width = Math.Max(1, (int)Math.Round(bitmap.Width * scale, MidpointRounding.AwayFromZero));
-        var height = Math.Max(1, (int)Math.Round(bitmap.Height * scale, MidpointRounding.AwayFromZero));
+        using var codec = SKCodec.Create(source) ??
+                          throw new ImageUploadValidationError("Image content cannot be decoded.");
+        var originalInfo = codec.Info;
+        var scale = Math.Min(1d, PreviewMaximumLongEdge / (double)Math.Max(originalInfo.Width, originalInfo.Height));
+        var width = Math.Max(1, (int)Math.Round(originalInfo.Width * scale, MidpointRounding.AwayFromZero));
+        var height = Math.Max(1, (int)Math.Round(originalInfo.Height * scale, MidpointRounding.AwayFromZero));
+
+        // JPEG/WebP can decode fewer pixels; other codecs return the original size.
+        // Account for rounded output dimensions and never decode below either edge.
+        var decodeScale = (float)Math.Max(width / (double)originalInfo.Width, height / (double)originalInfo.Height);
+        var decodeSize = codec.GetScaledDimensions(decodeScale);
+        while ((decodeSize.Width < width || decodeSize.Height < height) && decodeScale < 1f)
+        {
+            decodeScale = Math.Min(1f, decodeScale * 2f);
+            decodeSize = codec.GetScaledDimensions(decodeScale);
+        }
+
+        var decodeInfo = originalInfo.WithSize(decodeSize);
+        if (decodeInfo.AlphaType == SKAlphaType.Unpremul)
+            decodeInfo.AlphaType = SKAlphaType.Premul;
+        using var bitmap = SKBitmap.Decode(codec, decodeInfo) ?? SKBitmap.Decode(codec)
+            ?? throw new ImageUploadValidationError("Image content cannot be decoded.");
         var imageInfo = new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Opaque);
-        using var surface = SKSurface.Create(imageInfo) ?? throw new ImageUploadValidationError("Image preview cannot be created.");
+        using var surface = SKSurface.Create(imageInfo) ??
+                            throw new ImageUploadValidationError("Image preview cannot be created.");
         var canvas = surface.Canvas;
         canvas.Clear(SKColors.White);
         using var sourceImage = SKImage.FromBitmap(bitmap);
