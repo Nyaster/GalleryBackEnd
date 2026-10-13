@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace GallerySiteIntegrationTests;
 
-internal sealed class QueryCapture(Func<Task>? afterFirstCount = null) : DbCommandInterceptor, IMaterializationInterceptor
+internal sealed class QueryCapture(Func<Task>? afterFirstCount = null) : DbCommandInterceptor, IMaterializationObserver
 {
     private bool _changed;
 
@@ -31,11 +31,10 @@ internal sealed class QueryCapture(Func<Task>? afterFirstCount = null) : DbComma
         return result;
     }
 
-    public object InitializedInstance(MaterializationInterceptionData materializationData, object entity)
+    public void EntityMaterialized(object entity)
     {
         if (entity is AppImage or AppUser or ImageLike or Comment or ImageTag or RankingSnapshot or RankingSnapshotEntry)
             Entities.Add(entity);
-        return entity;
     }
 
     public void Clear()

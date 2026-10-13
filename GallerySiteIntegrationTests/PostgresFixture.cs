@@ -37,8 +37,17 @@ public sealed class PostgresFixture : IAsyncLifetime
     }
 
     public RepositoryContext CreateContext(params IInterceptor[] interceptors)
-        => new(new DbContextOptionsBuilder<RepositoryContext>()
-            .UseNpgsql(ConnectionString, postgres => postgres.UseVector()).AddInterceptors(interceptors).Options);
+    {
+        var observers = interceptors.OfType<IMaterializationObserver>().ToArray();
+        var options = new DbContextOptionsBuilder<RepositoryContext>()
+            .UseNpgsql(ConnectionString, postgres => postgres.UseVector()).AddInterceptors(interceptors);
+        if (observers.Length > 0)
+            options.AddInterceptors(MaterializationCaptureDispatcher.Instance);
+        var context = new RepositoryContext(options.Options);
+        if (observers.Length > 0)
+            MaterializationCaptureDispatcher.Instance.Register(context, observers);
+        return context;
+    }
 
     public AuthenticationService Authentication(RepositoryContext context, TimeProvider clock)
         => new(new RepositoryManager(context), new PasswordHasher<AppUser>(), Options.Create(Jwt), clock,
