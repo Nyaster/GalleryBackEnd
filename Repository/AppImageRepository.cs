@@ -153,14 +153,19 @@ public sealed class AppImageRepository(RepositoryContext context) : IAppImageRep
                                                                    image.ModerationStatus == ModerationStatus.Approved))
             .ThenBy(tag => tag.Name).Take(Math.Clamp(limit, 1, 50)).ToListAsync(cancellationToken);
 
-    public async Task<(List<ImageTag> Tags, int Total)> GetTagsAsync(TagModerationStatus status, int page, int pageSize,
+    public async Task<(List<AdminTagDto> Tags, int Total)> GetTagsAsync(TagModerationStatus status, int page, int pageSize,
         CancellationToken cancellationToken = default)
     {
         var query = context.Tags.AsNoTracking().Where(tag => tag.ModerationStatus == status)
             .OrderBy(tag => tag.CreatedAtUtc).ThenBy(tag => tag.Id);
         var total = await query.CountAsync(cancellationToken);
         var size = Math.Clamp(pageSize, 1, 50);
-        var tags = await query.Include(tag => tag.AppImages).Skip(Math.Max(page - 1, 0) * size).Take(size)
+        var offset = ((long)Math.Max(page, 1) - 1) * size;
+        if (offset >= total)
+            return ([], total);
+        var tags = await query.Skip((int)offset).Take(size)
+            .Select(tag => new AdminTagDto(tag.Id, tag.Name, tag.ModerationStatus, tag.CreatedAtUtc,
+                tag.AppImages.Count))
             .ToListAsync(cancellationToken);
         return (tags, total);
     }
@@ -192,18 +197,17 @@ public sealed class AppImageRepository(RepositoryContext context) : IAppImageRep
         CancellationToken cancellationToken = default)
     {
         var leaseExpires = now.AddMinutes(15);
-        // UPDATE ... RETURNING cannot be composed by EF; enumerate the returned rows directly.
-        var candidates = context.Images.FromSqlInterpolated($"""
-                                                             UPDATE "Images" SET "EmbeddingStatus" = {"Processing"}, "EmbeddingAttempts" = "EmbeddingAttempts" + 1,
-                                                                 "EmbeddingError" = NULL, "EmbeddingLeaseExpiresAtUtc" = {leaseExpires}
-                                                             WHERE "Id" IN (
-                                                                 SELECT "Id" FROM "Images"
-                                                                 WHERE "DeletedAtUtc" IS NULL AND ("EmbeddingStatus" = {"Pending"} OR
-                                                                     ("EmbeddingStatus" = {"Processing"} AND "EmbeddingLeaseExpiresAtUtc" < {now}))
-                                                                 ORDER BY "UploadedAtUtc" FOR UPDATE SKIP LOCKED LIMIT {Math.Clamp(batchSize, 1, 50)}
-                                                             ) RETURNING *
-                                                             """).AsEnumerable().ToList();
-        return candidates.Select(image => image.Id).ToList();
+        // Materialize the non-composable UPDATE directly, returning only the claimed IDs.
+        return await context.Database.SqlQuery<int>($"""
+                                                     UPDATE "Images" SET "EmbeddingStatus" = {"Processing"}, "EmbeddingAttempts" = "EmbeddingAttempts" + 1,
+                                                         "EmbeddingError" = NULL, "EmbeddingLeaseExpiresAtUtc" = {leaseExpires}
+                                                     WHERE "Id" IN (
+                                                         SELECT "Id" FROM "Images"
+                                                         WHERE "DeletedAtUtc" IS NULL AND ("EmbeddingStatus" = {"Pending"} OR
+                                                             ("EmbeddingStatus" = {"Processing"} AND "EmbeddingLeaseExpiresAtUtc" < {now}))
+                                                         ORDER BY "UploadedAtUtc" FOR UPDATE SKIP LOCKED LIMIT {Math.Clamp(batchSize, 1, 50)}
+                                                     ) RETURNING "Id" AS "Value"
+                                                     """).ToListAsync(cancellationToken);
     }
 
     private IQueryable<AppImage> ImageQuery(bool trackChanges)

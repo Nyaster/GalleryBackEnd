@@ -13,6 +13,43 @@ namespace GallerySiteUnitTests;
 
 public sealed class TagAndImageManagementHandlerTests
 {
+    [Theory]
+    [InlineData(AppUserRole.Admin, -1, 100, 1, 50)]
+    [InlineData(AppUserRole.Moderator, 3, 0, 3, 1)]
+    public async Task GetTags_Staff_ClampsPageAndPreservesProjectedCounts(AppUserRole role, int page,
+        int pageSize, int expectedPage, int expectedSize)
+    {
+        var repositories = new Mock<IRepositoryManager>();
+        var images = new Mock<IAppImageRepository>();
+        repositories.SetupGet(repository => repository.AppImage).Returns(images.Object);
+        using var cancellation = new CancellationTokenSource();
+        var tag = new AdminTagDto(4, "tag", TagModerationStatus.Pending, DateTimeOffset.UtcNow, 123);
+        images.Setup(repository => repository.GetTagsAsync(TagModerationStatus.Pending, expectedPage,
+            expectedSize, cancellation.Token)).ReturnsAsync(([tag], 17));
+        var handler = new Application.Features.Administration.GetTags.Handler(repositories.Object,
+            new TestUser(7, role));
+
+        var result = await handler.Handle(new(TagModerationStatus.Pending, page, pageSize), cancellation.Token);
+
+        Assert.Equal(expectedPage, result.Page);
+        Assert.Equal(expectedSize, result.PageSize);
+        Assert.Equal(17, result.Total);
+        Assert.Equal(tag, Assert.Single(result.Tags));
+        images.VerifyAll();
+    }
+
+    [Fact]
+    public async Task GetTags_NonStaff_ThrowsForbiddenBeforeReadingTags()
+    {
+        var repositories = new Mock<IRepositoryManager>(MockBehavior.Strict);
+        var handler = new Application.Features.Administration.GetTags.Handler(repositories.Object, new TestUser(7));
+
+        await Assert.ThrowsAsync<AppForbiddenException>(() =>
+            handler.Handle(new(TagModerationStatus.Pending), CancellationToken.None));
+
+        repositories.VerifyNoOtherCalls();
+    }
+
     [Fact]
     public async Task ReplaceTags_OwnerEdit_CreatesPendingChangeWithoutChangingImage()
     {

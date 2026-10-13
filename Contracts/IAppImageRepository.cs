@@ -39,7 +39,7 @@ public interface IAppImageRepository
     Task<List<ImageTag>> GetTagSuggestionsAsync(string normalizedQuery, int limit,
         CancellationToken cancellationToken = default);
 
-    Task<(List<ImageTag> Tags, int Total)> GetTagsAsync(TagModerationStatus status, int page, int pageSize,
+    Task<(List<AdminTagDto> Tags, int Total)> GetTagsAsync(TagModerationStatus status, int page, int pageSize,
         CancellationToken cancellationToken = default);
 
     Task<ImageTag?> GetTagByIdAsync(int id, bool trackChanges, CancellationToken cancellationToken = default);
