@@ -67,16 +67,16 @@ public sealed class AppImageRepository(RepositoryContext context) : IAppImageRep
         ImageViewer viewer, CancellationToken cancellationToken = default,
         IReadOnlyList<AiUsageClassification>? aiUsage = null)
     {
-        var query = ImageQuery(false)
-            .Where(image => image.DeletedAtUtc == null && image.Visibility == ImageVisibility.Gallery &&
-                            image.ModerationStatus == ModerationStatus.Approved)
-            .Where(image => image.Likes.Any(like => like.UserId == userId));
-        query = ApplyAiUsageFilter(query, aiUsage);
+        var discoverable = ApplyAiUsageFilter(ImageQuery(false).Where(IsDiscoverable()), aiUsage);
+        // Join the unique (ImageId, UserId) like instead of looking its timestamp up
+        // for every candidate. The existing user/time/image index can supply page order.
+        var query = context.ImageLikes.AsNoTracking().Where(like => like.UserId == userId)
+            .Join(discoverable, like => like.ImageId, image => image.Id,
+                (like, image) => new { Image = image, like.CreatedAtUtc });
         var total = await query.CountAsync(cancellationToken);
         var size = Math.Clamp(pageSize, 1, 50);
-        var ordered = query.OrderByDescending(image => image.Likes
-                .Where(like => like.UserId == userId).Select(like => like.CreatedAtUtc).Single())
-            .ThenByDescending(image => image.Id);
+        var ordered = query.OrderByDescending(like => like.CreatedAtUtc)
+            .ThenByDescending(like => like.Image.Id).Select(like => like.Image);
         var images = await ReadPageAsync(ordered, page, size, total, viewer, cancellationToken);
         return (images, total);
     }
