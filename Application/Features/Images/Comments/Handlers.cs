@@ -18,11 +18,8 @@ public sealed class GetCommentsHandler(IRepositoryManager repositories, IUserCon
         var page = Math.Max(request.Page, 1);
         var pageSize = Math.Clamp(request.PageSize, 1, 50);
         var result = await repositories.Interactions.GetCommentsAsync(image.Id, page, pageSize, cancellationToken);
-        return new PageableCommentsDto(page, pageSize, result.Total, result.Comments.Select(ToDto).ToArray());
+        return new PageableCommentsDto(page, pageSize, result.Total, result.Comments);
     }
-
-    internal static CommentDto ToDto(Comment comment) => new(comment.Id, comment.ImageId, comment.AuthorId,
-        comment.Author?.Login ?? string.Empty, comment.Content, comment.CreatedAtUtc);
 
     internal static void EnsurePublic(ImageMetadata image)
     {

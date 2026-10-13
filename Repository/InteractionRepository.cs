@@ -1,17 +1,24 @@
 using Contracts;
 using Entities.Models;
 using Microsoft.EntityFrameworkCore;
+using Shared.DataTransferObjects;
 
 namespace Repository;
 
 public sealed class InteractionRepository(RepositoryContext context) : IInteractionRepository
 {
-    public async Task<(List<Comment> Comments, int Total)> GetCommentsAsync(int imageId, int page, int pageSize, CancellationToken cancellationToken = default)
+    public async Task<(List<CommentDto> Comments, int Total)> GetCommentsAsync(int imageId, int page, int pageSize, CancellationToken cancellationToken = default)
     {
         var query = context.Comments.AsNoTracking().Where(comment => comment.ImageId == imageId && comment.DeletedAtUtc == null);
         var total = await query.CountAsync(cancellationToken);
-        var comments = await query.Include(comment => comment.Author).OrderBy(comment => comment.CreatedAtUtc).ThenBy(comment => comment.Id)
-            .Skip((Math.Max(page, 1) - 1) * Math.Clamp(pageSize, 1, 50)).Take(Math.Clamp(pageSize, 1, 50)).ToListAsync(cancellationToken);
+        var size = Math.Clamp(pageSize, 1, 50);
+        var offset = ((long)Math.Max(page, 1) - 1) * size;
+        if (offset >= total) return ([], total);
+        var comments = await query.OrderBy(comment => comment.CreatedAtUtc).ThenBy(comment => comment.Id)
+            .Skip((int)offset).Take(size)
+            .Select(comment => new CommentDto(comment.Id, comment.ImageId, comment.AuthorId,
+                comment.Author!.Login ?? string.Empty, comment.Content, comment.CreatedAtUtc))
+            .ToListAsync(cancellationToken);
         return (comments, total);
     }
 

@@ -143,8 +143,8 @@ public sealed class AnnouncementAndFeedbackTests
     public async Task GetFeedback_ClampsPaginationAndReturnsNewestFirstRepositoryResults()
     {
         var feedbackRepository = new Mock<IFeedbackRepository>();
-        var newest = new Feedback { Id = 2, AuthorId = 7, Author = User("new"), Content = "new", CreatedAtUtc = DateTimeOffset.MaxValue };
-        var oldest = new Feedback { Id = 1, AuthorId = 6, Author = User("old"), Content = "old", CreatedAtUtc = DateTimeOffset.MinValue };
+        var newest = new FeedbackDto(2, 7, "new", "new", DateTimeOffset.MaxValue);
+        var oldest = new FeedbackDto(1, 6, "old", "old", DateTimeOffset.MinValue);
         feedbackRepository.Setup(item => item.GetAsync(1, 50, It.IsAny<CancellationToken>())).ReturnsAsync(([newest, oldest], 2));
         var handler = new GetFeedbackHandler(Repositories(feedback: feedbackRepository.Object).Object, new TestUser(3, true));
 
@@ -153,6 +153,27 @@ public sealed class AnnouncementAndFeedbackTests
         Assert.Equal(1, result.Page);
         Assert.Equal(50, result.PageSize);
         Assert.Equal([2, 1], result.Feedback.Select(item => item.Id));
+        Assert.Equal(new[] { newest, oldest }, result.Feedback);
+    }
+
+    [Fact]
+    public async Task GetFeedback_NonAdmin_RejectsBeforeRepositoryAccess()
+    {
+        var repositories = new Mock<IRepositoryManager>(MockBehavior.Strict);
+        var handler = new GetFeedbackHandler(repositories.Object, new TestUser(3));
+        await Assert.ThrowsAsync<AppForbiddenException>(() => handler.Handle(new(1, 50), CancellationToken.None));
+        repositories.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task GetFeedback_Unauthenticated_RejectsBeforeRepositoryAccess()
+    {
+        var repositories = new Mock<IRepositoryManager>(MockBehavior.Strict);
+        var user = new Mock<IUserContext>();
+        user.Setup(item => item.RequireAuthenticated()).Throws(new AppUserUnauthorizedException("Authentication is required."));
+        var handler = new GetFeedbackHandler(repositories.Object, user.Object);
+        await Assert.ThrowsAsync<AppUserUnauthorizedException>(() => handler.Handle(new(1, 50), CancellationToken.None));
+        repositories.VerifyNoOtherCalls();
     }
 
     private static Mock<IRepositoryManager> Repositories(IAnnouncementRepository? announcements = null, IFeedbackRepository? feedback = null)
@@ -163,8 +184,6 @@ public sealed class AnnouncementAndFeedbackTests
         repositories.Setup(item => item.SaveAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
         return repositories;
     }
-
-    private static AppUser User(string login) => new() { Login = login, NormalizedLogin = login, PasswordHash = "hash" };
 
     private sealed class TestUser(int userId, bool isAdmin = false, string? login = null) : IUserContext
     {

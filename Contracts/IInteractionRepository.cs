@@ -1,10 +1,11 @@
 using Entities.Models;
+using Shared.DataTransferObjects;
 
 namespace Contracts;
 
 public interface IInteractionRepository
 {
-    Task<(List<Comment> Comments, int Total)> GetCommentsAsync(int imageId, int page, int pageSize, CancellationToken cancellationToken = default);
+    Task<(List<CommentDto> Comments, int Total)> GetCommentsAsync(int imageId, int page, int pageSize, CancellationToken cancellationToken = default);
     Task<Comment?> GetCommentAsync(int commentId, bool trackChanges, CancellationToken cancellationToken = default);
     Task AddCommentAsync(Comment comment, CancellationToken cancellationToken = default);
     Task<CommentRestriction?> GetCommentRestrictionAsync(int userId, bool trackChanges, CancellationToken cancellationToken = default);

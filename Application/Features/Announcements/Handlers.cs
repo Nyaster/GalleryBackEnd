@@ -96,7 +96,6 @@ public sealed class GetFeedbackHandler(IRepositoryManager repositories, IUserCon
         var page = Math.Max(request.Page, 1);
         var pageSize = Math.Clamp(request.PageSize, 1, 50);
         var result = await repositories.Feedback.GetAsync(page, pageSize, cancellationToken);
-        return new PageableFeedbackDto(page, pageSize, result.Total, result.Feedback.Select(feedback =>
-            CreateFeedbackHandler.ToDto(feedback, feedback.Author?.Login ?? string.Empty)).ToArray());
+        return new PageableFeedbackDto(page, pageSize, result.Total, result.Feedback);
     }
 }
