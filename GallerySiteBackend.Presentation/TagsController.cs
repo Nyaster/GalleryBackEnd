@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Shared.DataTransferObjects;
 
 namespace GallerySiteBackend.Presentation;
@@ -10,6 +11,8 @@ namespace GallerySiteBackend.Presentation;
 [Route("api/tags")]
 public sealed class TagsController(IMediator mediator) : ControllerBase
 {
+    [AllowAnonymous]
+    [EnableRateLimiting("guest-read")]
     [HttpGet("suggestions")]
     public async Task<ActionResult<List<TagsDto>>> Suggestions([FromQuery] string query, [FromQuery] int limit = 20,
         CancellationToken cancellationToken = default)

@@ -50,6 +50,8 @@ builder.Services.AddDataProtection().SetApplicationName("Lilgallery")
     .PersistKeysToFileSystem(authenticatorKeyDirectory);
 builder.Services.AddOptions<ObservabilityOptions>().Bind(builder.Configuration.GetSection("Observability"))
     .ValidateDataAnnotations().ValidateOnStart();
+builder.Services.AddOptions<GuestBrowsingOptions>().Bind(builder.Configuration.GetSection("GuestBrowsing"))
+    .ValidateDataAnnotations().ValidateOnStart();
 
 builder.Services.AddOptions<JwtConfiguration>().Bind(builder.Configuration.GetSection("JwtConfig"))
     .ValidateDataAnnotations().ValidateOnStart();
@@ -84,7 +86,7 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-    options.OnRejected = (context, _) =>
+    options.OnRejected = async (context, _) =>
     {
         var logger = context.HttpContext.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger(LogCategories.Security);
         logger.LogWarning("RateLimitRejected {TimestampUtc} {TraceId} {Method} {Route} {ClientIp}",
@@ -93,11 +95,33 @@ builder.Services.AddRateLimiter(options =>
                 ? endpoint.RoutePattern.RawText ?? context.HttpContext.Request.Path.Value ?? "/"
                 : context.HttpContext.Request.Path.Value ?? "/",
             context.HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown");
-        return ValueTask.CompletedTask;
+        if (context.HttpContext.GetEndpoint()?.Metadata.GetMetadata<EnableRateLimitingAttribute>()?.PolicyName == "guest-read")
+        {
+            if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+                context.HttpContext.Response.Headers.RetryAfter = Math.Ceiling(retryAfter.TotalSeconds)
+                    .ToString(System.Globalization.CultureInfo.InvariantCulture);
+            await Results.Problem(statusCode: StatusCodes.Status429TooManyRequests,
+                title: "Too Many Requests", detail: "The guest browsing request limit was exceeded.",
+                extensions: new Dictionary<string, object?> { ["traceId"] = context.HttpContext.TraceIdentifier })
+                .ExecuteAsync(context.HttpContext);
+        }
     };
     options.AddPolicy("auth", context => RateLimitPartition.GetFixedWindowLimiter(
         context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 5, Window = TimeSpan.FromMinutes(1), QueueLimit = 0, AutoReplenishment = true }));
+    options.AddPolicy("guest-read", context =>
+    {
+        if (context.User.Identity?.IsAuthenticated == true)
+            return RateLimitPartition.GetNoLimiter("authenticated");
+        var limit = context.RequestServices
+            .GetRequiredService<Microsoft.Extensions.Options.IOptions<GuestBrowsingOptions>>().Value.RequestsPerMinute;
+        return RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = limit, Window = TimeSpan.FromMinutes(1), QueueLimit = 0, AutoReplenishment = true
+            });
+    });
     options.AddPolicy("upload", context => RateLimitPartition.GetFixedWindowLimiter(
         context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? context.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0, AutoReplenishment = true }));
@@ -138,6 +162,7 @@ app.UseCors("CorsPolicy");
 app.UseRouting();
 app.UseMiddleware<ApiRequestObservabilityMiddleware>();
 app.UseAuthentication();
+app.UseMiddleware<GuestBrowsingMiddleware>();
 app.UseRateLimiter();
 app.UseAuthorization();
 app.MapControllers();

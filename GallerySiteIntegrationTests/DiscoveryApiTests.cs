@@ -23,12 +23,12 @@ public sealed class DiscoveryApiTests(PostgresFixture database) : IClassFixture<
     [InlineData("most-liked")]
     [InlineData("new-uploads")]
     [InlineData("most-commented")]
-    public async Task GetDiscovery_MissingOrExpiredSession_ReturnsUnauthorized(string collection)
+    public async Task GetDiscovery_GuestOrRevokedSession_ReturnsGuestResultsOrUnauthorized(string collection)
     {
         var clock = new TestClock();
         await using var app = new ApiFactory(database, clock);
         using var client = app.Client();
-        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/discovery/" + collection)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/discovery/" + collection)).StatusCode);
 
         await using var context = database.CreateContext();
         var account = await database.Authentication(context, clock).RegisterAsync(

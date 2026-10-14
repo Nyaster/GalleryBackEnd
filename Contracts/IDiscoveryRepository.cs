@@ -8,6 +8,6 @@ public sealed record DiscoveryPage(int GalleryTotal, int Total, IReadOnlyList<Di
 public interface IDiscoveryRepository
 {
     Task<DiscoveryPage> GetCollectionAsync(DiscoveryCollection collection, DateTimeOffset startUtc,
-        DateTimeOffset endUtc, int userId, int page, int pageSize,
+        DateTimeOffset endUtc, int? userId, int page, int pageSize,
         IReadOnlyList<AiUsageClassification>? aiUsage = null, CancellationToken cancellationToken = default);
 }

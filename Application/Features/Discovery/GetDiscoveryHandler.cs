@@ -13,7 +13,6 @@ public sealed class GetDiscoveryHandler(IRepositoryManager repositories, IUserCo
 {
     public async Task<PageableDiscoveryDto> Handle(GetDiscoveryCommand request, CancellationToken cancellationToken)
     {
-        currentUser.RequireAuthenticated();
         var now = clock.GetUtcNow();
         var collection = request.Collection switch
         {
@@ -37,7 +36,7 @@ public sealed class GetDiscoveryHandler(IRepositoryManager repositories, IUserCo
         var page = Math.Max(request.Page, 1);
         var pageSize = Math.Clamp(request.PageSize, 1, 50);
         var result = await repositories.Discovery.GetCollectionAsync(collection, startUtc, endUtc,
-            currentUser.UserId!.Value, page, pageSize, request.AiUsage, cancellationToken);
+            currentUser.UserId, page, pageSize, request.AiUsage, cancellationToken);
 
         return new PageableDiscoveryDto(request.Collection, "Daily", date, timeZone.Id, startUtc, endUtc,
             now.UtcDateTime, result.GalleryTotal, page, pageSize, result.Total, result.Entries);

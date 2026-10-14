@@ -12,7 +12,8 @@ public sealed record ImageMetadata(
     DateTimeOffset? DeletedAtUtc,
     string StorageKey,
     string ContentType,
-    bool HasEmbedding);
+    bool HasEmbedding,
+    bool IsGuestVisible = false);
 
 public sealed record ImageTagSummary(string Name, TagModerationStatus ModerationStatus);
 
@@ -32,4 +33,5 @@ public sealed record ImageCard(
     int LikeCount,
     int CommentCount,
     bool IsLikedByCurrentUser,
-    bool CanSeePendingTags);
+    bool CanSeePendingTags,
+    bool IsGuestVisible = false);

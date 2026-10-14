@@ -37,7 +37,18 @@ dotnet run --project GallerySiteBackend/GallerySiteBackend.csproj
 
 ## API behavior
 
-All gallery endpoints require a bearer access token. `POST /api/auth/login` and `POST /api/auth/register` return a
+Gallery search, image details/files, recommendations, comments, tag suggestions, and daily discovery support guest
+browsing. Guests see only approved, public, undeleted user uploads with an approved `sfw` tag. Attached `nsfw` tags
+(including pending tags), and pending tag replacements proposing `nsfw`, block guest access. Signed-in users retain
+existing broader access. Writes, personal feeds, rankings, announcements, and administration require authentication.
+See [API_REFERENCE.md](API_REFERENCE.md) for the exact public routes and visibility rules.
+
+Guest reads have no viewing quota and share a default limit of 300 requests per IP per minute per API process, including
+image files. Configure `GuestBrowsing__RequestsPerMinute` for SDK runs or `GUEST_BROWSING_REQUESTS_PER_MINUTE` in the
+Compose `.env` file. Guest responses are not cached; opened read routes vary by `Authorization`. Invalid/expired/revoked
+tokens return `401`, while ineligible guest image URLs return `404`. No new migration or dependency is required.
+
+`POST /api/auth/login` and `POST /api/auth/register` return a
 short-lived access token and issue a rotating, Secure/HttpOnly refresh cookie. `POST /api/auth/refresh` reads that
 cookie; refresh tokens are never returned in JSON.
 
@@ -65,6 +76,10 @@ There is no email or administrator password-reset fallback.
 
 Run `dotnet test GallerySiteBackend.sln` for unit and integration tests. Integration tests require Docker and use
 isolated PostgreSQL containers.
+
+Apply the `AddDiscoveryPeriodIndexes` migration when deploying the discovery query optimization. It adds date-first
+indexes for daily likes and undeleted comments. Before recreating the API, run the Compose `migrate` service following
+[deploy/DEPLOYMENT.md](deploy/DEPLOYMENT.md).
 
 User uploads begin as `Pending`; only an administrator can approve or reject them. Gallery search and recommendations
 include only approved, non-private images. The uploader and administrators can still read pending or private images

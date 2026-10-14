@@ -25,10 +25,14 @@ public sealed class ImageController(IMediator mediator) : ControllerBase
         return CreatedAtRoute("GetImage", new { id = image.Id }, image);
     }
 
+    [AllowAnonymous]
+    [EnableRateLimiting("guest-read")]
     [HttpGet("{id:int}", Name = "GetImage")]
     public async Task<ActionResult<AppImageDto>> Get(int id, CancellationToken cancellationToken)
         => Ok(await mediator.Send(new Application.Features.Images.GetImageById.Command(id), cancellationToken));
 
+    [AllowAnonymous]
+    [EnableRateLimiting("guest-read")]
     [HttpGet("{id:int}/content")]
     public async Task<IActionResult> GetContent(int id, [FromQuery] string format = "original",
         CancellationToken cancellationToken = default)
@@ -48,6 +52,8 @@ public sealed class ImageController(IMediator mediator) : ControllerBase
         return File(content.Stream, content.ContentType);
     }
 
+    [AllowAnonymous]
+    [EnableRateLimiting("guest-read")]
     [HttpGet]
     public async Task<ActionResult<PageableImagesDto>> Search([FromQuery] List<string>? tags,
         [FromQuery] ImageKind kind = ImageKind.All,
@@ -61,6 +67,8 @@ public sealed class ImageController(IMediator mediator) : ControllerBase
                     excludedTags)),
             cancellationToken));
 
+    [AllowAnonymous]
+    [EnableRateLimiting("guest-read")]
     [HttpGet("{id:int}/recommendations")]
     public async Task<ActionResult<PageableRecommendationsDto>> Recommendations(int id, [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
@@ -104,6 +112,8 @@ public sealed class ImageController(IMediator mediator) : ControllerBase
     public async Task<ActionResult<AppImageDto>> Publish(int id, CancellationToken cancellationToken)
         => Ok(await mediator.Send(new Application.Features.Images.PublishImage.Command(id), cancellationToken));
 
+    [AllowAnonymous]
+    [EnableRateLimiting("guest-read")]
     [HttpGet("{imageId:int}/comments")]
     public async Task<ActionResult<PageableCommentsDto>> Comments(int imageId, [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20, CancellationToken cancellationToken = default)

@@ -196,7 +196,7 @@ public sealed class ImageReadRepositoryTests(PostgresFixture database) : IClassF
         }
         await using var app = new ApiFactory(database, clock);
         using var client = app.Client();
-        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/images")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/images")).StatusCode);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
         using var like = await client.PutAsync($"/api/images/{seed.PublicIds[0]}/likes/me", null);
         Assert.Equal(HttpStatusCode.OK, like.StatusCode);

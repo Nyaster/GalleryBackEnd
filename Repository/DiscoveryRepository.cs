@@ -9,7 +9,7 @@ namespace Repository;
 public sealed class DiscoveryRepository(RepositoryContext context) : IDiscoveryRepository
 {
     public async Task<DiscoveryPage> GetCollectionAsync(DiscoveryCollection collection, DateTimeOffset startUtc,
-        DateTimeOffset endUtc, int userId, int page, int pageSize,
+        DateTimeOffset endUtc, int? userId, int page, int pageSize,
         IReadOnlyList<AiUsageClassification>? aiUsage = null, CancellationToken cancellationToken = default)
     {
         // PostgreSQL repeatable read keeps totals, metrics and cards on the same snapshot.
@@ -18,6 +18,7 @@ public sealed class DiscoveryRepository(RepositoryContext context) : IDiscoveryR
         var images = context.Images.AsNoTracking().Where(image => image.DeletedAtUtc == null &&
                                                                   image.Visibility == ImageVisibility.Gallery &&
                                                                   image.ModerationStatus == ModerationStatus.Approved);
+        if (userId is null) images = images.Where(GuestImageQuery.IsEligible);
         var galleryTotal = await images.CountAsync(cancellationToken);
         if (aiUsage is { Count: > 0 })
         {
@@ -85,7 +86,7 @@ public sealed class DiscoveryRepository(RepositoryContext context) : IDiscoveryR
                     image.DeletedAtUtc,
                     image.Likes.Count,
                     image.Comments.Count(comment => comment.DeletedAtUtc == null),
-                    image.Likes.Any(like => like.UserId == userId)))
+                    userId != null && image.Likes.Any(like => like.UserId == userId)))
                 .ToDictionaryAsync(image => image.Id, cancellationToken);
             cards = rows.Select(row => new DiscoveryEntryDto(imagesById[row.ImageId],
                 row.PeriodLikeCount, row.PeriodCommentCount)).ToArray();

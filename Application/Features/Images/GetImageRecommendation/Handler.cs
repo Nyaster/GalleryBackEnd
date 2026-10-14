@@ -11,9 +11,8 @@ public sealed class Handler(IRepositoryManager repositories, IUserContext curren
 {
     public async Task<PageableRecommendationsDto> Handle(Command request, CancellationToken cancellationToken)
     {
-        var image = await repositories.AppImage.GetMetadataByIdAsync(request.Id, cancellationToken)
-            ?? throw new Base404ReturnException("Image not found.");
-        ImageAuthorization.EnsureReadable(image, currentUser);
+        var image = await ImageAuthorization.GetReadableMetadataAsync(repositories.AppImage, request.Id,
+            currentUser, cancellationToken);
         if (!image.HasEmbedding)
             throw new Base409ConflictException("Recommendations are not ready for this image.");
         var page = Math.Max(request.Page, 1);

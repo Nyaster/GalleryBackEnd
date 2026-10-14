@@ -8,6 +8,7 @@ public interface IAppImageRepository
     Task<AppImage?> GetByIdAsync(int id, bool trackChanges, CancellationToken cancellationToken = default);
     Task<AppImage?> GetWithTagsByIdAsync(int id, CancellationToken cancellationToken = default);
     Task<ImageMetadata?> GetMetadataByIdAsync(int id, CancellationToken cancellationToken = default);
+    Task<ImageMetadata?> GetGuestMetadataByIdAsync(int id, CancellationToken cancellationToken = default);
     Task<ImageCard?> GetCardByIdAsync(int id, ImageViewer viewer, CancellationToken cancellationToken = default);
 
     Task<(List<ImageCard> Images, int Total)> SearchAsync(SearchImageDto request, ImageViewer viewer,
@@ -37,6 +38,9 @@ public interface IAppImageRepository
         CancellationToken cancellationToken = default);
 
     Task<List<ImageTag>> GetTagSuggestionsAsync(string normalizedQuery, int limit,
+        CancellationToken cancellationToken = default);
+
+    Task<List<ImageTag>> GetGuestTagSuggestionsAsync(string normalizedQuery, int limit,
         CancellationToken cancellationToken = default);
 
     Task<(List<AdminTagDto> Tags, int Total)> GetTagsAsync(TagModerationStatus status, int page, int pageSize,

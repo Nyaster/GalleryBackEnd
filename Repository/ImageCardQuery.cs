@@ -5,7 +5,7 @@ namespace Repository;
 
 internal static class ImageCardQuery
 {
-    public static IQueryable<ImageCard> Project(IQueryable<AppImage> images, ImageViewer viewer)
+    public static IQueryable<ImageCard> Project(IQueryable<AppImage> images, ImageViewer viewer, bool guestFiltered = false)
         => images.Select(image => new ImageCard(
             image.Id, image.Source, image.UploadedById,
             image.UploadedBy == null ? null : image.UploadedBy.Login,
@@ -18,5 +18,6 @@ internal static class ImageCardQuery
                 .OrderBy(tag => tag.Name).Select(tag => new ImageTagSummary(tag.Name, tag.ModerationStatus)).ToArray(),
             image.Likes.Count, image.Comments.Count(comment => comment.DeletedAtUtc == null),
             viewer.UserId != null && image.Likes.Any(like => like.UserId == viewer.UserId),
-            viewer.IsStaff || (viewer.UserId != null && image.UploadedById == viewer.UserId)));
+            viewer.IsStaff || (viewer.UserId != null && image.UploadedById == viewer.UserId),
+            guestFiltered));
 }

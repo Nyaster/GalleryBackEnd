@@ -1,6 +1,5 @@
 using Application.Helpers;
 using Contracts;
-using Entities.Exceptions;
 using MediatR;
 using Service.Contracts;
 
@@ -12,9 +11,8 @@ public sealed class Handler(IRepositoryManager repositories, IImageStorage stora
 {
     public async Task<ImageContent> Handle(Command request, CancellationToken cancellationToken)
     {
-        var image = await repositories.AppImage.GetMetadataByIdAsync(request.Id, cancellationToken)
-            ?? throw new Base404ReturnException("Image not found.");
-        ImageAuthorization.EnsureReadable(image, currentUser);
+        var image = await ImageAuthorization.GetReadableMetadataAsync(repositories.AppImage, request.Id,
+            currentUser, cancellationToken);
         if (!storage.Exists(image.StorageKey))
             throw new InvalidOperationException("Image data is unavailable.");
 

@@ -98,17 +98,23 @@ public sealed class DiscoveryHandlerTests
     }
 
     [Fact]
-    public async Task GetDiscovery_Unauthenticated_RejectsBeforeReading()
+    public async Task GetDiscovery_Guest_PassesNullViewerToRepository()
     {
-        var repositories = new Mock<IRepositoryManager>(MockBehavior.Strict);
-        var user = new Mock<IUserContext>();
-        user.Setup(context => context.RequireAuthenticated())
-            .Throws(new AppUserUnauthorizedException("Authentication required."));
+        var repositories = new Mock<IRepositoryManager>();
+        var discovery = new Mock<IDiscoveryRepository>(MockBehavior.Strict);
+        repositories.SetupGet(repository => repository.Discovery).Returns(discovery.Object);
+        discovery.Setup(repository => repository.GetCollectionAsync(DiscoveryCollection.NewUploads,
+                Now.UtcDateTime.Date, Now.UtcDateTime.Date.AddDays(1), null, 1, 20, null, CancellationToken.None))
+            .ReturnsAsync(new DiscoveryPage(2, 1, []));
+        var user = new Mock<IUserContext>(MockBehavior.Strict);
+        user.SetupGet(context => context.UserId).Returns((int?)null);
         var handler = new GetDiscoveryHandler(repositories.Object, user.Object, new CrossingMidnightClock());
 
-        await Assert.ThrowsAsync<AppUserUnauthorizedException>(() => handler.Handle(
-            new GetDiscoveryCommand("new-uploads"), CancellationToken.None));
-        repositories.VerifyNoOtherCalls();
+        var result = await handler.Handle(new GetDiscoveryCommand("new-uploads"), CancellationToken.None);
+
+        Assert.Equal(2, result.GalleryTotal);
+        Assert.Equal(1, result.Total);
+        discovery.VerifyAll();
     }
 
     [Fact]

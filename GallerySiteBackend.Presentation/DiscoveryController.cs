@@ -3,6 +3,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Shared.DataTransferObjects;
 
 namespace GallerySiteBackend.Presentation;
@@ -12,6 +13,8 @@ namespace GallerySiteBackend.Presentation;
 [Route("api/discovery")]
 public sealed class DiscoveryController(IMediator mediator) : ControllerBase
 {
+    [AllowAnonymous]
+    [EnableRateLimiting("guest-read")]
     [HttpGet("{collection}")]
     [ProducesResponseType<PageableDiscoveryDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]

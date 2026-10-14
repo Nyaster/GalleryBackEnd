@@ -12,8 +12,11 @@ public sealed class GetCommentsHandler(IRepositoryManager repositories, IUserCon
 {
     public async Task<PageableCommentsDto> Handle(GetCommentsCommand request, CancellationToken cancellationToken)
     {
-        currentUser.RequireAuthenticated();
-        var image = await repositories.AppImage.GetMetadataByIdAsync(request.ImageId, cancellationToken) ?? throw new Base404ReturnException("Image not found.");
+        var image = currentUser.UserId is null
+            ? await ImageAuthorization.GetReadableMetadataAsync(repositories.AppImage, request.ImageId,
+                currentUser, cancellationToken)
+            : await repositories.AppImage.GetMetadataByIdAsync(request.ImageId, cancellationToken)
+              ?? throw new Base404ReturnException("Image not found.");
         EnsurePublic(image);
         var page = Math.Max(request.Page, 1);
         var pageSize = Math.Clamp(request.PageSize, 1, 50);

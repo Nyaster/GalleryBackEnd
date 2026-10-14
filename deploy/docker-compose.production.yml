@@ -41,6 +41,7 @@ services:
       Embedding__ModelPath: /app/model/model.onnx
       Authenticator__KeyRingPath: /app/auth-keys
       ImageStorage__RootPath: /app/Data/images
+      GuestBrowsing__RequestsPerMinute: ${GUEST_BROWSING_REQUESTS_PER_MINUTE:-300}
       Observability__LogPath: /app/logs
       Observability__RetentionDays: ${LOG_RETENTION_DAYS:-30}
       Observability__SlowRequestMilliseconds: ${SLOW_REQUEST_MILLISECONDS:-1000}
