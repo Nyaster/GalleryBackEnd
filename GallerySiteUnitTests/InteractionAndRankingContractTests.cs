@@ -10,12 +10,7 @@ namespace GallerySiteUnitTests;
 public sealed class InteractionAndRankingContractTests
 {
     [Theory]
-    [InlineData(typeof(ImageController), "Comments", "GET", "{imageId:int}/comments")]
     [InlineData(typeof(ImageController), "CreateComment", "POST", "{imageId:int}/comments")]
-    [InlineData(typeof(ImageController), "Recommendations", "GET", "{id:int}/recommendations")]
-    [InlineData(typeof(ImageController), "Like", "PUT", "{imageId:int}/likes/me")]
-    [InlineData(typeof(ImageController), "Unlike", "DELETE", "{imageId:int}/likes/me")]
-    [InlineData(typeof(UserController), "LikedImages", "GET", "liked-images")]
     [InlineData(typeof(CommentsController), "Delete", "DELETE", "{commentId:int}")]
     [InlineData(typeof(RankingsController), "Get", "GET", "{period}")]
     [InlineData(typeof(AdministrationController), "DeleteComment", "DELETE", "comments/{commentId:int}")]

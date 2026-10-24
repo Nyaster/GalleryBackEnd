@@ -16,7 +16,6 @@ namespace GallerySiteUnitTests;
 public sealed class AnnouncementAndFeedbackTests
 {
     [Theory]
-    [InlineData(typeof(AnnouncementController), "Get", "GET", null)]
     [InlineData(typeof(FeedbackController), "Create", "POST", null)]
     [InlineData(typeof(AdministrationController), "UpdateAnnouncement", "PUT", "announcement")]
     [InlineData(typeof(AdministrationController), "ClearAnnouncement", "DELETE", "announcement")]

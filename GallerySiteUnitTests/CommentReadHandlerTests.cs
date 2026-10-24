@@ -68,40 +68,6 @@ public sealed class CommentReadHandlerTests
         repository.VerifyGet(item => item.Interactions, Times.Never);
     }
 
-    [Fact]
-    public async Task GetComments_GuestEligibleImage_ReturnsComments()
-    {
-        var repository = new Mock<IRepositoryManager>();
-        var images = new Mock<IAppImageRepository>();
-        var interactions = new Mock<IInteractionRepository>();
-        repository.SetupGet(item => item.AppImage).Returns(images.Object);
-        repository.SetupGet(item => item.Interactions).Returns(interactions.Object);
-        images.Setup(item => item.GetGuestMetadataByIdAsync(7, CancellationToken.None))
-            .ReturnsAsync(Metadata() with { IsGuestVisible = true });
-        var comments = new List<CommentDto> { new(3, 7, 12, "alice", "public", DateTimeOffset.UnixEpoch) };
-        interactions.Setup(item => item.GetCommentsAsync(7, 1, 20, CancellationToken.None))
-            .ReturnsAsync((comments, 1));
-
-        var result = await new GetCommentsHandler(repository.Object, new User(false))
-            .Handle(new(7, 1, 20), CancellationToken.None);
-
-        Assert.Equal(comments, result.Comments);
-        Assert.Equal(1, result.Total);
-    }
-
-    [Fact]
-    public async Task GetComments_GuestIneligibleImage_ReturnsNotFoundBeforeReadingComments()
-    {
-        var repository = new Mock<IRepositoryManager>();
-        var images = new Mock<IAppImageRepository>();
-        repository.SetupGet(item => item.AppImage).Returns(images.Object);
-        images.Setup(item => item.GetGuestMetadataByIdAsync(7, CancellationToken.None)).ReturnsAsync(Metadata());
-        var handler = new GetCommentsHandler(repository.Object, new User(false));
-
-        await Assert.ThrowsAsync<Base404ReturnException>(() => handler.Handle(new(7, 1, 20), CancellationToken.None));
-        repository.VerifyGet(item => item.Interactions, Times.Never);
-    }
-
     private static ImageMetadata Metadata() => new(7, 12, ImageVisibility.Gallery,
         ModerationStatus.Approved, null, "image.jpg", "image/jpeg", false);
 

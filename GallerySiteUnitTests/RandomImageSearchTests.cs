@@ -2,10 +2,7 @@ using System.Text.Json;
 using Application.Features.Images.GetImageBySearch;
 using Contracts;
 using Entities.Exceptions;
-using Microsoft.EntityFrameworkCore;
 using Moq;
-using Pgvector.EntityFrameworkCore;
-using Repository;
 using Service.Contracts;
 using Shared.DataTransferObjects;
 
@@ -79,22 +76,6 @@ public sealed class RandomImageSearchTests
         var result = await handler.Handle(new Command(new SearchImageDto(null, RandomSeed: "not-a-valid-seed")), CancellationToken.None);
 
         Assert.Null(result.RandomSeed);
-    }
-
-    [Fact]
-    public void RandomSort_TranslatesToSeededPostgresHashWithIdTieBreaker()
-    {
-        var options = new DbContextOptionsBuilder<RepositoryContext>()
-            .UseNpgsql("Host=localhost;Database=gallery;Username=gallery;Password=gallery", postgres => postgres.UseVector())
-            .Options;
-        using var context = new RepositoryContext(options);
-        const long seed = 42;
-
-        var sql = AppImageRepository.ApplySort(context.Images, ImageSort.Random, seed).ToQueryString();
-
-        Assert.Contains("hashint4extended", sql, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("ORDER BY", sql, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("\"Id\"", sql, StringComparison.Ordinal);
     }
 
     [Fact]

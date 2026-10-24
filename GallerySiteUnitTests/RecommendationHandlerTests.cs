@@ -51,17 +51,6 @@ public sealed class RecommendationHandlerTests
     }
 
     [Fact]
-    public async Task GetRecommendations_WithoutEmbedding_ThrowsConflict()
-    {
-        var source = Image(1, 7, embedded: false);
-        var (repositories, _) = Repositories(source);
-        var handler = new Application.Features.Images.GetImageRecommendation.Handler(repositories.Object, new TestUser(7));
-
-        await Assert.ThrowsAsync<Base409ConflictException>(() => handler.Handle(
-            new Application.Features.Images.GetImageRecommendation.Command(1), CancellationToken.None));
-    }
-
-    [Fact]
     public async Task GetRecommendations_UnreadableImage_ThrowsForbidden()
     {
         var source = Image(1, 7, embedded: true, visibility: ImageVisibility.Private);

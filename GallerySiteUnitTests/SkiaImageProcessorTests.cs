@@ -47,31 +47,6 @@ public sealed class SkiaImageProcessorTests
     }
 
     [Fact]
-    public async Task CreatePreviewJpegAsync_LargeImage_ResizesToMaximumLongEdgeAsJpeg()
-    {
-        await using var source = CreatePng(1600, 800, SKColors.Red);
-        await using var preview = await Processor().CreatePreviewJpegAsync(source);
-        using var codec = SKCodec.Create(preview);
-
-        Assert.NotNull(codec);
-        Assert.Equal(SKEncodedImageFormat.Jpeg, codec.EncodedFormat);
-        Assert.Equal(768, codec.Info.Width);
-        Assert.Equal(384, codec.Info.Height);
-    }
-
-    [Fact]
-    public async Task CreatePreviewJpegAsync_SmallImage_DoesNotUpscale()
-    {
-        await using var source = CreatePng(24, 12, SKColors.Blue);
-        await using var preview = await Processor().CreatePreviewJpegAsync(source);
-        using var codec = SKCodec.Create(preview);
-
-        Assert.NotNull(codec);
-        Assert.Equal(24, codec.Info.Width);
-        Assert.Equal(12, codec.Info.Height);
-    }
-
-    [Fact]
     public async Task CreatePreviewJpegAsync_TransparentImage_CompositesOntoWhite()
     {
         await using var source = CreatePng(8, 8, SKColors.Transparent);

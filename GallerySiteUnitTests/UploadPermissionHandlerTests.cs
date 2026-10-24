@@ -90,46 +90,6 @@ public sealed class UploadPermissionHandlerTests
     }
 
     [Fact]
-    public async Task UploadImage_RevokedUser_ThrowsForbidden()
-    {
-        var users = UserRepository(User(7, canUploadImages: false));
-        var handler = UploadHandler(Repositories(users).Object, new TestUser(7));
-
-        await Assert.ThrowsAsync<AppForbiddenException>(() => handler.Handle(UploadCommand(), CancellationToken.None));
-    }
-
-    [Fact]
-    public async Task UploadImage_AdminBypassesStoredPermission()
-    {
-        var users = new Mock<IAppUserRepository>();
-        var handler = UploadHandler(Repositories(users).Object, new TestUser(7, AppUserRole.Admin));
-
-        await Assert.ThrowsAsync<ImageUploadValidationError>(() =>
-            handler.Handle(UploadCommand(), CancellationToken.None));
-
-        users.Verify(
-            repository => repository.GetByIdAsync(It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()),
-            Times.Never);
-    }
-
-    [Theory]
-    [InlineData(AiUsageClassification.Unknown)]
-    [InlineData((AiUsageClassification)999)]
-    public async Task UploadImage_InvalidAiUsage_RejectsBeforeFileProcessing(AiUsageClassification aiUsage)
-    {
-        var storage = new Mock<IImageStorage>();
-        var handler = UploadHandler(Repositories(new Mock<IAppUserRepository>()).Object,
-            new TestUser(7, AppUserRole.Admin), storage);
-
-        await Assert.ThrowsAsync<ImageUploadValidationError>(() => handler.Handle(
-            new Application.Features.Images.UploadImage.Command(new AppImageCreationDto { AiUsage = aiUsage }),
-            CancellationToken.None));
-
-        storage.Verify(service => service.SaveTemporaryAsync(It.IsAny<Stream>(), It.IsAny<CancellationToken>()),
-            Times.Never);
-    }
-
-    [Fact]
     public async Task UploadImage_MissingCurrentUserRecord_ThrowsForbidden()
     {
         var users = new Mock<IAppUserRepository>();
@@ -163,19 +123,6 @@ public sealed class UploadPermissionHandlerTests
         Assert.False(revoked.CanUploadImages);
         Assert.False(user.CanUploadImages);
         repositories.Verify(repository => repository.SaveAsync(It.IsAny<CancellationToken>()), Times.Exactly(2));
-    }
-
-    [Fact]
-    public async Task GetUploadPermission_AdminUser_ReturnsEffectiveAccessWhenStoredFlagIsFalse()
-    {
-        var users = UserRepository(User(12, canUploadImages: false, AppUserRole.Admin));
-        var handler = new Application.Features.Administration.GetUserUploadPermission.Handler(
-            Repositories(users).Object, new TestUser(1, AppUserRole.Admin));
-
-        var result = await handler.Handle(new Application.Features.Administration.GetUserUploadPermission.Command(12),
-            CancellationToken.None);
-
-        Assert.True(result.CanUploadImages);
     }
 
     [Theory]

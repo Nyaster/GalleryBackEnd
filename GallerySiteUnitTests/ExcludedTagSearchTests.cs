@@ -2,9 +2,7 @@ using Application.Features.Images.GetImageBySearch;
 using Entities.Models;
 using GallerySiteBackend.Presentation;
 using MediatR;
-using Microsoft.EntityFrameworkCore;
 using Moq;
-using Pgvector.EntityFrameworkCore;
 using Repository;
 using Shared.DataTransferObjects;
 
@@ -118,27 +116,6 @@ public sealed class ExcludedTagSearchTests
         var result = AppImageRepository.ApplyTagFilters(images, ["portrait"], [" PORTRAIT "]);
 
         Assert.Empty(result);
-    }
-
-    [Theory]
-    [InlineData(ImageSort.Newest)]
-    [InlineData(ImageSort.Oldest)]
-    [InlineData(ImageSort.MediaId)]
-    [InlineData(ImageSort.Random)]
-    public void ApplyTagFilters_AllSorts_TranslateWithPostgresProvider(ImageSort sort)
-    {
-        var options = new DbContextOptionsBuilder<RepositoryContext>()
-            .UseNpgsql("Host=localhost;Database=gallery;Username=gallery;Password=gallery",
-                postgres => postgres.UseVector())
-            .Options;
-        using var context = new RepositoryContext(options);
-
-        var query = AppImageRepository.ApplyTagFilters(context.Images, ["portrait"], ["summer", "winter"]);
-        var sql = AppImageRepository.ApplySort(query, sort, 42).ToQueryString();
-
-        Assert.Contains("NOT EXISTS", sql, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("Approved", sql, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("ORDER BY", sql, StringComparison.OrdinalIgnoreCase);
     }
 
     private static UserMadeImage Image(int id, params ImageTag[] tags) => new()

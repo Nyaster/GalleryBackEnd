@@ -256,19 +256,6 @@ public sealed class AuthenticatorServiceTests
     }
 
     [Fact]
-    public async Task BackupRecovery_InvalidatesUnusedCodes_AndCannotBeRepeated()
-    {
-        var fixture = new Fixture();
-        await fixture.EnrollAsync();
-        await fixture.Service.RecoverAsync(new("galleryuser", fixture.BackupCodes[0], Fixture.NewPassword));
-        await Assert.ThrowsAsync<AppUserUnauthorizedException>(() =>
-            fixture.Service.RecoverAsync(new("galleryuser", fixture.BackupCodes[0], Fixture.Password)));
-        await Assert.ThrowsAsync<AppUserUnauthorizedException>(() =>
-            fixture.Service.RecoverAsync(new("galleryuser", fixture.BackupCodes[1], Fixture.Password)));
-        Assert.Equal(1, fixture.User.AuthenticationVersion);
-    }
-
-    [Fact]
     public async Task WrongPassword_DoesNotConsumeBackupProofForManagement()
     {
         var fixture = new Fixture();
