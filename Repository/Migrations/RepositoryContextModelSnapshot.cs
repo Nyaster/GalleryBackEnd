@@ -342,6 +342,70 @@ namespace Repository.Migrations
                     b.ToTable("Feedback");
                 });
 
+            modelBuilder.Entity("Entities.Models.ForMeFeed", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.PrimitiveCollection<int[]>("AiUsage")
+                        .IsRequired()
+                        .HasColumnType("integer[]");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.PrimitiveCollection<string[]>("ExcludedTags")
+                        .IsRequired()
+                        .HasColumnType("text[]");
+
+                    b.Property<DateTimeOffset>("ExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Mode")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<int>("PageSize")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Total")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExpiresAtUtc");
+
+                    b.HasIndex("UserId", "ExpiresAtUtc");
+
+                    b.ToTable("ForMeFeeds");
+                });
+
+            modelBuilder.Entity("Entities.Models.ForMeFeedEntry", b =>
+                {
+                    b.Property<Guid>("FeedId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Rank")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ImageId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("FeedId", "Rank");
+
+                    b.HasIndex("ImageId");
+
+                    b.HasIndex("FeedId", "ImageId")
+                        .IsUnique();
+
+                    b.ToTable("ForMeFeedEntries");
+                });
+
             modelBuilder.Entity("Entities.Models.ImageLike", b =>
                 {
                     b.Property<int>("ImageId")
@@ -773,6 +837,30 @@ namespace Repository.Migrations
                     b.Navigation("Author");
                 });
 
+            modelBuilder.Entity("Entities.Models.ForMeFeed", b =>
+                {
+                    b.HasOne("Entities.Models.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Entities.Models.ForMeFeedEntry", b =>
+                {
+                    b.HasOne("Entities.Models.ForMeFeed", null)
+                        .WithMany("Entries")
+                        .HasForeignKey("FeedId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Entities.Models.AppImage", null)
+                        .WithMany()
+                        .HasForeignKey("ImageId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Entities.Models.ImageLike", b =>
                 {
                     b.HasOne("Entities.Models.AppImage", "Image")
@@ -845,6 +933,11 @@ namespace Repository.Migrations
                     b.Navigation("RefreshSessions");
 
                     b.Navigation("UploadedImages");
+                });
+
+            modelBuilder.Entity("Entities.Models.ForMeFeed", b =>
+                {
+                    b.Navigation("Entries");
                 });
 
             modelBuilder.Entity("Entities.Models.RankingSnapshot", b =>

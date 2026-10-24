@@ -13,6 +13,27 @@ namespace GallerySiteBackend.Presentation;
 [Route("api/images")]
 public sealed class ImageController(IMediator mediator) : ControllerBase
 {
+    [HttpGet("for-me")]
+    [EnableRateLimiting("for-me")]
+    [ProducesResponseType<ForMeFeedDto>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<ForMeFeedDto>> ForMe([FromQuery] int pageSize = 20,
+        [FromQuery] List<string>? aiUsage = null, [FromQuery] List<string>? excludedTags = null,
+        [FromQuery] string? cursor = null, CancellationToken cancellationToken = default)
+    {
+        Response.Headers.CacheControl = "private, no-store";
+        Response.Headers.Vary = "Authorization";
+        if (Request.Query.ContainsKey("cursor"))
+        {
+            if (string.IsNullOrWhiteSpace(cursor) || Request.Query.ContainsKey("pageSize") ||
+                Request.Query.ContainsKey("aiUsage") || Request.Query.ContainsKey("excludedTags"))
+                throw new Entities.Exceptions.Base400BadRequestException(
+                    "A continuation requires only a nonempty cursor; filters and pageSize cannot change.");
+        }
+
+        return Ok(await mediator.Send(new Application.Features.Images.GetForMe.Command(pageSize,
+            AiUsageFilterParser.Parse(aiUsage), excludedTags, cursor), cancellationToken));
+    }
+
     [HttpPost]
     [EnableRateLimiting("upload")]
     [Consumes("multipart/form-data")]

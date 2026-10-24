@@ -11,7 +11,10 @@ namespace GallerySiteBackend.Extensions;
 public static class ServiceExtensions
 {
     public static void ConfigureRepositoryManager(this IServiceCollection services)
-        => services.AddScoped<IRepositoryManager, RepositoryManager>();
+    {
+        services.AddScoped<IRepositoryManager, RepositoryManager>();
+        services.AddScoped<IForMeFeedRepository, ForMeFeedRepository>();
+    }
 
     public static void ConfigureCors(this IServiceCollection services, IConfiguration configuration)
     {
@@ -22,7 +25,7 @@ public static class ServiceExtensions
         services.AddCors(options => options.AddPolicy("CorsPolicy", policy =>
         {
             if (origins.Length == 0) return;
-            policy.WithOrigins(origins).AllowAnyHeader().AllowAnyMethod().AllowCredentials();
+            policy.WithOrigins(origins).AllowAnyHeader().AllowAnyMethod().AllowCredentials().WithExposedHeaders("X-Request-ID");
         }));
     }
 

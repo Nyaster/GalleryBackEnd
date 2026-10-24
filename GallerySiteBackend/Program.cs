@@ -32,7 +32,8 @@ nlogConfiguration.Variables["retentionDays"] = builder.Configuration["Observabil
 LogManager.Configuration = nlogConfiguration;
 builder.Logging.AddNLog();
 
-builder.Services.AddProblemDetails();
+builder.Services.AddProblemDetails(options => options.CustomizeProblemDetails = context =>
+    context.ProblemDetails.Extensions["traceId"] = context.HttpContext.TraceIdentifier);
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddOpenApi();
 builder.Services.AddControllers().AddJsonOptions(options =>
@@ -95,13 +96,15 @@ builder.Services.AddRateLimiter(options =>
                 ? endpoint.RoutePattern.RawText ?? context.HttpContext.Request.Path.Value ?? "/"
                 : context.HttpContext.Request.Path.Value ?? "/",
             context.HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown");
-        if (context.HttpContext.GetEndpoint()?.Metadata.GetMetadata<EnableRateLimitingAttribute>()?.PolicyName == "guest-read")
+        var policy = context.HttpContext.GetEndpoint()?.Metadata.GetMetadata<EnableRateLimitingAttribute>()?.PolicyName;
+        if (policy is "guest-read" or "for-me")
         {
             if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
                 context.HttpContext.Response.Headers.RetryAfter = Math.Ceiling(retryAfter.TotalSeconds)
                     .ToString(System.Globalization.CultureInfo.InvariantCulture);
             await Results.Problem(statusCode: StatusCodes.Status429TooManyRequests,
-                title: "Too Many Requests", detail: "The guest browsing request limit was exceeded.",
+                title: "Too Many Requests", detail: policy == "for-me"
+                    ? "The recommendation request limit was exceeded." : "The guest browsing request limit was exceeded.",
                 extensions: new Dictionary<string, object?> { ["traceId"] = context.HttpContext.TraceIdentifier })
                 .ExecuteAsync(context.HttpContext);
         }
@@ -125,6 +128,19 @@ builder.Services.AddRateLimiter(options =>
     options.AddPolicy("upload", context => RateLimitPartition.GetFixedWindowLimiter(
         context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? context.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0, AutoReplenishment = true }));
+    options.AddPolicy("for-me", context =>
+    {
+        if (context.User.Identity?.IsAuthenticated != true)
+            return RateLimitPartition.GetNoLimiter("anonymous");
+        var continuation = context.Request.Query.ContainsKey("cursor");
+        var userId = context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        return RateLimitPartition.GetFixedWindowLimiter($"{userId}:{continuation}",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = continuation ? 120 : 10, Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0, AutoReplenishment = true
+            });
+    });
     options.AddPolicy("comment-write", context => RateLimitPartition.GetFixedWindowLimiter(
         context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? context.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0, AutoReplenishment = true }));
@@ -146,6 +162,7 @@ else
 builder.Services.AddHostedService<ScrapeRunPollingService>();
 builder.Services.AddHostedService<RankingSnapshotPollingService>();
 builder.Services.AddHostedService<RefreshSessionCleanupService>();
+builder.Services.AddHostedService<ForMeFeedCleanupService>();
 
 var app = builder.Build();
 if (args.Contains("--migrate", StringComparer.OrdinalIgnoreCase))
@@ -153,6 +170,7 @@ if (args.Contains("--migrate", StringComparer.OrdinalIgnoreCase))
     await DatabaseMigrationService.MigrateAsync(app.Services, app.Logger, CancellationToken.None);
     return;
 }
+app.UseMiddleware<ApiRequestCorrelationMiddleware>();
 app.UseExceptionHandler();
 app.UseForwardedHeaders();
 if (!app.Environment.IsDevelopment()) app.UseHsts();

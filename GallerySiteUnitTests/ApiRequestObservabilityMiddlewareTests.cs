@@ -55,10 +55,46 @@ public sealed class ApiRequestObservabilityMiddlewareTests
         var middleware = new ApiRequestObservabilityMiddleware(_ => Task.CompletedTask, loggerFactory,
             Options.Create(new ObservabilityOptions()));
 
-        await middleware.InvokeAsync(context);
+        var correlation = new ApiRequestCorrelationMiddleware(middleware.InvokeAsync,
+            loggerFactory.CreateLogger<ApiRequestCorrelationMiddleware>());
+        await correlation.InvokeAsync(context);
+        await context.Features.Get<TestResponseFeature>()!.StartAsync();
         await context.Features.Get<TestResponseFeature>()!.CompleteAsync();
 
+        Assert.False(context.Response.Headers.ContainsKey("X-Request-ID"));
         Assert.Empty(logs.Events);
+    }
+
+    [Theory]
+    [InlineData("/api/images/for-me", "", "CreateFeed")]
+    [InlineData("/API/images/FOR-ME/", "?cursor=", "ReadFeedPage")]
+    public async Task Correlation_StartingAndCompletedAfterOuterScopeDisposal_KeepServerId(string path, string query, string operation)
+    {
+        var logs = new CapturingLoggerProvider();
+        using var factory = LoggerFactory.Create(builder => builder.AddProvider(logs));
+        var context = CreateContext(path, HttpMethods.Get, "server-owned-id");
+        context.Request.QueryString = new QueryString(query);
+        context.Request.Headers["X-Request-ID"] = "inbound-secret";
+        var completion = new ApiRequestObservabilityMiddleware(current =>
+        {
+            current.Response.Headers.Clear();
+            current.Response.Headers["X-Request-ID"] = "downstream-secret";
+            return Task.CompletedTask;
+        }, factory, Options.Create(new ObservabilityOptions()));
+        var correlation = new ApiRequestCorrelationMiddleware(completion.InvokeAsync,
+            factory.CreateLogger<ApiRequestCorrelationMiddleware>());
+        await correlation.InvokeAsync(context);
+        factory.CreateLogger("Probe").LogInformation("Outside request");
+        var probe = Assert.Single(logs.Events);
+        Assert.False(probe.Properties.ContainsKey("RequestId"));
+        Assert.False(probe.Properties.ContainsKey("Operation"));
+        await context.Features.Get<TestResponseFeature>()!.StartAsync();
+        Assert.Equal("server-owned-id", context.Response.Headers["X-Request-ID"]);
+        await context.Features.Get<TestResponseFeature>()!.CompleteAsync();
+        var request = Assert.Single(logs.Events, entry => entry.Category == "GallerySiteBackend.Requests");
+        Assert.Equal("server-owned-id", request.Properties["RequestId"]);
+        Assert.Equal("server-owned-id", request.Properties["TraceId"]);
+        Assert.Equal(operation, request.Properties["Operation"]);
     }
 
     private static DefaultHttpContext CreateContext(string path, string method, string traceId)
@@ -77,6 +113,7 @@ public sealed class ApiRequestObservabilityMiddlewareTests
     private sealed class TestResponseFeature : IHttpResponseFeature
     {
         private readonly List<(Func<object, Task> Callback, object State)> _completed = [];
+        private readonly List<(Func<object, Task> Callback, object State)> _starting = [];
 
         public int StatusCode { get; set; } = StatusCodes.Status200OK;
         public string? ReasonPhrase { get; set; }
@@ -84,7 +121,11 @@ public sealed class ApiRequestObservabilityMiddlewareTests
         public Stream Body { get; set; } = new MemoryStream();
         public bool HasStarted => false;
 
-        public void OnStarting(Func<object, Task> callback, object state) { }
+        public void OnStarting(Func<object, Task> callback, object state) => _starting.Add((callback, state));
+        public async Task StartAsync()
+        {
+            foreach (var (callback, state) in _starting.AsEnumerable().Reverse()) await callback(state);
+        }
         public void OnCompleted(Func<object, Task> callback, object state) => _completed.Add((callback, state));
 
         public async Task CompleteAsync()
@@ -94,17 +135,19 @@ public sealed class ApiRequestObservabilityMiddlewareTests
         }
     }
 
-    private sealed class CapturingLoggerProvider : ILoggerProvider
+    private sealed class CapturingLoggerProvider : ILoggerProvider, ISupportExternalScope
     {
         public List<CapturedLog> Events { get; } = [];
+        private IExternalScopeProvider _scopes = new LoggerExternalScopeProvider();
+        public void SetScopeProvider(IExternalScopeProvider scopeProvider) => _scopes = scopeProvider;
 
-        public ILogger CreateLogger(string categoryName) => new CapturingLogger(categoryName, Events);
+        public ILogger CreateLogger(string categoryName) => new CapturingLogger(categoryName, Events, _scopes);
         public void Dispose() { }
     }
 
-    private sealed class CapturingLogger(string category, List<CapturedLog> events) : ILogger
+    private sealed class CapturingLogger(string category, List<CapturedLog> events, IExternalScopeProvider scopes) : ILogger
     {
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => scopes.Push(state);
         public bool IsEnabled(LogLevel logLevel) => true;
 
         public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
@@ -113,6 +156,11 @@ public sealed class ApiRequestObservabilityMiddlewareTests
             var properties = state is IReadOnlyList<KeyValuePair<string, object?>> values
                 ? values.Where(pair => pair.Key != "{OriginalFormat}").ToDictionary(pair => pair.Key, pair => pair.Value)
                 : new Dictionary<string, object?>();
+            scopes.ForEachScope((scope, state) =>
+            {
+                if (scope is IEnumerable<KeyValuePair<string, object?>> fields)
+                    foreach (var pair in fields) state[pair.Key] = pair.Value;
+            }, properties);
             events.Add(new CapturedLog(category, logLevel, properties));
         }
     }

@@ -20,6 +20,8 @@ public sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logge
             AppForbiddenException => StatusCodes.Status403Forbidden,
             Base404ReturnException => StatusCodes.Status404NotFound,
             Base409ConflictException => StatusCodes.Status409Conflict,
+            ForMeFeedLimitException => StatusCodes.Status429TooManyRequests,
+            ForMeFeedDeadlineException => StatusCodes.Status503ServiceUnavailable,
             PostgresException { SqlState: PostgresErrorCodes.SerializationFailure } => StatusCodes.Status409Conflict,
             DbUpdateException { InnerException: PostgresException { SqlState: PostgresErrorCodes.SerializationFailure } } => StatusCodes.Status409Conflict,
             DbUpdateException { InnerException: PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } } => StatusCodes.Status409Conflict,
@@ -54,6 +56,8 @@ public sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logge
             Instance = context.Request.Path
         };
         problem.Extensions["traceId"] = context.TraceIdentifier;
+        if (error is ForMeFeedLimitException limit)
+            context.Response.Headers.RetryAfter = limit.RetryAfterSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
         context.Response.StatusCode = status;
         await context.Response.WriteAsJsonAsync(problem, cancellationToken);
         return true;

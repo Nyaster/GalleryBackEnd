@@ -30,12 +30,14 @@ public sealed class ApiRequestObservabilityMiddleware(
         var route = GetRouteTemplate(context);
         var method = context.Request.Method;
         var traceId = context.TraceIdentifier;
+        var operation = ApiRequestCorrelation.Operation(context.Request);
         var clientIp = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
         var targetRouteIds = GetTargetRouteIds(context);
         var isWrite = MutatingMethods.Contains(method);
 
         context.Response.OnCompleted(() =>
         {
+            using var scope = _requestLogger.BeginScope(ApiRequestCorrelation.Properties(traceId, operation));
             stopwatch.Stop();
             var statusCode = context.Response.StatusCode;
             var elapsedMilliseconds = stopwatch.Elapsed.TotalMilliseconds;

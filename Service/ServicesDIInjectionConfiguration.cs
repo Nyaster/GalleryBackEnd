@@ -11,6 +11,7 @@ public static class ServicesDiInjectionConfiguration
     {
         services.AddScoped<IAuthenticationService, AuthenticationService>();
         services.AddScoped<IAuthenticatorService, AuthenticatorService>();
+        services.AddSingleton<IForMeFeedCursorProtector, ForMeFeedCursorProtector>();
         services.AddSingleton<IPasswordHasher<AppUser>, PasswordHasher<AppUser>>();
         services.AddSingleton<IImageStorage, LocalImageStorage>();
         services.AddSingleton<IImageProcessor, SkiaImageProcessor>();

@@ -23,6 +23,9 @@ public sealed class RepositoryContext(DbContextOptions<RepositoryContext> option
     public DbSet<RankingSnapshot> RankingSnapshots => Set<RankingSnapshot>();
     public DbSet<RankingSnapshotEntry> RankingSnapshotEntries => Set<RankingSnapshotEntry>();
 
+    public DbSet<ForMeFeed> ForMeFeeds => Set<ForMeFeed>();
+    public DbSet<ForMeFeedEntry> ForMeFeedEntries => Set<ForMeFeedEntry>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasPostgresExtension("vector");
