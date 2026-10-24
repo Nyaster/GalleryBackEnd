@@ -30,8 +30,8 @@ public sealed class UploadPermissionHandlerTests
         user.AuthenticatorEnabledAtUtc = enrolled ? DateTimeOffset.UtcNow : null;
         user.UploadsBlocked = blocked;
         var repositories = Repositories(UserRepository(user));
-        var storage = new Mock<IImageStorage>();
-        var handler = UploadHandler(repositories.Object, new TestUser(7, role), storage);
+        var stager = new Mock<IImageStager>();
+        var handler = UploadHandler(repositories.Object, new TestUser(7, role), stager);
         if (allowed)
             await Assert.ThrowsAsync<ImageUploadValidationError>(() =>
                 handler.Handle(UploadCommand(), CancellationToken.None));
@@ -47,7 +47,7 @@ public sealed class UploadPermissionHandlerTests
         Assert.Equal(enrolled, reported.AuthenticatorEnabled);
         Assert.Equal(blocked, reported.UploadsBlocked);
         Assert.Equal(allowed, Shared.DataTransferObjects.AppUserDto.FromUser(user).CanUploadImages);
-        storage.Verify(service => service.SaveTemporaryAsync(It.IsAny<Stream>(), It.IsAny<CancellationToken>()),
+        stager.Verify(service => service.StageAsync(It.IsAny<Stream>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -70,12 +70,12 @@ public sealed class UploadPermissionHandlerTests
     public async Task UploadImage_UngrantedModerator_ThrowsForbiddenBeforeFileProcessing()
     {
         var users = UserRepository(User(7, canUploadImages: false));
-        var storage = new Mock<IImageStorage>();
-        var handler = UploadHandler(Repositories(users).Object, new TestUser(7, AppUserRole.Moderator), storage);
+        var stager = new Mock<IImageStager>();
+        var handler = UploadHandler(Repositories(users).Object, new TestUser(7, AppUserRole.Moderator), stager);
 
         await Assert.ThrowsAsync<AppForbiddenException>(() => handler.Handle(UploadCommand(), CancellationToken.None));
 
-        storage.Verify(service => service.SaveTemporaryAsync(It.IsAny<Stream>(), It.IsAny<CancellationToken>()),
+        stager.Verify(service => service.StageAsync(It.IsAny<Stream>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -171,8 +171,8 @@ public sealed class UploadPermissionHandlerTests
 
     private static Application.Features.Images.UploadImage.Handler UploadHandler(IRepositoryManager repositories,
         IUserContext currentUser,
-        Mock<IImageStorage>? storage = null)
-        => new(repositories, (storage ?? new Mock<IImageStorage>()).Object, new Mock<IImageProcessor>().Object,
+        Mock<IImageStager>? stager = null)
+        => new(repositories, (stager ?? new Mock<IImageStager>()).Object,
             currentUser, TimeProvider.System,
             Options.Create(new ImageStorageOptions()));
 

@@ -12,8 +12,7 @@ namespace Application.Features.Images.UploadImage;
 
 public sealed class Handler(
     IRepositoryManager repositories,
-    IImageStorage storage,
-    IImageProcessor processor,
+    IImageStager stager,
     IUserContext currentUser,
     TimeProvider clock,
     IOptions<ImageStorageOptions> storageOptions) : IRequestHandler<Command, AppImageDto>
@@ -41,54 +40,32 @@ public sealed class Handler(
             throw new Entities.Exceptions.ImageUploadValidationError("The uploaded file is empty.");
         if (file.Length > storageOptions.Value.MaximumUploadMegabytes * 1024L * 1024L)
             throw new Entities.Exceptions.ImageUploadValidationError($"Image size may not exceed {storageOptions.Value.MaximumUploadMegabytes} MB.");
-        string? temporaryPath = null;
-        string? storageKey = null;
-        var saved = false;
-        try
+        await using var source = file.OpenReadStream();
+        await using var staged = await stager.StageAsync(source, "uploads/", cancellationToken);
+        var now = clock.GetUtcNow();
+        var tags = await repositories.AppImage.GetOrCreateTagsAsync(request.Request.Tags, now, cancellationToken);
+        if (tags.Any(tag => tag.ModerationStatus == TagModerationStatus.Rejected))
+            throw new Entities.Exceptions.Base400BadRequestException("Rejected tags cannot be used.");
+        var image = new UserMadeImage
         {
-            await using var source = file.OpenReadStream();
-            temporaryPath = await storage.SaveTemporaryAsync(source, cancellationToken);
-            var inspected = await processor.InspectAsync(temporaryPath, cancellationToken);
-            storageKey = $"uploads/{Guid.NewGuid():N}{inspected.Extension}";
-            await storage.MoveTemporaryToFinalAsync(temporaryPath, storageKey, cancellationToken);
-            temporaryPath = null;
-
-            var now = clock.GetUtcNow();
-            var tags = await repositories.AppImage.GetOrCreateTagsAsync(request.Request.Tags, now, cancellationToken);
-            if (tags.Any(tag => tag.ModerationStatus == TagModerationStatus.Rejected))
-                throw new Entities.Exceptions.Base400BadRequestException("Rejected tags cannot be used.");
-            var image = new UserMadeImage
-            {
-                Source = ImageSource.UserUpload,
-                UploadedById = currentUser.UserId,
-                UploadedAtUtc = now,
-                Visibility = request.Request.IsPrivate ? ImageVisibility.Private : ImageVisibility.Gallery,
-                ModerationStatus = ModerationStatus.Pending,
-                AiUsage = request.Request.AiUsage,
-                StorageKey = storageKey,
-                ContentType = inspected.ContentType,
-                Width = inspected.Width,
-                Height = inspected.Height,
-                Tags = tags,
-                EmbeddingStatus = EmbeddingStatus.Pending
-            };
-            await repositories.AppImage.AddAsync(image, cancellationToken);
-            await repositories.SaveAsync(cancellationToken);
-            saved = true;
-            var card = await repositories.AppImage.GetCardByIdAsync(image.Id, ImageAuthorization.GetViewer(currentUser), cancellationToken)
-                ?? throw new InvalidOperationException("The saved image could not be read.");
-            return ImageDtoMapper.ToDto(card);
-        }
-        catch
-        {
-            if (storageKey is not null && !saved)
-                await storage.DeleteAsync(storageKey, cancellationToken);
-            throw;
-        }
-        finally
-        {
-            if (temporaryPath is not null && File.Exists(temporaryPath))
-                File.Delete(temporaryPath);
-        }
+            Source = ImageSource.UserUpload,
+            UploadedById = currentUser.UserId,
+            UploadedAtUtc = now,
+            Visibility = request.Request.IsPrivate ? ImageVisibility.Private : ImageVisibility.Gallery,
+            ModerationStatus = ModerationStatus.Pending,
+            AiUsage = request.Request.AiUsage,
+            StorageKey = staged.StorageKey,
+            ContentType = staged.Metadata.ContentType,
+            Width = staged.Metadata.Width,
+            Height = staged.Metadata.Height,
+            Tags = tags,
+            EmbeddingStatus = EmbeddingStatus.Pending
+        };
+        await repositories.AppImage.AddAsync(image, cancellationToken);
+        await repositories.SaveAsync(cancellationToken);
+        staged.MarkPersisted();
+        var card = await repositories.AppImage.GetCardByIdAsync(image.Id, ImageAuthorization.GetViewer(currentUser), cancellationToken)
+            ?? throw new InvalidOperationException("The saved image could not be read.");
+        return ImageDtoMapper.ToDto(card);
     }
 }

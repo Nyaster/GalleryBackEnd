@@ -148,7 +148,7 @@ public sealed class ImageDerivativeCacheTests
         => new(storage, NullLogger<LocalImageDerivativeCache>.Instance);
 
     private static LocalImageStorage Storage(string root)
-        => new(Options.Create(new ImageStorageOptions { RootPath = root }));
+        => new(Options.Create(new ImageStorageOptions { RootPath = root }), NullLogger<LocalImageStorage>.Instance);
 
     private static string TemporaryRoot()
     {

@@ -221,6 +221,8 @@ public sealed class EmbeddingClaimPerformanceTests(PostgresFixture database, ITe
             => Task.FromResult<Stream>(new MemoryStream([1, 2, 3]));
         public Task<string> SaveTemporaryAsync(Stream source, CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
+        public Task DeleteTemporaryAsync(string temporaryPath, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
         public Task MoveTemporaryToFinalAsync(string temporaryPath, string storageKey, CancellationToken cancellationToken = default)
             => throw new NotSupportedException();
         public Task DeleteAsync(string storageKey, CancellationToken cancellationToken = default)

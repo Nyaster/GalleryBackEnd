@@ -1,9 +1,11 @@
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Service.Contracts;
 
 namespace Service;
 
-public sealed class LocalImageStorage(IOptions<ImageStorageOptions> options) : IImageStorage
+public sealed class LocalImageStorage(IOptions<ImageStorageOptions> options, ILogger<LocalImageStorage> logger)
+    : IImageStorage
 {
     private readonly string _rootPath = Path.GetFullPath(options.Value.RootPath);
 
@@ -21,12 +23,31 @@ public sealed class LocalImageStorage(IOptions<ImageStorageOptions> options) : I
         }
         catch
         {
-            if (File.Exists(path)) File.Delete(path);
+            try
+            {
+                await DeleteTemporaryAsync(path, CancellationToken.None);
+            }
+            catch (Exception exception)
+            {
+                logger.LogWarning(exception, "ImageTemporaryCopyCleanupFailed {TemporaryPath}", path);
+            }
             throw;
         }
     }
 
-    public Task MoveTemporaryToFinalAsync(string temporaryPath, string storageKey, CancellationToken cancellationToken = default)
+    public Task DeleteTemporaryAsync(string temporaryPath, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var path = Path.GetFullPath(temporaryPath);
+        var temporaryRoot = Path.Combine(_rootPath, ".tmp") + Path.DirectorySeparatorChar;
+        if (!path.StartsWith(temporaryRoot, StringComparison.Ordinal))
+            throw new InvalidOperationException("Invalid temporary image path.");
+        File.Delete(path);
+        return Task.CompletedTask;
+    }
+
+    public Task MoveTemporaryToFinalAsync(string temporaryPath, string storageKey,
+        CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var destination = ToFullPath(storageKey);

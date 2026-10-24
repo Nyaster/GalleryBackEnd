@@ -16,8 +16,7 @@ namespace Service;
 
 public sealed class AppImageParserService(
     IRepositoryManager repositories,
-    IImageStorage storage,
-    IImageProcessor processor,
+    IImageStager stager,
     IOptions<ParserSettings> options,
     TimeProvider clock,
     ILogger<AppImageParserService> logger) : IImageParserService
@@ -157,55 +156,41 @@ public sealed class AppImageParserService(
     private async Task<bool> ImportCandidateAsync(ScrapedCandidate candidate, string cookie, ParserSettings settings,
         CancellationToken cancellationToken)
     {
-        string? temporaryPath = null;
-        string? storageKey = null;
-        try
+        EnsureAllowedImageUri(candidate.ImageUrl, settings);
+        using var handler = new HttpClientHandler { CookieContainer = CreateCookies(cookie, new Uri(settings.SiteUrl).Host), AllowAutoRedirect = false };
+        using var client = new HttpClient(handler, disposeHandler: false);
+        client.Timeout = TimeSpan.FromSeconds(30);
+        using var response = await SendImageRequestAsync(client, candidate.ImageUrl, settings, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        if (response.Content.Headers.ContentLength is long contentLength && contentLength > settings.MaximumDownloadMegabytes * 1024L * 1024L)
+            throw new ImageUploadValidationError("Remote image exceeds the configured download limit.");
+        await using var body = await response.Content.ReadAsStreamAsync(cancellationToken);
+        await using var boundedBody = new LengthLimitedReadStream(body, settings.MaximumDownloadMegabytes * 1024L * 1024L);
+        await PersistCandidateAsync(candidate, boundedBody, cancellationToken);
+        return true;
+    }
+
+    private async Task PersistCandidateAsync(ScrapedCandidate candidate, Stream source, CancellationToken cancellationToken)
+    {
+        await using var staged = await stager.StageAsync(source, $"scraped/{candidate.MediaId}-", cancellationToken);
+        var tags = await repositories.AppImage.GetOrCreateTagsAsync(candidate.Tags, clock.GetUtcNow(), cancellationToken);
+        await repositories.AppImage.AddAsync(new SelebusImage
         {
-            EnsureAllowedImageUri(candidate.ImageUrl, settings);
-            using var handler = new HttpClientHandler { CookieContainer = CreateCookies(cookie, new Uri(settings.SiteUrl).Host), AllowAutoRedirect = false };
-            using var client = new HttpClient(handler, disposeHandler: false);
-            client.Timeout = TimeSpan.FromSeconds(30);
-            using var response = await SendImageRequestAsync(client, candidate.ImageUrl, settings, cancellationToken);
-            response.EnsureSuccessStatusCode();
-            if (response.Content.Headers.ContentLength is long contentLength && contentLength > settings.MaximumDownloadMegabytes * 1024L * 1024L)
-                throw new ImageUploadValidationError("Remote image exceeds the configured download limit.");
-            await using var body = await response.Content.ReadAsStreamAsync(cancellationToken);
-            await using var boundedBody = new LengthLimitedReadStream(body, settings.MaximumDownloadMegabytes * 1024L * 1024L);
-            temporaryPath = await storage.SaveTemporaryAsync(boundedBody, cancellationToken);
-            var inspected = await processor.InspectAsync(temporaryPath, cancellationToken);
-            storageKey = $"scraped/{candidate.MediaId}-{Guid.NewGuid():N}{inspected.Extension}";
-            await storage.MoveTemporaryToFinalAsync(temporaryPath, storageKey, cancellationToken);
-            temporaryPath = null;
-            var tags = await repositories.AppImage.GetOrCreateTagsAsync(candidate.Tags, clock.GetUtcNow(), cancellationToken);
-            await repositories.AppImage.AddAsync(new SelebusImage
-            {
-                Source = ImageSource.Scraped,
-                ExternalMediaId = candidate.MediaId,
-                UploadedAtUtc = candidate.UploadedAtUtc,
-                Visibility = ImageVisibility.Gallery,
-                ModerationStatus = ModerationStatus.Approved,
-                AiUsage = AiUsageClassification.HumanMade,
-                StorageKey = storageKey,
-                ContentType = inspected.ContentType,
-                Width = inspected.Width,
-                Height = inspected.Height,
-                Tags = tags,
-                EmbeddingStatus = EmbeddingStatus.Pending
-            }, cancellationToken);
-            await repositories.SaveAsync(cancellationToken);
-            return true;
-        }
-        catch
-        {
-            if (storageKey is not null)
-                await storage.DeleteAsync(storageKey, cancellationToken);
-            throw;
-        }
-        finally
-        {
-            if (temporaryPath is not null && File.Exists(temporaryPath))
-                File.Delete(temporaryPath);
-        }
+            Source = ImageSource.Scraped,
+            ExternalMediaId = candidate.MediaId,
+            UploadedAtUtc = candidate.UploadedAtUtc,
+            Visibility = ImageVisibility.Gallery,
+            ModerationStatus = ModerationStatus.Approved,
+            AiUsage = AiUsageClassification.HumanMade,
+            StorageKey = staged.StorageKey,
+            ContentType = staged.Metadata.ContentType,
+            Width = staged.Metadata.Width,
+            Height = staged.Metadata.Height,
+            Tags = tags,
+            EmbeddingStatus = EmbeddingStatus.Pending
+        }, cancellationToken);
+        await repositories.SaveAsync(cancellationToken);
+        staged.MarkPersisted();
     }
 
     private static async Task EnsureLoginAsync(IBrowsingContext context, ParserSettings settings, CancellationToken cancellationToken)

@@ -179,11 +179,15 @@ public sealed class SkiaImageProcessorTests
         var root = Path.Combine(Path.GetTempPath(), $"gallery-storage-{Guid.NewGuid():N}");
         try
         {
-            var storage = new LocalImageStorage(Options.Create(new ImageStorageOptions { RootPath = root }));
+            var storage = new LocalImageStorage(Options.Create(new ImageStorageOptions { RootPath = root }),
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<LocalImageStorage>.Instance);
             var bytes = "gallery image"u8.ToArray();
             await using var input = new MemoryStream(bytes);
             var temporaryPath = await storage.SaveTemporaryAsync(input);
             await storage.MoveTemporaryToFinalAsync(temporaryPath, "uploads/item.bin");
+            await storage.DeleteTemporaryAsync(temporaryPath);
+            await Assert.ThrowsAsync<InvalidOperationException>(() => storage.DeleteTemporaryAsync(
+                Path.Combine(root, ".tmp", "..", "uploads", "item.bin")));
 
             await using var stored = await storage.OpenReadAsync("uploads/item.bin");
             using var output = new MemoryStream();

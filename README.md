@@ -85,6 +85,13 @@ User uploads begin as `Pending`; only an administrator can approve or reject the
 include only approved, non-private images. The uploader and administrators can still read pending or private images
 directly. API errors are RFC 7807 problem-details responses.
 
+Upload and scrape imports share an image staging lifecycle: temporary data is inspected and moved to its final
+storage key, but the staging handle still owns the file until the caller marks it persisted immediately after a
+successful database save. Later response reads or source-stream disposal cannot delete a persisted file. Earlier
+failures trigger best-effort cleanup even after request cancellation; deletion failures are logged without replacing
+the original error. Database saving and file storage are not atomic, so process crashes or failed cleanup may leave
+artifacts that require reconciliation.
+
 ## One-time scrape
 
 After configuring scraper credentials and starting the API, log in with the bootstrap admin and copy `accessToken` from
