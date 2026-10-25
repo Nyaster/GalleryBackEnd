@@ -20,6 +20,7 @@ using Repository;
 using Service;
 using Service.Contracts;
 using System.Text;
+using Shared.Configuration;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 
@@ -60,7 +61,11 @@ builder.Services.AddOptions<ImageStorageOptions>().Bind(builder.Configuration.Ge
     .ValidateDataAnnotations().ValidateOnStart();
 builder.Services.AddOptions<EmbeddingOptions>().Bind(builder.Configuration.GetSection("Embedding"))
     .ValidateDataAnnotations().ValidateOnStart();
+builder.Services.AddOptions<ForMeFeedOptions>().Bind(builder.Configuration.GetSection("ForMeFeed"))
+    .ValidateDataAnnotations().ValidateOnStart();
 builder.Services.AddOptions<ParserSettings>().Bind(builder.Configuration.GetSection("ParserSettings"));
+builder.Services.AddOptions<DatabaseMigrationOptions>().Bind(builder.Configuration.GetSection("DatabaseMigrations"))
+    .ValidateDataAnnotations().ValidateOnStart();
 builder.Services.AddOptions<BootstrapAdminOptions>().Bind(builder.Configuration.GetSection("BootstrapAdmin"));
 builder.Services.Configure<FormOptions>(options => options.MultipartBodyLengthLimit =
     (builder.Configuration.GetValue<int?>("ImageStorage:MaximumUploadMegabytes") ?? 20) * 1024L * 1024L);

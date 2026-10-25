@@ -4,22 +4,30 @@ using Microsoft.Extensions.Options;
 using Repository;
 using Entities.Models;
 using Service;
+using GallerySiteBackend.Configuration;
 
 namespace GallerySiteBackend;
 
 public static class DatabaseMigrationService
 {
-    private static readonly TimeSpan MigrationCommandTimeout = TimeSpan.FromMinutes(10);
-
     public static async Task MigrateAsync(IServiceProvider services, ILogger logger, CancellationToken cancellationToken)
     {
         await using var scope = services.CreateAsyncScope();
         var database = scope.ServiceProvider.GetRequiredService<RepositoryContext>();
         var bootstrapAdmin = scope.ServiceProvider.GetRequiredService<IOptions<BootstrapAdminOptions>>();
         var passwordHasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher<AppUser>>();
+        var options = scope.ServiceProvider.GetRequiredService<IOptions<DatabaseMigrationOptions>>().Value;
         logger.LogInformation("Applying pending database migrations");
-        database.Database.SetCommandTimeout(MigrationCommandTimeout);
-        await database.Database.MigrateAsync(cancellationToken);
+        var previousTimeout = database.Database.GetCommandTimeout();
+        try
+        {
+            database.Database.SetCommandTimeout(options.CommandTimeoutSeconds);
+            await database.Database.MigrateAsync(cancellationToken);
+        }
+        finally
+        {
+            database.Database.SetCommandTimeout(previousTimeout);
+        }
         await SeedBootstrapAdminAsync(database, bootstrapAdmin.Value, passwordHasher, logger, cancellationToken);
     }
 

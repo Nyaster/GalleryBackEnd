@@ -44,6 +44,8 @@ services:
       Authenticator__KeyRingPath: /app/auth-keys
       ImageStorage__RootPath: /app/Data/images
       GuestBrowsing__RequestsPerMinute: ${GUEST_BROWSING_REQUESTS_PER_MINUTE:-300}
+      ForMeFeed__RepresentativeCount: ${FOR_ME_REPRESENTATIVE_COUNT:-25}
+      DatabaseMigrations__CommandTimeoutSeconds: ${MIGRATION_COMMAND_TIMEOUT_SECONDS:-600}
       Observability__LogPath: /app/logs
       Observability__RetentionDays: ${LOG_RETENTION_DAYS:-30}
       Observability__SlowRequestMilliseconds: ${SLOW_REQUEST_MILLISECONDS:-1000}

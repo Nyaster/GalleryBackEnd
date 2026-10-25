@@ -2,12 +2,15 @@ namespace Repository;
 
 public static class ForMeRanking
 {
-    public static IReadOnlyList<int> SelectRepresentatives(IReadOnlyList<float[]> vectors)
+    public static IReadOnlyList<int> SelectRepresentatives(IReadOnlyList<float[]> vectors, int maximumCount)
     {
+        ArgumentNullException.ThrowIfNull(vectors);
+        ArgumentOutOfRangeException.ThrowIfLessThan(maximumCount, 1);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(maximumCount, 100);
         if (vectors.Count == 0) return [];
         var selected = new List<int> { 0 };
         var minimumDistances = Enumerable.Repeat(double.PositiveInfinity, vectors.Count).ToArray();
-        while (selected.Count < Math.Min(10, vectors.Count))
+        while (selected.Count < Math.Min(maximumCount, vectors.Count))
         {
             var latest = vectors[selected[^1]];
             var next = -1;

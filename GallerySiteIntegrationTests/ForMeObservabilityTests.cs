@@ -60,7 +60,7 @@ public sealed class ForMeObservabilityTests(PostgresFixture database) : IClassFi
         Assert.Equal(1, created.GetProperty("NeighborQueryCount").GetInt32());
         Assert.Equal(4, created.GetProperty("StoredImageCount").GetInt32());
         Assert.False(created.TryGetProperty("FallbackQueryElapsedMilliseconds", out _));
-        foreach (var name in new[] { "GenerationSlot", "SeedLoad", "RepresentativeSelection", "NeighborQueries", "Merge", "GenerationCommit", "Publication" })
+        foreach (var name in new[] { "GenerationSlot", "VectorSearchSetup", "ExcludedTagResolution", "SeedLoad", "RepresentativeSelection", "NeighborQueries", "Merge", "GenerationCommit", "Publication" })
             Assert.Equal(JsonValueKind.Number, created.GetProperty(name + "ElapsedMilliseconds").ValueKind);
         foreach (var result in Summaries(creation).Where(entry => Event(entry) != "ForMeFeedCreated"))
         {
@@ -69,6 +69,9 @@ public sealed class ForMeObservabilityTests(PostgresFixture database) : IClassFi
             Assert.Equal("Personalized", result.GetProperty("Mode").GetString());
             Assert.Equal(1, result.GetProperty("ReturnedImageCount").GetInt32());
             Assert.True(result.GetProperty("HasMore").GetBoolean());
+            if (Event(result) == "ForMeFeedPageRead")
+                foreach (var field in new[] { "ConfiguredRepresentativeCount", "ResolvedExcludedTagCount", "AnnCandidateLimit", "AnnCandidateRowCount", "ExactTopUpQueryCount", "ExactTopUpImageCount", "AppliedAnnRandomPageCost" })
+                    Assert.False(result.TryGetProperty(field, out _));
             Assert.Equal(Event(result) == "ForMeRequestHandled" ? "BuildResponse" : "ReadCommit", result.GetProperty("Stage").GetString());
         }
         ValidateJson(creation);
@@ -205,7 +208,8 @@ public sealed class ForMeObservabilityTests(PostgresFixture database) : IClassFi
     }
 
     [Theory]
-    [InlineData("NeighborQueries", "+ 0.0", "ForMeFeedCreated")]
+    [InlineData("ExcludedTagResolution", "ForMeExcludedTagResolution", "ForMeFeedCreated")]
+    [InlineData("NeighborQueries", "ForMeAnnNeighbors", "ForMeFeedCreated")]
     [InlineData("Publication", "FOR UPDATE", "ForMeFeedCreated")]
     [InlineData("CardHydration", "\"Width\"", "ForMeFeedPageRead")]
     public async Task Api_RepositoryFailure_EmitsSafePartialStageAndPreservesGlobalErrorCorrelation(string stage, string marker, string eventName)

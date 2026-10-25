@@ -33,6 +33,8 @@ public sealed class AppImageEfConfiguration : IEntityTypeConfiguration<AppImage>
         builder.HasIndex(image => image.DeletedAtUtc);
         builder.HasIndex(image => image.Embedding)
             .HasMethod("hnsw")
+            .HasStorageParameter("m", 16)
+            .HasStorageParameter("ef_construction", 128)
             .HasOperators("vector_l2_ops")
             .HasFilter("\"Embedding\" IS NOT NULL");
     }

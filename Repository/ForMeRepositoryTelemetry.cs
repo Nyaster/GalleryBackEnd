@@ -13,6 +13,13 @@ internal sealed class ForMeRepositoryTelemetry(ILogger logger, string eventName)
     public LogLevel Level { get; private set; } = LogLevel.Information;
     public string? FailureType { get; private set; }
     public string? Mode { get; set; }
+    public double? AppliedAnnRandomPageCost { get; set; }
+    public int? ResolvedExcludedTagCount { get; set; }
+    public int? ConfiguredRepresentativeCount { get; set; }
+    public int? AnnCandidateLimit { get; set; }
+    public int? AnnCandidateRowCount { get; set; }
+    public int? ExactTopUpQueryCount { get; set; }
+    public int? ExactTopUpImageCount { get; set; }
     public int? SeedCount { get; set; }
     public int? RepresentativeCount { get; set; }
     public int? NeighborQueryCount { get; set; }
@@ -49,6 +56,13 @@ internal sealed class ForMeRepositoryTelemetry(ILogger logger, string eventName)
         if (FailureType is not null) fields.Add(new("FailureType", FailureType));
         if (Mode is not null && (eventName != "ForMeFeedPageRead" || Outcome == "Succeeded"))
             fields.Add(new("Mode", Mode));
+        if (AppliedAnnRandomPageCost is not null) fields.Add(new("AppliedAnnRandomPageCost", AppliedAnnRandomPageCost));
+        if (ResolvedExcludedTagCount is not null) fields.Add(new("ResolvedExcludedTagCount", ResolvedExcludedTagCount));
+        if (ConfiguredRepresentativeCount is not null) fields.Add(new("ConfiguredRepresentativeCount", ConfiguredRepresentativeCount));
+        if (AnnCandidateLimit is not null) fields.Add(new("AnnCandidateLimit", AnnCandidateLimit));
+        if (AnnCandidateRowCount is not null) fields.Add(new("AnnCandidateRowCount", AnnCandidateRowCount));
+        if (ExactTopUpQueryCount is not null) fields.Add(new("ExactTopUpQueryCount", ExactTopUpQueryCount));
+        if (ExactTopUpImageCount is not null) fields.Add(new("ExactTopUpImageCount", ExactTopUpImageCount));
         if (SeedCount is not null) fields.Add(new("SeedCount", SeedCount));
         if (RepresentativeCount is not null) fields.Add(new("RepresentativeCount", RepresentativeCount));
         if (NeighborQueryCount is not null) fields.Add(new("NeighborQueryCount", NeighborQueryCount));

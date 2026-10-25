@@ -10,6 +10,9 @@ using Entities.Models;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+using Shared.Configuration;
 using Npgsql;
 using Pgvector;
 using Repository;
@@ -32,7 +35,7 @@ public sealed class ForMeFeedTests(PostgresFixture database) : IClassFixture<Pos
         var seed = await SeedAsync();
         var capture = new QueryCapture();
         await using var context = database.CreateContext(capture);
-        var repository = new ForMeFeedRepository(context, seed.Clock, Microsoft.Extensions.Logging.Abstractions.NullLogger<ForMeFeedRepository>.Instance);
+        var repository = new ForMeFeedRepository(context, seed.Clock, NullLogger<ForMeFeedRepository>.Instance, Options.Create(new ForMeFeedOptions()));
         var id = await repository.CreateAsync(seed.UserId, 20, All);
         var page = await repository.ReadAsync(id, new ImageViewer(seed.UserId, true), 0);
 
@@ -40,7 +43,7 @@ public sealed class ForMeFeedTests(PostgresFixture database) : IClassFixture<Pos
         Assert.Equal(seed.Images.Skip(2).Take(4).Select(image => image.Id), page.Images.Select(image => image.Id));
         Assert.All(page.Images, image => Assert.False(image.IsLikedByCurrentUser));
         Assert.False(page.HasMore);
-        Assert.Contains(capture.Reads, sql => sql.Contains("+ 0.0") && sql.Contains("LIMIT"));
+        Assert.Contains(capture.Reads, sql => sql.Contains("ForMeAnnNeighbors") && !sql.Contains("+ 0.0") && sql.Contains("LIMIT"));
         Assert.DoesNotContain(capture.Entities, entity => entity is AppImage or ImageLike);
     }
 
@@ -49,7 +52,7 @@ public sealed class ForMeFeedTests(PostgresFixture database) : IClassFixture<Pos
     {
         var seed = await SeedAsync();
         await using var context = database.CreateContext();
-        var repository = new ForMeFeedRepository(context, seed.Clock, Microsoft.Extensions.Logging.Abstractions.NullLogger<ForMeFeedRepository>.Instance);
+        var repository = new ForMeFeedRepository(context, seed.Clock, NullLogger<ForMeFeedRepository>.Instance, Options.Create(new ForMeFeedOptions()));
         var id = await repository.CreateAsync(seed.UserId, 1, All);
         var first = await repository.ReadAsync(id, new(seed.UserId, false), 0);
         Assert.Equal(seed.Images[2].Id, Assert.Single(first.Images).Id);
@@ -86,7 +89,7 @@ public sealed class ForMeFeedTests(PostgresFixture database) : IClassFixture<Pos
             new ImageLike { ImageId = seed.Images[2].Id, UserId = seed.ThirdId, CreatedAtUtc = seed.Clock.GetUtcNow() },
             new ImageLike { ImageId = seed.Images[3].Id, UserId = seed.OtherId, CreatedAtUtc = seed.Clock.GetUtcNow() });
         await context.SaveChangesAsync();
-        var repository = new ForMeFeedRepository(context, seed.Clock, Microsoft.Extensions.Logging.Abstractions.NullLogger<ForMeFeedRepository>.Instance);
+        var repository = new ForMeFeedRepository(context, seed.Clock, NullLogger<ForMeFeedRepository>.Instance, Options.Create(new ForMeFeedOptions()));
         var id = await repository.CreateAsync(seed.UserId, 20, All);
         var page = await repository.ReadAsync(id, new(seed.UserId, false), 0);
 
@@ -108,7 +111,7 @@ public sealed class ForMeFeedTests(PostgresFixture database) : IClassFixture<Pos
             .ExecuteUpdateAsync(update => update.SetProperty(image => image.AiUsage, AiUsageClassification.AiGenerated));
         await context.SaveChangesAsync();
         var filters = new ForMeFilters([(int)AiUsageClassification.HumanMade], ["landscape"]);
-        var repository = new ForMeFeedRepository(context, seed.Clock, Microsoft.Extensions.Logging.Abstractions.NullLogger<ForMeFeedRepository>.Instance);
+        var repository = new ForMeFeedRepository(context, seed.Clock, NullLogger<ForMeFeedRepository>.Instance, Options.Create(new ForMeFeedOptions()));
         var id = await repository.CreateAsync(seed.UserId, 20, filters);
         var personalized = await repository.ReadAsync(id, new(seed.UserId, true), 0);
         Assert.Equal("Personalized", personalized.Feed.Mode);
@@ -135,7 +138,7 @@ public sealed class ForMeFeedTests(PostgresFixture database) : IClassFixture<Pos
         context.ImageLikes.AddRange(liked.Select((image, index) => new ImageLike
             { ImageId = image.Id, UserId = seed.UserId, CreatedAtUtc = now.AddMinutes(index) }));
         await context.SaveChangesAsync();
-        var repository = new ForMeFeedRepository(context, seed.Clock, Microsoft.Extensions.Logging.Abstractions.NullLogger<ForMeFeedRepository>.Instance);
+        var repository = new ForMeFeedRepository(context, seed.Clock, NullLogger<ForMeFeedRepository>.Instance, Options.Create(new ForMeFeedOptions()));
         var id = await repository.CreateAsync(seed.UserId, 50, All);
         var stored = await context.ForMeFeedEntries.Where(entry => entry.FeedId == id).Select(entry => entry.ImageId).ToListAsync();
         Assert.Equal(500, stored.Count);
@@ -226,7 +229,7 @@ public sealed class ForMeFeedTests(PostgresFixture database) : IClassFixture<Pos
         for (var slot = 0; slot < 2; slot++)
             Assert.True(await holder.Database.SqlQuery<bool>($"SELECT pg_try_advisory_xact_lock({ForMeFeedRepository.GenerationLockNamespace}, {slot}) AS \"Value\"").SingleAsync());
         await using var context = database.CreateContext();
-        await Assert.ThrowsAsync<ForMeFeedLimitException>(() => new ForMeFeedRepository(context, seed.Clock, Microsoft.Extensions.Logging.Abstractions.NullLogger<ForMeFeedRepository>.Instance).CreateAsync(seed.UserId, 20, All));
+        await Assert.ThrowsAsync<ForMeFeedLimitException>(() => new ForMeFeedRepository(context, seed.Clock, NullLogger<ForMeFeedRepository>.Instance, Options.Create(new ForMeFeedOptions())).CreateAsync(seed.UserId, 20, All));
         Assert.Empty(await context.ForMeFeeds.ToListAsync());
     }
 
@@ -244,9 +247,9 @@ public sealed class ForMeFeedTests(PostgresFixture database) : IClassFixture<Pos
         var secondAttempt = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
         await using var firstContext = database.CreateContext(new PublicationGate(firstLocked, release));
         await using var secondContext = database.CreateContext(new PublicationGate(secondAttempt));
-        var firstTask = new ForMeFeedRepository(firstContext, seed.Clock, Microsoft.Extensions.Logging.Abstractions.NullLogger<ForMeFeedRepository>.Instance).CreateAsync(seed.UserId, 20, All);
+        var firstTask = new ForMeFeedRepository(firstContext, seed.Clock, NullLogger<ForMeFeedRepository>.Instance, Options.Create(new ForMeFeedOptions())).CreateAsync(seed.UserId, 20, All);
         await firstLocked.Task.WaitAsync(TimeSpan.FromSeconds(20));
-        var secondTask = new ForMeFeedRepository(secondContext, seed.Clock, Microsoft.Extensions.Logging.Abstractions.NullLogger<ForMeFeedRepository>.Instance).CreateAsync(seed.UserId, 20, All);
+        var secondTask = new ForMeFeedRepository(secondContext, seed.Clock, NullLogger<ForMeFeedRepository>.Instance, Options.Create(new ForMeFeedOptions())).CreateAsync(seed.UserId, 20, All);
         var pid = await secondAttempt.Task.WaitAsync(TimeSpan.FromSeconds(20));
         try { await WaitForDatabaseLockAsync(pid); }
         finally { release.TrySetResult(); }
@@ -261,7 +264,7 @@ public sealed class ForMeFeedTests(PostgresFixture database) : IClassFixture<Pos
     {
         var seed = await SeedAsync();
         await using var context = database.CreateContext();
-        var repository = new ForMeFeedRepository(context, seed.Clock, Microsoft.Extensions.Logging.Abstractions.NullLogger<ForMeFeedRepository>.Instance);
+        var repository = new ForMeFeedRepository(context, seed.Clock, NullLogger<ForMeFeedRepository>.Instance, Options.Create(new ForMeFeedOptions()));
         var id = await repository.CreateAsync(seed.UserId, 20, All);
         await context.Images.Where(image => image.Id == seed.Images[2].Id).ExecuteDeleteAsync();
         var page = await repository.ReadAsync(id, new(seed.UserId, false), 0);
@@ -282,7 +285,7 @@ public sealed class ForMeFeedTests(PostgresFixture database) : IClassFixture<Pos
         var candidateIds = seed.Images.Skip(2).Take(4).Select(image => image.Id).ToArray();
         await context.Images.Where(image => Enumerable.Contains(candidateIds, image.Id))
             .ExecuteUpdateAsync(update => update.SetProperty(image => image.Embedding, (Vector?)null));
-        var repository = new ForMeFeedRepository(context, seed.Clock, Microsoft.Extensions.Logging.Abstractions.NullLogger<ForMeFeedRepository>.Instance);
+        var repository = new ForMeFeedRepository(context, seed.Clock, NullLogger<ForMeFeedRepository>.Instance, Options.Create(new ForMeFeedOptions()));
         var id = await repository.CreateAsync(seed.UserId, 20, All);
         var fallback = await repository.ReadAsync(id, new(seed.UserId, false), 0);
         Assert.Equal("Fallback", fallback.Feed.Mode);
@@ -328,7 +331,7 @@ public sealed class ForMeFeedTests(PostgresFixture database) : IClassFixture<Pos
         context.ForMeFeeds.AddRange(Enumerable.Range(0, 1001).Select(_ => Header(seed.UserId, seed.Clock.GetUtcNow().AddHours(-2))));
         context.ForMeFeeds.Add(Header(seed.UserId, seed.Clock.GetUtcNow()));
         await context.SaveChangesAsync();
-        var repository = new ForMeFeedRepository(context, seed.Clock, Microsoft.Extensions.Logging.Abstractions.NullLogger<ForMeFeedRepository>.Instance);
+        var repository = new ForMeFeedRepository(context, seed.Clock, NullLogger<ForMeFeedRepository>.Instance, Options.Create(new ForMeFeedOptions()));
         Assert.Equal(1000, await repository.DeleteExpiredAsync());
         Assert.Equal(1, await repository.DeleteExpiredAsync());
         Assert.Equal(1, await context.ForMeFeeds.CountAsync());
@@ -341,7 +344,7 @@ public sealed class ForMeFeedTests(PostgresFixture database) : IClassFixture<Pos
         var locked = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         await using var publisher = database.CreateContext(new ImageKeyGate(locked, release));
-        var creation = new ForMeFeedRepository(publisher, seed.Clock, Microsoft.Extensions.Logging.Abstractions.NullLogger<ForMeFeedRepository>.Instance).CreateAsync(seed.UserId, 20, All);
+        var creation = new ForMeFeedRepository(publisher, seed.Clock, NullLogger<ForMeFeedRepository>.Instance, Options.Create(new ForMeFeedOptions())).CreateAsync(seed.UserId, 20, All);
         await locked.Task.WaitAsync(TimeSpan.FromSeconds(20));
         await using var deleting = database.CreateContext();
         await deleting.Database.OpenConnectionAsync();
@@ -351,7 +354,7 @@ public sealed class ForMeFeedTests(PostgresFixture database) : IClassFixture<Pos
         finally { release.TrySetResult(); }
         var id = await creation;
         Assert.Equal(1, await deletion);
-        var page = await new ForMeFeedRepository(publisher, seed.Clock, Microsoft.Extensions.Logging.Abstractions.NullLogger<ForMeFeedRepository>.Instance).ReadAsync(id, new(seed.UserId, false), 0);
+        var page = await new ForMeFeedRepository(publisher, seed.Clock, NullLogger<ForMeFeedRepository>.Instance, Options.Create(new ForMeFeedOptions())).ReadAsync(id, new(seed.UserId, false), 0);
         Assert.Equal(4, page.Feed.Total);
         Assert.Equal(3, page.Images.Count);
     }
@@ -363,7 +366,7 @@ public sealed class ForMeFeedTests(PostgresFixture database) : IClassFixture<Pos
         using var cancellation = new CancellationTokenSource();
         await using var context = database.CreateContext(new CancelInsert(cancellation));
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            new ForMeFeedRepository(context, seed.Clock, Microsoft.Extensions.Logging.Abstractions.NullLogger<ForMeFeedRepository>.Instance).CreateAsync(seed.UserId, 20, All, cancellation.Token));
+            new ForMeFeedRepository(context, seed.Clock, NullLogger<ForMeFeedRepository>.Instance, Options.Create(new ForMeFeedOptions())).CreateAsync(seed.UserId, 20, All, cancellation.Token));
         await using var check = database.CreateContext();
         Assert.Empty(await check.ForMeFeeds.ToListAsync());
         Assert.Empty(await check.ForMeFeedEntries.ToListAsync());

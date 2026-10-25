@@ -141,7 +141,9 @@ namespace Repository.Migrations
                     b.HasIndex("DeletedAtUtc");
 
                     b.HasIndex("Embedding")
-                        .HasFilter("\"Embedding\" IS NOT NULL");
+                        .HasFilter("\"Embedding\" IS NOT NULL")
+                        .HasAnnotation("Npgsql:StorageParameter:ef_construction", 128)
+                        .HasAnnotation("Npgsql:StorageParameter:m", 16);
 
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Embedding"), "hnsw");
                     NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("Embedding"), new[] { "vector_l2_ops" });

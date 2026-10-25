@@ -9,17 +9,39 @@ public sealed class ForMeRankingTests
     {
         float[][] vectors = [[0, 0], [1, 0], [10, 0], [10, 0]];
 
-        var selected = ForMeRanking.SelectRepresentatives(vectors);
+        var selected = ForMeRanking.SelectRepresentatives(vectors, 25);
 
         Assert.Equal(new[] { 0, 2, 1 }, selected);
     }
 
-    [Fact]
-    public void SelectRepresentatives_ManyDifferentLikes_IsBoundedAtTen()
+    [Theory]
+    [InlineData(1)]
+    [InlineData(10)]
+    [InlineData(25)]
+    [InlineData(100)]
+    public void SelectRepresentatives_ManyDifferentLikes_RespectsConfiguredLimit(int limit)
     {
         var vectors = Enumerable.Range(0, 100).Select(value => new[] { (float)value }).ToArray();
-        Assert.Equal(10, ForMeRanking.SelectRepresentatives(vectors).Count);
+        Assert.Equal(limit, ForMeRanking.SelectRepresentatives(vectors, limit).Count);
     }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(101)]
+    public void SelectRepresentatives_EmptyInputAndInvalidLimit_RejectsLimit(int limit)
+        => Assert.Throws<ArgumentOutOfRangeException>(() => ForMeRanking.SelectRepresentatives([], limit));
+
+    [Fact]
+    public void SelectRepresentatives_NullInput_RejectsInput()
+        => Assert.Throws<ArgumentNullException>(() => ForMeRanking.SelectRepresentatives(null!, 25));
+
+    [Fact]
+    public void SelectRepresentatives_EmptyInput_ReturnsNoReferences()
+        => Assert.Empty(ForMeRanking.SelectRepresentatives([], 25));
+
+    [Fact]
+    public void SelectRepresentatives_IdenticalLikes_UsesOneReference()
+        => Assert.Equal(new[] { 0 }, ForMeRanking.SelectRepresentatives([[1f], [1f], [1f]], 25));
 
     [Fact]
     public void Merge_OverlappingNeighborhoods_PreservesVarietyWithoutDuplicates()

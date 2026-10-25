@@ -1,17 +1,29 @@
 using System.Data;
+using System.Globalization;
 using Microsoft.Extensions.Logging;
 using Contracts;
 using Entities.Exceptions;
 using Entities.Models;
 using Microsoft.EntityFrameworkCore;
 using Pgvector.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using Shared.Configuration;
 
 namespace Repository;
 
-public sealed class ForMeFeedRepository(RepositoryContext context, TimeProvider clock, ILogger<ForMeFeedRepository> logger) : IForMeFeedRepository
+public sealed class ForMeFeedRepository(RepositoryContext context, TimeProvider clock, ILogger<ForMeFeedRepository> logger, IOptions<ForMeFeedOptions> options) : IForMeFeedRepository
 {
     // Two transaction-scoped slots in a feature-specific two-int advisory-lock namespace.
     public const int GenerationLockNamespace = 0x464F524D;
+    internal const string AnnQueryTag = "ForMeAnnNeighbors";
+    internal const string TagResolutionQueryTag = "ForMeExcludedTagResolution";
+    internal const string ExactTopUpQueryTag = "ForMeExactTopUp";
+    internal const int AnnCandidateLimit = 2000;
+    internal const int FilteredAnnCandidateLimit = 1000;
+    internal const int SearchEffort = 200;
+    internal const int ScanMemoryMultiplier = 2;
+    internal const int MaxScanTuples = 20000;
+    internal const double AnnRandomPageCost = 1.1;
 
     public async Task<Guid> CreateAsync(int userId, int pageSize, ForMeFilters filters,
         CancellationToken cancellationToken = default)
@@ -34,6 +46,34 @@ public sealed class ForMeFeedRepository(RepositoryContext context, TimeProvider 
                     throw new ForMeFeedLimitException("Recommendation generation is busy. Retry later.", 2);
 
                 generationSlot.Dispose();
+                telemetry.ConfiguredRepresentativeCount = options.Value.RepresentativeCount;
+                var annCandidateLimit = GetAnnCandidateLimit(filters);
+                telemetry.AnnCandidateLimit = annCandidateLimit;
+                telemetry.AnnCandidateRowCount = 0;
+                telemetry.ExactTopUpQueryCount = 0;
+                telemetry.ExactTopUpImageCount = 0;
+                using (telemetry.Measure("VectorSearchSetup"))
+                {
+                    var installed = await context.Database.SqlQuery<string>($"""
+                        SELECT extversion AS "Value" FROM pg_extension WHERE extname = 'vector'
+                        """).SingleOrDefaultAsync(cancellationToken);
+                    if (!Version.TryParse(installed, out var version) || version < new Version(0, 8, 0))
+                        throw new InvalidOperationException("Personalized feeds require a released pgvector version 0.8.0 or newer. Upgrade the vector extension before creating a feed.");
+                    await ConfigureVectorSearchAsync(context, SearchEffort, ScanMemoryMultiplier, MaxScanTuples, cancellationToken);
+                }
+                ForMeFilters generationFilters;
+                using (telemetry.Measure("ExcludedTagResolution"))
+                {
+                    // The normalized request contains at most 20 names and NormalizedName is unique.
+                    // Resolve metadata within this generation snapshot; retain original names for future pages.
+                    var approvedNames = filters.ExcludedTags.Length == 0 ? [] : await context.Tags.AsNoTracking()
+                        .TagWith(TagResolutionQueryTag)
+                        .Where(tag => tag.ModerationStatus == TagModerationStatus.Approved &&
+                            filters.ExcludedTags.Contains(tag.NormalizedName))
+                        .Select(tag => tag.NormalizedName).ToArrayAsync(cancellationToken);
+                    telemetry.ResolvedExcludedTagCount = approvedNames.Length;
+                    generationFilters = new ForMeFilters(filters.AiUsage, approvedNames);
+                }
                 List<Pgvector.Vector> seeds;
                 using (telemetry.Measure("SeedLoad"))
                 {
@@ -47,32 +87,61 @@ public sealed class ForMeFeedRepository(RepositoryContext context, TimeProvider 
                 telemetry.SeedCount = seeds.Count;
                 IReadOnlyList<int> representatives;
                 using (telemetry.Measure("RepresentativeSelection"))
-                    representatives = ForMeRanking.SelectRepresentatives(seeds.Select(seed => seed.ToArray()).ToArray());
+                    representatives = ForMeRanking.SelectRepresentatives(seeds.Select(seed => seed.ToArray()).ToArray(), options.Value.RepresentativeCount);
                 telemetry.RepresentativeCount = representatives.Count;
-                var candidates = Eligible(userId, filters).Where(image => image.Embedding != null);
+                var candidates = Eligible(userId, generationFilters).Where(image => image.Embedding != null);
                 var neighborhoods = new List<IReadOnlyList<int>>();
                 using (telemetry.Measure("NeighborQueries"))
                 {
                     telemetry.NeighborQueryCount = 0;
+                    string? previousRandomPageCost = null;
+                    if (representatives.Count > 0 && filters.AiUsage.Length == 0 && filters.ExcludedTags.Length == 0)
+                    {
+                        previousRandomPageCost = await ApplyAnnPlannerCostAsync(context, cancellationToken);
+                        telemetry.AppliedAnnRandomPageCost = AnnRandomPageCost;
+                    }
                     foreach (var representative in representatives)
                     {
                         var vector = seeds[representative];
-                        // An expression rather than the bare distance operator deliberately requests exact retrieval.
-                        // Keep the vectors in PostgreSQL: only the bounded neighbor IDs cross this boundary.
-                        neighborhoods.Add(await candidates.OrderBy(image => image.Embedding!.L2Distance(vector) + 0.0)
-                            .ThenBy(image => image.Id).Select(image => image.Id).Take(500).ToListAsync(cancellationToken));
+                        // Keep the inner distance order bare so pgvector can use HNSW.
+                        // Only a bounded shortlist of IDs and exact distances leaves PostgreSQL.
+                        var neighbors = await candidates.TagWith(AnnQueryTag)
+                            .OrderBy(image => image.Embedding!.L2Distance(vector))
+                            .Select(image => new { image.Id, Distance = image.Embedding!.L2Distance(vector) })
+                            .Take(annCandidateLimit).ToListAsync(cancellationToken);
+                        cancellationToken.ThrowIfCancellationRequested();
+                        neighborhoods.Add(neighbors.OrderBy(row => row.Distance).ThenBy(row => row.Id)
+                            .Take(500).Select(row => row.Id).ToArray());
+                        telemetry.AnnCandidateRowCount += neighbors.Count;
                         telemetry.NeighborQueryCount++;
                     }
+                    if (previousRandomPageCost is not null)
+                        await RestoreAnnPlannerCostAsync(context, previousRandomPageCost, cancellationToken);
                 }
                 using (telemetry.Measure("Merge"))
                     orderedIds = ForMeRanking.Merge(neighborhoods);
+                cancellationToken.ThrowIfCancellationRequested();
+                if (representatives.Count > 0 && orderedIds.Count < 500)
+                {
+                    using var topUpTiming = telemetry.Measure("ExactTopUp");
+                    telemetry.ExactTopUpQueryCount = 1;
+                    var mergedIds = orderedIds.ToArray();
+                    var firstVector = seeds[representatives[0]];
+                    var topUp = await candidates.TagWith(ExactTopUpQueryTag)
+                        .Where(image => !mergedIds.Contains(image.Id))
+                        .OrderBy(image => image.Embedding!.L2Distance(firstVector) + 0.0)
+                        .ThenBy(image => image.Id).Select(image => image.Id)
+                        .Take(500 - orderedIds.Count).ToListAsync(cancellationToken);
+                    telemetry.ExactTopUpImageCount = topUp.Count;
+                    orderedIds = orderedIds.Concat(topUp).ToArray();
+                }
                 telemetry.Mode = orderedIds.Count > 0 ? "Personalized" : "Fallback";
                 if (orderedIds.Count > 0)
                     mode = "Personalized";
                 else
                 {
                     using var fallbackQuery = telemetry.Measure("FallbackQuery");
-                    orderedIds = await Eligible(userId, filters).OrderByDescending(image => image.Likes.Count)
+                    orderedIds = await Eligible(userId, generationFilters).OrderByDescending(image => image.Likes.Count)
                         .ThenByDescending(image => image.UploadedAtUtc).ThenByDescending(image => image.Id)
                         .Select(image => image.Id).Take(500).ToListAsync(cancellationToken);
                 }
@@ -175,6 +244,37 @@ public sealed class ForMeFeedRepository(RepositoryContext context, TimeProvider 
             )
             """, cancellationToken);
     }
+
+    internal static async Task<string> ApplyAnnPlannerCostAsync(RepositoryContext database,
+        CancellationToken cancellationToken = default)
+    {
+        var previous = await database.Database.SqlQuery<string>($"""
+            SELECT current_setting('random_page_cost') AS "Value"
+            """).SingleAsync(cancellationToken);
+        await database.Database.ExecuteSqlInterpolatedAsync($"""
+            SELECT set_config('random_page_cost', {AnnRandomPageCost.ToString(CultureInfo.InvariantCulture)}, true)
+            """, cancellationToken);
+        return previous;
+    }
+
+    internal static Task RestoreAnnPlannerCostAsync(RepositoryContext database, string previous,
+        CancellationToken cancellationToken = default)
+        => database.Database.ExecuteSqlInterpolatedAsync($"""
+            SELECT set_config('random_page_cost', {previous}, true)
+            """, cancellationToken);
+
+    internal static int GetAnnCandidateLimit(ForMeFilters filters)
+        => filters.AiUsage.Length == 0 && filters.ExcludedTags.Length == 0
+            ? AnnCandidateLimit : FilteredAnnCandidateLimit;
+
+    internal static Task ConfigureVectorSearchAsync(RepositoryContext database, int searchEffort,
+        int scanMemoryMultiplier, int maxScanTuples, CancellationToken cancellationToken = default)
+        => database.Database.ExecuteSqlInterpolatedAsync($"""
+            SELECT set_config('hnsw.iterative_scan', 'relaxed_order', true),
+                   set_config('hnsw.max_scan_tuples', {maxScanTuples.ToString(CultureInfo.InvariantCulture)}, true),
+                   set_config('hnsw.scan_mem_multiplier', {scanMemoryMultiplier.ToString(CultureInfo.InvariantCulture)}, true),
+                   set_config('hnsw.ef_search', {searchEffort.ToString(CultureInfo.InvariantCulture)}, true)
+            """, cancellationToken);
 
     private IQueryable<AppImage> Eligible(int userId, ForMeFilters filters)
     {
