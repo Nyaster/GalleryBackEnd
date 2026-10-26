@@ -18,8 +18,7 @@ public sealed class ForMeFeedRepository(RepositoryContext context, TimeProvider 
     internal const string AnnQueryTag = "ForMeAnnNeighbors";
     internal const string TagResolutionQueryTag = "ForMeExcludedTagResolution";
     internal const string ExactTopUpQueryTag = "ForMeExactTopUp";
-    internal const int AnnCandidateLimit = 2000;
-    internal const int FilteredAnnCandidateLimit = 1000;
+    internal const int AnnCandidateLimit = 500;
     internal const int SearchEffort = 200;
     internal const int ScanMemoryMultiplier = 2;
     internal const int MaxScanTuples = 20000;
@@ -47,8 +46,7 @@ public sealed class ForMeFeedRepository(RepositoryContext context, TimeProvider 
 
                 generationSlot.Dispose();
                 telemetry.ConfiguredRepresentativeCount = options.Value.RepresentativeCount;
-                var annCandidateLimit = GetAnnCandidateLimit(filters);
-                telemetry.AnnCandidateLimit = annCandidateLimit;
+                telemetry.AnnCandidateLimit = AnnCandidateLimit;
                 telemetry.AnnCandidateRowCount = 0;
                 telemetry.ExactTopUpQueryCount = 0;
                 telemetry.ExactTopUpImageCount = 0;
@@ -108,7 +106,7 @@ public sealed class ForMeFeedRepository(RepositoryContext context, TimeProvider 
                         var neighbors = await candidates.TagWith(AnnQueryTag)
                             .OrderBy(image => image.Embedding!.L2Distance(vector))
                             .Select(image => new { image.Id, Distance = image.Embedding!.L2Distance(vector) })
-                            .Take(annCandidateLimit).ToListAsync(cancellationToken);
+                            .Take(AnnCandidateLimit).ToListAsync(cancellationToken);
                         cancellationToken.ThrowIfCancellationRequested();
                         neighborhoods.Add(neighbors.OrderBy(row => row.Distance).ThenBy(row => row.Id)
                             .Take(500).Select(row => row.Id).ToArray());
@@ -262,10 +260,6 @@ public sealed class ForMeFeedRepository(RepositoryContext context, TimeProvider 
         => database.Database.ExecuteSqlInterpolatedAsync($"""
             SELECT set_config('random_page_cost', {previous}, true)
             """, cancellationToken);
-
-    internal static int GetAnnCandidateLimit(ForMeFilters filters)
-        => filters.AiUsage.Length == 0 && filters.ExcludedTags.Length == 0
-            ? AnnCandidateLimit : FilteredAnnCandidateLimit;
 
     internal static Task ConfigureVectorSearchAsync(RepositoryContext database, int searchEffort,
         int scanMemoryMultiplier, int maxScanTuples, CancellationToken cancellationToken = default)

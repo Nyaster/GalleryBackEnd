@@ -107,7 +107,7 @@ public sealed partial class ForMeVectorSearchTests
             Assert.True(mutation.Applied);
             var created = Assert.Single(logger.Events);
             Assert.Equal(0, created["ResolvedExcludedTagCount"]);
-            Assert.Equal(1000, created["AnnCandidateLimit"]);
+            Assert.Equal(500, created["AnnCandidateLimit"]);
             Assert.False(created.ContainsKey("AppliedAnnRandomPageCost"));
             Assert.All(costs.Values, value => Assert.Equal("2.3", value.Cost));
             Assert.DoesNotContain("NormalizedName", Assert.Single(capture.Reads, sql => sql.Contains(ForMeFeedRepository.AnnQueryTag)));

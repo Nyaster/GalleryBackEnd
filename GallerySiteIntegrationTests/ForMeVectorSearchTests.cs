@@ -50,8 +50,8 @@ public sealed partial class ForMeVectorSearchTests(PostgresFixture database) : I
     public async Task Create_CandidatePoolExceedsShortlist_BoundsMaterializedRows(bool usage, bool tag)
     {
         var filters = new ForMeFilters(usage ? [(int)AiUsageClassification.HumanMade] : [], tag ? ["nonexistent-bound-tag"] : []);
-        var limit = ForMeFeedRepository.GetAnnCandidateLimit(filters);
-        Assert.Equal(usage || tag ? 1000 : 2000, limit);
+        var limit = ForMeFeedRepository.AnnCandidateLimit;
+        Assert.Equal(500, limit);
         var user = await SeedAsync(1, limit + 250);
         var capture = new QueryCapture();
         var metrics = new AnnReadMetrics();
@@ -61,6 +61,7 @@ public sealed partial class ForMeVectorSearchTests(PostgresFixture database) : I
         Assert.Equal(limit, Assert.Single(logger.Events)["AnnCandidateLimit"]);
         var read = Assert.Single(metrics.Reads);
         Assert.Equal(2, read.Columns);
+        Assert.Equal(500, Assert.Single(metrics.Limits));
         Assert.Equal(limit, read.Rows);
         Assert.DoesNotContain(capture.Entities, entity => entity is AppImage or ImageLike);
     }
@@ -270,11 +271,33 @@ public sealed partial class ForMeVectorSearchTests(PostgresFixture database) : I
     {
         private readonly ImageRepositoryReadMetrics _metrics = new();
         public IReadOnlyList<ImageRepositoryReadMetrics.Read> Reads => _metrics.Reads;
+        public List<int> Limits { get; } = [];
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command,
+            CommandEventData eventData, InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default)
+        {
+            if (command.CommandText.Contains(ForMeFeedRepository.AnnQueryTag)) Limits.Add((int)AnnLimitParameter.Find(command).Value!);
+            return ValueTask.FromResult(result);
+        }
         public override ValueTask<DbDataReader> ReaderExecutedAsync(DbCommand command,
             CommandExecutedEventData eventData, DbDataReader result, CancellationToken cancellationToken = default)
             => command.CommandText.Contains(ForMeFeedRepository.AnnQueryTag)
                 ? _metrics.ReaderExecutedAsync(command, eventData, result, cancellationToken)
                 : ValueTask.FromResult(result);
+    }
+
+    [Fact]
+    public async Task LimitAnnRows_UserIdEqualsLimit_ChangesOnlySqlLimitParameter()
+    {
+        using var command = new Npgsql.NpgsqlCommand("-- ForMeAnnNeighbors\nSELECT 1 WHERE @userId = 500\nLIMIT @limit");
+        command.Parameters.AddWithValue("userId", 500);
+        command.Parameters.AddWithValue("limit", 500);
+        await new LimitAnnRows(3).ReaderExecutingAsync(command, null!, default);
+        Assert.Equal(500, command.Parameters["userId"].Value);
+        Assert.Equal(3, command.Parameters["limit"].Value);
+        command.CommandText = "-- ForMeAnnNeighbors\nSELECT @userId";
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await new LimitAnnRows(3).ReaderExecutingAsync(command, null!, default));
+        Assert.Contains("SQL LIMIT", error.Message);
     }
 
     private sealed class LimitAnnRows(int limit) : DbCommandInterceptor
@@ -283,8 +306,7 @@ public sealed partial class ForMeVectorSearchTests(PostgresFixture database) : I
             CommandEventData eventData, InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default)
         {
             if (command.CommandText.Contains(ForMeFeedRepository.AnnQueryTag))
-                foreach (DbParameter parameter in command.Parameters)
-                    if (parameter.Value is int count && count == ForMeFeedRepository.AnnCandidateLimit) parameter.Value = limit;
+                AnnLimitParameter.Find(command).Value = limit;
             return ValueTask.FromResult(result);
         }
     }

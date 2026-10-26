@@ -66,12 +66,19 @@ public sealed partial class ForMeFeedPerformanceTests(PostgresFixture database, 
 
     private static IReadOnlyList<SearchProfile> CalibrationProfiles =>
     [
-        new(2000, 200, 2, 20000), new(2000, 200, 4, 20000), new(2000, 200, 8, 20000),
-        new(2000, 400, 8, 20000), new(2000, 1000, 8, 20000), new(2000, 1000, 8, 40000)
+        new(ForMeFeedRepository.AnnCandidateLimit, 200, 2, 20000), new(ForMeFeedRepository.AnnCandidateLimit, 200, 4, 20000), new(ForMeFeedRepository.AnnCandidateLimit, 200, 8, 20000),
+        new(ForMeFeedRepository.AnnCandidateLimit, 400, 8, 20000), new(ForMeFeedRepository.AnnCandidateLimit, 1000, 8, 20000), new(ForMeFeedRepository.AnnCandidateLimit, 1000, 8, 40000)
     ];
 
     [ImageRepositoryPerformanceFact]
-    public async Task Feed_HundredThousandDenseVectors_MeetsGenerationPagingAndRecallBudgets()
+    public Task Feed_HundredThousandDenseVectors_MeetsGenerationPagingAndRecallBudgets()
+        => RunAcceptanceAsync(100_000);
+
+    [ImageRepositoryPerformanceFact]
+    public Task Feed_SeventeenThousandDenseVectors_MeetsGenerationPagingAndRecallBudgets()
+        => RunAcceptanceAsync(17_000);
+
+    private async Task RunAcceptanceAsync(int imageCount)
     {
         var calibrating = Environment.GetEnvironmentVariable("GALLERY_FOR_ME_CALIBRATE") == "1";
         var indexCalibrating = Environment.GetEnvironmentVariable("GALLERY_FOR_ME_INDEX_CALIBRATE") == "1";
@@ -85,7 +92,7 @@ public sealed partial class ForMeFeedPerformanceTests(PostgresFixture database, 
 #endif
         Report("Comparison: old exact10 SEARCH PHASE excludes publication; new25 FULL GENERATION includes setup and publication. This is a conservative speedup gate.");
         var clock = new TestClock();
-        var users = await SeedAsync(clock);
+        var users = await SeedAsync(clock, imageCount);
         if (indexCalibrating)
         {
             await CalibrateIndexConstructionAsync(clock, users);
@@ -119,7 +126,7 @@ public sealed partial class ForMeFeedPerformanceTests(PostgresFixture database, 
             await using (var context = database.CreateContext(capture))
                 await FeedRepository(context, clock).CreateAsync(users[0].Id, 20, filters);
             Assert.Equal(25, capture.Queries.Count);
-            var expectedLimit = ForMeFeedRepository.GetAnnCandidateLimit(filters);
+            var expectedLimit = ForMeFeedRepository.AnnCandidateLimit;
             AssertCapturedLimit(capture.Queries, expectedLimit);
             Report($"{name}: effective_candidate_limit={expectedLimit}; captured_production_queries={capture.Queries.Count}");
             if (name == "unfiltered")
@@ -186,7 +193,7 @@ public sealed partial class ForMeFeedPerformanceTests(PostgresFixture database, 
                     indexPlansPass = false;
                     Report($"{workload.Name}: {profile}; index_gate_pass=False");
                 }
-                Report($"{workload.Name}: {EffectiveProfile(profile, workload.Filters)}; mean_recall_at_500={quality.Mean:P3}; " +
+                Report($"{workload.Name}: {profile}; mean_recall_at_500={quality.Mean:P3}; " +
                        $"min_recall_at_500={quality.Minimum:P3}; final_feed_overlap={quality.FeedOverlap:P3}");
                 if (!quality.Passes || !indexPlansPass) break;
             }
@@ -195,7 +202,7 @@ public sealed partial class ForMeFeedPerformanceTests(PostgresFixture database, 
             selected = profile;
             break;
         }
-        Report($"selected_profile={selected?.ToString() ?? "NONE"}; production_profile={ProductionProfile}; filtered_candidate_limit={ForMeFeedRepository.FilteredAnnCandidateLimit}");
+        Report($"selected_profile={selected?.ToString() ?? "NONE"}; production_profile={ProductionProfile}");
         Assert.NotNull(selected);
         if (calibrating)
             Report("Calibration completed. Set the selected production constants, then run normal acceptance without GALLERY_FOR_ME_CALIBRATE.");
@@ -213,11 +220,11 @@ public sealed partial class ForMeFeedPerformanceTests(PostgresFixture database, 
             var generation = await MeasureAsync(() => GenerateAsync(users[0].Id), () => GenerateAsync(users[1].Id));
             var passed = generation <= 5000 && (workload.Name != "unfiltered" || generation < workload.ExactTenP95);
             generationsPass &= passed;
-            Report($"{workload.Name}: {EffectiveProfile(profile, workload.Filters)}; new25_full_generation_p95_ms={generation:F2}; generation_gates_pass={passed}");
+            Report($"{workload.Name}: {profile}; new25_full_generation_p95_ms={generation:F2}; generation_gates_pass={passed}");
 
             async Task<double> GenerateAsync(int userId)
             {
-                await using var context = calibrating ? database.CreateContext(new ProfileOverride(EffectiveProfile(profile, workload.Filters))) : database.CreateContext();
+                await using var context = calibrating ? database.CreateContext(new ProfileOverride(profile)) : database.CreateContext();
                 using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
                 var watch = Stopwatch.StartNew();
                 try
@@ -229,7 +236,7 @@ public sealed partial class ForMeFeedPerformanceTests(PostgresFixture database, 
                 }
                 catch (OperationCanceledException) when (deadline.IsCancellationRequested)
                 {
-                    Report($"{workload.Name}: {EffectiveProfile(profile, workload.Filters)}; generation exceeded shared10s deadline");
+                    Report($"{workload.Name}: {profile}; generation exceeded shared10s deadline");
                     return double.PositiveInfinity;
                 }
             }
@@ -330,16 +337,13 @@ public sealed partial class ForMeFeedPerformanceTests(PostgresFixture database, 
     private static void AssertCapturedLimit(IReadOnlyList<NeighborQuery> queries, int expectedLimit)
         => Assert.All(queries, query =>
         {
-            var limitName = query.Sql[(query.Sql.LastIndexOf("\nLIMIT ", StringComparison.Ordinal) + 7)..].Trim().TrimStart('@');
-            Assert.Equal(expectedLimit, query.Parameters.Single(parameter => parameter.ParameterName.TrimStart('@') == limitName).Value);
+            using var command = new NpgsqlCommand(query.Sql);
+            foreach (var parameter in query.Parameters) command.Parameters.Add(parameter.Clone());
+            Assert.Equal(expectedLimit, AnnLimitParameter.Find(command).Value);
         });
-
-    private static SearchProfile EffectiveProfile(SearchProfile profile, ForMeFilters filters)
-        => profile with { CandidateLimit = Math.Min(profile.CandidateLimit, ForMeFeedRepository.GetAnnCandidateLimit(filters)) };
 
     private async Task<Quality> RecallAsync(Workload workload, SearchProfile profile)
     {
-        profile = EffectiveProfile(profile, workload.Filters);
         await using var context = database.CreateContext();
         await using var transaction = await context.Database.BeginTransactionAsync(System.Data.IsolationLevel.RepeatableRead);
         await ForMeFeedRepository.ConfigureVectorSearchAsync(context, profile.Effort, profile.MemoryMultiplier, profile.MaxScanTuples);
@@ -380,7 +384,6 @@ public sealed partial class ForMeFeedPerformanceTests(PostgresFixture database, 
 
     private async Task<bool> ExplainAsync(Workload workload, SearchProfile profile, int representative)
     {
-        profile = EffectiveProfile(profile, workload.Filters);
         await using var context = database.CreateContext();
         await using var transaction = await context.Database.BeginTransactionAsync(System.Data.IsolationLevel.RepeatableRead);
         await ForMeFeedRepository.ConfigureVectorSearchAsync(context, profile.Effort, profile.MemoryMultiplier, profile.MaxScanTuples);
@@ -417,8 +420,7 @@ public sealed partial class ForMeFeedPerformanceTests(PostgresFixture database, 
         foreach (var parameter in query.Parameters) command.Parameters.Add(parameter.Clone());
         var limitStart = command.CommandText.LastIndexOf("\nLIMIT ", StringComparison.Ordinal);
         Assert.True(limitStart >= 0);
-        var limitName = command.CommandText[(limitStart + 7)..].Trim().TrimStart('@');
-        command.Parameters[limitName].Value = limit;
+        AnnLimitParameter.Find(command).Value = limit;
         if (!exact) return command;
         var orderStart = command.CommandText.LastIndexOf("\nORDER BY ", StringComparison.Ordinal);
         Assert.True(orderStart >= 0 && limitStart > orderStart, "Expected one bare-distance ANN ordering.");
@@ -442,7 +444,7 @@ public sealed partial class ForMeFeedPerformanceTests(PostgresFixture database, 
         public override string ToString() => $"candidates={CandidateLimit}; ef_search={Effort}; memory={MemoryMultiplier}; max_scan={MaxScanTuples}";
     }
 
-    private async Task<AppUser[]> SeedAsync(TimeProvider clock)
+    private async Task<AppUser[]> SeedAsync(TimeProvider clock, int imageCount)
     {
         await using var context = database.CreateContext();
         await context.ForMeFeeds.ExecuteDeleteAsync();
@@ -478,7 +480,7 @@ public sealed partial class ForMeFeedPerformanceTests(PostgresFixture database, 
             """))
         {
             copy.Timeout = TimeSpan.FromMinutes(10);
-            for (var index = 1; index <= 100_000; index++)
+            for (var index = 1; index <= imageCount; index++)
             {
                 var vector = new float[1024];
                 for (var dimension = 0; dimension < vector.Length; dimension++)
@@ -522,13 +524,13 @@ public sealed partial class ForMeFeedPerformanceTests(PostgresFixture database, 
         foreach (var user in users.Take(2))
             await context.Database.ExecuteSqlInterpolatedAsync($"""
                 INSERT INTO "ImageLikes" ("ImageId", "UserId", "CreatedAtUtc")
-                SELECT ((series * 9973) % 100000) + 1, {user.Id}, {clock.GetUtcNow()}
+                SELECT ((series * 9973) % {imageCount}) + 1, {user.Id}, {clock.GetUtcNow()}
                 FROM generate_series(1, 100) AS series
                 """);
         foreach (var user in users.Skip(2))
             await context.Database.ExecuteSqlInterpolatedAsync($"""
                 INSERT INTO "ImageLikes" ("ImageId", "UserId", "CreatedAtUtc")
-                SELECT ((series * 7919 + {user.Id} * 17) % 100000) + 1, {user.Id}, {clock.GetUtcNow()}
+                SELECT ((series * 7919 + {user.Id} * 17) % {imageCount}) + 1, {user.Id}, {clock.GetUtcNow()}
                 FROM generate_series(1, 1000) AS series
                 """);
         await context.Database.ExecuteSqlRawAsync("ANALYZE");
@@ -536,7 +538,7 @@ public sealed partial class ForMeFeedPerformanceTests(PostgresFixture database, 
             .OrderByDescending(like => like.CreatedAtUtc).ThenByDescending(like => like.ImageId)
             .Select(like => like.Image!.Embedding!).ToListAsync();
         Assert.Equal(25, ForMeRanking.SelectRepresentatives(vectors.Select(vector => vector.ToArray()).ToArray(), 25).Count);
-        output.WriteLine("fixture=100000 images, dense1024D, 25 visual clusters, currentLikes=50200, approvedTagLinks=33333; " +
+        Report($"fixture={imageCount} images, dense1024D, 25 visual clusters, currentLikes=50200, approvedTagLinks={imageCount / 3}; " +
                          "PostgreSQL17 pgvector/pgvector:pg17; production HNSW index present; unrestricted and ~17% selective filters");
         return users;
     }
@@ -558,6 +560,22 @@ public sealed partial class ForMeFeedPerformanceTests(PostgresFixture database, 
                     command.Parameters.Cast<NpgsqlParameter>().Select(parameter => parameter.Clone()).ToList()));
             return ValueTask.FromResult(result);
         }
+    }
+
+    [Fact]
+    public async Task ProfileOverride_UserIdEqualsLimit_ChangesOnlySqlLimitParameter()
+    {
+        using var command = new NpgsqlCommand("-- ForMeAnnNeighbors\nSELECT 1 WHERE @userId = 500\nLIMIT @limit");
+        command.Parameters.AddWithValue("userId", 500);
+        command.Parameters.AddWithValue("limit", 500);
+        var interceptor = new ProfileOverride(ProductionProfile with { CandidateLimit = 3 });
+        await interceptor.ReaderExecutingAsync(command, null!, default);
+        Assert.Equal(500, command.Parameters["userId"].Value);
+        Assert.Equal(3, command.Parameters["limit"].Value);
+        command.CommandText = "-- ForMeAnnNeighbors\nSELECT @userId";
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await interceptor.ReaderExecutingAsync(command, null!, default));
+        Assert.Contains("SQL LIMIT", error.Message);
     }
 
     private sealed class ProfileOverride(SearchProfile profile) : DbCommandInterceptor
@@ -588,9 +606,7 @@ public sealed partial class ForMeFeedPerformanceTests(PostgresFixture database, 
             CommandEventData eventData, InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default)
         {
             if (command.CommandText.Contains(ForMeFeedRepository.AnnQueryTag))
-                foreach (DbParameter parameter in command.Parameters)
-                    if (parameter.Value is int count && count == ForMeFeedRepository.AnnCandidateLimit)
-                        parameter.Value = profile.CandidateLimit;
+                AnnLimitParameter.Find(command).Value = profile.CandidateLimit;
             return ValueTask.FromResult(result);
         }
     }

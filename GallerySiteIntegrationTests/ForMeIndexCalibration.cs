@@ -1,6 +1,7 @@
 using Contracts;
 using Entities.Models;
 using Microsoft.EntityFrameworkCore;
+using Repository;
 
 namespace GallerySiteIntegrationTests;
 
@@ -9,7 +10,7 @@ public sealed partial class ForMeFeedPerformanceTests
     private async Task CalibrateIndexConstructionAsync(TimeProvider clock, AppUser[] users)
     {
         Report("INDEX CONSTRUCTION DIAGNOSTIC: fixed data/query settings; not production acceptance.");
-        var profile = new SearchProfile(2000, 200, 2, 20000);
+        var profile = new SearchProfile(ForMeFeedRepository.AnnCandidateLimit, 200, 2, 20000);
         var workloads = new List<Workload>();
         foreach (var filters in new[] { new ForMeFilters([], []), new ForMeFilters([1], ["exclude-performance"]) })
         {
@@ -64,7 +65,7 @@ public sealed partial class ForMeFeedPerformanceTests
             var quality = await RecallAsync(workload, profile);
             var indexUsed = await ExplainAsync(workload, profile, quality.WorstIndex);
             var passed = quality.Passes && (workload.Name != "unfiltered" || indexUsed);
-            Report($"INDEX QUALITY {workload.Name}: {EffectiveProfile(profile, workload.Filters)}; mean_recall={quality.Mean:P3}; minimum_recall={quality.Minimum:P3}; final_feed_overlap={quality.FeedOverlap:P3}; gates_pass={passed}");
+            Report($"INDEX QUALITY {workload.Name}: {profile}; mean_recall={quality.Mean:P3}; minimum_recall={quality.Minimum:P3}; final_feed_overlap={quality.FeedOverlap:P3}; gates_pass={passed}");
             if (!passed) return false;
         }
         return true;
