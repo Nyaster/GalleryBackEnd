@@ -3,6 +3,9 @@ using Contracts;
 using Entities.Exceptions;
 using Entities.Models;
 using Moq;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+using Service;
 using Service.Contracts;
 
 namespace GallerySiteUnitTests;
@@ -93,6 +96,48 @@ public sealed class GetImageContentHandlerTests
             Assert.Equal([6, 7], await ReadAsync(result.Stream));
         cache.Verify(service => service.GetOrCreateAsync(image.StorageKey, ImageDerivativeVariants.PreviewJpeg768V1,
             It.IsAny<Func<Stream, CancellationToken, Task<Stream>>>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Handle_WarmPreviewWithAccessDeniedOrMissingOriginal_DoesNotConsultCache(bool unauthorized)
+    {
+        var image = Image("image/png", uploadedById: 7);
+        image.Visibility = ImageVisibility.Private;
+        var storage = new Mock<IImageStorage>();
+        storage.Setup(service => service.Exists(It.IsAny<string>())).Returns(true);
+        storage.Setup(service => service.OpenReadAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => new MemoryStream([8, 9]));
+        using var realCache = new LocalImageDerivativeCache(storage.Object,
+            NullLogger<LocalImageDerivativeCache>.Instance, Options.Create(new ImageStorageOptions()));
+        await using (var warm = await realCache.GetOrCreateAsync(image.StorageKey,
+                         ImageDerivativeVariants.PreviewJpeg768V1, (_, _) => throw new InvalidOperationException()))
+            Assert.Equal([8, 9], await ReadAsync(warm));
+        storage.Invocations.Clear();
+        storage.Setup(service => service.Exists(image.StorageKey)).Returns(false);
+        var cache = new Mock<IImageDerivativeCache>();
+        cache.Setup(service => service.GetOrCreateAsync(It.IsAny<string>(), It.IsAny<ImageDerivativeVariant>(),
+                It.IsAny<Func<Stream, CancellationToken, Task<Stream>>>(), It.IsAny<CancellationToken>()))
+            .Returns((string key, ImageDerivativeVariant variant, Func<Stream, CancellationToken, Task<Stream>> factory,
+                CancellationToken token) => realCache.GetOrCreateAsync(key, variant, factory, token));
+        var handler = new Handler(Repositories(image).Object, storage.Object, new Mock<IImageProcessor>().Object,
+            cache.Object, new TestUser(unauthorized ? 8 : 7));
+
+        if (unauthorized)
+        {
+            await Assert.ThrowsAsync<AppForbiddenException>(() => handler.Handle(
+                new Command(image.Id, ImageContentFormat.Preview), CancellationToken.None));
+            storage.VerifyNoOtherCalls();
+        }
+        else
+        {
+            await Assert.ThrowsAsync<InvalidOperationException>(() => handler.Handle(
+                new Command(image.Id, ImageContentFormat.Preview), CancellationToken.None));
+            storage.Verify(service => service.Exists(image.StorageKey), Times.Once);
+            storage.VerifyNoOtherCalls();
+        }
+        cache.VerifyNoOtherCalls();
     }
 
     private static Mock<IRepositoryManager> Repositories(AppImage image)

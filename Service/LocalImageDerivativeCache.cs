@@ -1,13 +1,22 @@
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Options;
 using Service.Contracts;
 
 namespace Service;
 
-public sealed class LocalImageDerivativeCache(IImageStorage storage, ILogger<LocalImageDerivativeCache> logger)
+public sealed class LocalImageDerivativeCache(IImageStorage storage, ILogger<LocalImageDerivativeCache> logger,
+    IOptions<ImageStorageOptions> options)
     : IImageDerivativeCache, IDisposable
 {
+    private const int MaximumMemoryEntryBytes = 1024 * 1024;
+    private readonly long _memoryBudgetBytes = options.Value.PreviewMemoryCacheMegabytes * 1024L * 1024L;
+    private readonly MemoryCache? _memoryCache = options.Value.PreviewMemoryCacheMegabytes == 0
+        ? null
+        : new MemoryCache(new MemoryCacheOptions { SizeLimit = options.Value.PreviewMemoryCacheMegabytes * 1024L * 1024L });
+    private readonly SemaphoreSlim _admissionLimit = new(2, 2);
     private readonly SemaphoreSlim _conversionLimit = new(2, 2);
     private readonly Lock _gateLock = new();
     private readonly Dictionary<string, ConversionGate> _conversionGates = new(StringComparer.Ordinal);
@@ -23,7 +32,11 @@ public sealed class LocalImageDerivativeCache(IImageStorage storage, ILogger<Loc
         ArgumentNullException.ThrowIfNull(factory);
 
         var cacheStorageKey = CreateCacheStorageKey(sourceStorageKey, variant);
-        if (storage.Exists(cacheStorageKey))
+        cancellationToken.ThrowIfCancellationRequested();
+        var useMemory = _memoryCache is not null && variant == ImageDerivativeVariants.PreviewJpeg768V1;
+        if (useMemory && TryOpenMemory(cacheStorageKey, out var cached))
+            return cached!;
+        if (!useMemory && storage.Exists(cacheStorageKey))
             return await storage.OpenReadAsync(cacheStorageKey, cancellationToken);
 
         var gate = RentGate(cacheStorageKey);
@@ -32,8 +45,15 @@ public sealed class LocalImageDerivativeCache(IImageStorage storage, ILogger<Loc
         {
             await gate.Semaphore.WaitAsync(cancellationToken);
             acquired = true;
+            if (useMemory && TryOpenMemory(cacheStorageKey, out cached))
+                return cached!;
             if (storage.Exists(cacheStorageKey))
-                return await storage.OpenReadAsync(cacheStorageKey, cancellationToken);
+            {
+                var candidate = await storage.OpenReadAsync(cacheStorageKey, cancellationToken);
+                return useMemory
+                    ? await AdmitAsync(candidate, cacheStorageKey, cancellationToken)
+                    : candidate;
+            }
 
             Stream generated;
             await _conversionLimit.WaitAsync(cancellationToken);
@@ -51,18 +71,75 @@ public sealed class LocalImageDerivativeCache(IImageStorage storage, ILogger<Loc
             try
             {
                 response = await EnsureSeekableAsync(generated, cancellationToken);
-                return await StoreBestEffortAsync(response, cacheStorageKey, sourceStorageKey, variant.CacheKey, cancellationToken);
+                await StoreBestEffortAsync(response, cacheStorageKey, sourceStorageKey, variant.CacheKey, cancellationToken);
             }
             catch
             {
                 await (response ?? generated).DisposeAsync();
                 throw;
             }
+            return useMemory
+                ? await AdmitAsync(response, cacheStorageKey, cancellationToken)
+                : response;
         }
         finally
         {
             if (acquired) gate.Semaphore.Release();
             ReturnGate(cacheStorageKey, gate);
+        }
+    }
+
+    private bool TryOpenMemory(string key, out Stream? stream)
+    {
+        stream = _memoryCache!.TryGetValue(key, out byte[]? bytes) && bytes is not null
+            ? new MemoryStream(bytes, writable: false)
+            : null;
+        return stream is not null;
+    }
+
+    private async Task<Stream> AdmitAsync(Stream candidate, string key, CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (!candidate.CanSeek)
+                return candidate;
+            long length;
+            try
+            {
+                length = candidate.Length;
+            }
+            catch (NotSupportedException)
+            {
+                return candidate;
+            }
+            candidate.Position = 0;
+            if (length == 0 || length > Math.Min(_memoryBudgetBytes, MaximumMemoryEntryBytes) ||
+                !_admissionLimit.Wait(0))
+                return candidate;
+
+            try
+            {
+                var bytes = new byte[(int)length];
+                await candidate.ReadExactlyAsync(bytes, cancellationToken);
+                candidate.Position = 0;
+                cancellationToken.ThrowIfCancellationRequested();
+                _memoryCache!.Set(key, bytes, new MemoryCacheEntryOptions
+                {
+                    Size = bytes.Length,
+                    AbsoluteExpirationRelativeToNow = TimeSpan.FromHours(1)
+                });
+                await candidate.DisposeAsync();
+                return new MemoryStream(bytes, writable: false);
+            }
+            finally
+            {
+                _admissionLimit.Release();
+            }
+        }
+        catch
+        {
+            await candidate.DisposeAsync();
+            throw;
         }
     }
 
@@ -179,5 +256,10 @@ public sealed class LocalImageDerivativeCache(IImageStorage storage, ILogger<Loc
         return Path.Combine(".derivatives", variant.CacheKey, hash[..2], $"{hash}{variant.Extension}");
     }
 
-    public void Dispose() => _conversionLimit.Dispose();
+    public void Dispose()
+    {
+        _memoryCache?.Dispose();
+        _admissionLimit.Dispose();
+        _conversionLimit.Dispose();
+    }
 }

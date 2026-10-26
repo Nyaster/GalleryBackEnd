@@ -116,3 +116,27 @@ curl http://localhost:8080/api/admin/scrape-runs/<runId> \
 restart the API to change that ceiling. The run status reports live page and download counters while it is running.
 `Incremental` fetches at most `ParserSettings:IncrementalPages` pages (five by default); `Full` scans every source page
 before applying the download cap.
+
+### Preview RAM cache
+
+Preview JPEGs use a lazy, per-process RAM cache in front of the persistent disk cache.
+`ImageStorage:PreviewMemoryCacheMegabytes` defaults to 128 MiB; set it to `0` to disable
+RAM caching, or use the environment variable `ImageStorage__PreviewMemoryCacheMegabytes`
+(range 0–1024). Restart the API after changing the setting. Original files and full-size
+JPEG derivatives remain on the existing storage path.
+
+Only nonempty previews up to and including 1 MiB are admitted. Entries expire after
+one hour and may be evicted earlier to stay within the encoded-byte budget. Each API
+replica warms its own cache on demand. The budget limits retained preview payloads,
+not total process memory: active responses, admission copies (at most two additional
+1 MiB buffers), conversion buffers, object overhead, and garbage collection add to RSS.
+Authorization and original-file existence checks still run on every request.
+
+With Podman Compose or Docker Compose, set `PREVIEW_MEMORY_CACHE_MEGABYTES=512` in
+the Compose environment file to use a 512 MiB cache (default 128; `0` disables it).
+The Compose files forward it to `ImageStorage__PreviewMemoryCacheMegabytes`.
+Recreate the API container after changing its environment; for the production Compose file:
+
+```bash
+podman compose --env-file deploy/.env -f deploy/docker-compose.production.yml up -d --no-deps --force-recreate api
+```

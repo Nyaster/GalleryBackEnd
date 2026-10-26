@@ -41,6 +41,7 @@ services:
       Embedding__ModelPath: /app/model/model.onnx
       Authenticator__KeyRingPath: /app/auth-keys
       ImageStorage__RootPath: /app/Data/images
+      ImageStorage__PreviewMemoryCacheMegabytes: ${PREVIEW_MEMORY_CACHE_MEGABYTES:-128}
       GuestBrowsing__RequestsPerMinute: ${GUEST_BROWSING_REQUESTS_PER_MINUTE:-300}
       ForMeFeed__RepresentativeCount: ${FOR_ME_REPRESENTATIVE_COUNT:-25}
       DatabaseMigrations__CommandTimeoutSeconds: ${MIGRATION_COMMAND_TIMEOUT_SECONDS:-600}
