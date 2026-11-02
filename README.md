@@ -2,6 +2,28 @@
 
 See [API_REFERENCE.md](API_REFERENCE.md) for the frontend integration contract.
 
+## Project structure
+
+The solution has three production projects and separate unit and integration test projects:
+
+| Project              | Responsibilities                                                                                  |
+|----------------------|---------------------------------------------------------------------------------------------------|
+| `GallerySiteBackend` | API host, controllers, middleware, HTTP user context, and background workers                      |
+| `Application`        | Feature handlers, domain models, DTOs, repository/service abstractions, and shared configuration  |
+| `Infrastructure`     | Persistence, EF Core migrations, authentication services, storage, image processing, and scraping |
+
+The API references Application and Infrastructure; Infrastructure references Application.
+Application has no production project dependencies. Existing namespaces are retained so the
+consolidation preserves type names and logging categories. MediatR and repository behavior are unchanged.
+
+EF Core migrations live in `Infrastructure/Persistence/Migrations`. For example, check model changes with:
+
+```bash
+dotnet ef migrations has-pending-model-changes --project Infrastructure --startup-project GallerySiteBackend
+```
+
+## Runtime
+
 The API targets .NET 10, PostgreSQL with the `vector` extension, and a persistent local image volume. It applies its
 initial EF migration at startup and creates an administrator only when both `BootstrapAdmin__Login` and
 `BootstrapAdmin__Password` are configured.

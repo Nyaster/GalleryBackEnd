@@ -12,7 +12,7 @@ The existing Tops page uses the ranking API separately. Its scoring, tie breaker
 
 The backend's existing day boundaries use UTC. No separate configurable site timezone was found. Return `UTC` as the site's effective timezone for this implementation; neither the developer's Europe/Warsaw timezone nor the visitor's device timezone determines today. A later site timezone setting should control discovery day boundaries without changing existing ranking semantics.
 
-Evidence: [frontend contracts](../src/api/types.ts), [existing API client](../src/api/gallery.ts), [ranking navigation](../src/pages/rankingNavigation.ts), and the live `http://localhost:8080/openapi/v1.json`, inspected on 4 October 2026. Backend definitions were checked in `Entities/Models/RankingPeriodBounds.cs`, `Repository/RankingRepository.cs`, `Application/Features/Rankings/GetRankingsHandler.cs`, and `Shared/DataTransferObjects/SearchImageDto.cs` in the adjacent GalleryBackEnd project.
+Evidence: [frontend contracts](../src/api/types.ts), [existing API client](../src/api/gallery.ts), [ranking navigation](../src/pages/rankingNavigation.ts), and the live `http://localhost:8080/openapi/v1.json`, inspected on 4 October 2026. Backend definitions were checked in `Application/Domain/Models/RankingPeriodBounds.cs`, `Infrastructure/Persistence/RankingRepository.cs`, `Application/Features/Rankings/GetRankingsHandler.cs`, and `Application/DataTransferObjects/SearchImageDto.cs` in the adjacent GalleryBackEnd project.
 
 ## Collection definitions
 

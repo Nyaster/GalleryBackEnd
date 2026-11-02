@@ -10,14 +10,8 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
 COPY ["GallerySiteBackend/GallerySiteBackend.csproj", "GallerySiteBackend/"]
-COPY ["GallerySiteBackend.Presentation/GallerySiteBackend.Presentation.csproj", "GallerySiteBackend.Presentation/"]
 COPY ["Application/Application.csproj", "Application/"]
-COPY ["Contracts/Contracts.csproj", "Contracts/"]
-COPY ["Entities/Entities.csproj", "Entities/"]
-COPY ["Repository/Repository.csproj", "Repository/"]
-COPY ["Service.Contracts/Service.Contracts.csproj", "Service.Contracts/"]
-COPY ["Service/Service.csproj", "Service/"]
-COPY ["Shared/Shared.csproj", "Shared/"]
+COPY ["Infrastructure/Infrastructure.csproj", "Infrastructure/"]
 RUN dotnet restore "GallerySiteBackend/GallerySiteBackend.csproj"
 COPY . .
 WORKDIR "/src/GallerySiteBackend"
