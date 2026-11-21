@@ -143,7 +143,7 @@ public sealed class GetImageContentHandlerTests
     private static Mock<IRepositoryManager> Repositories(AppImage image)
     {
         var images = new Mock<IAppImageRepository>();
-        images.Setup(repository => repository.GetMetadataByIdAsync(image.Id, It.IsAny<CancellationToken>())).ReturnsAsync(() => ImageReadTestData.Metadata(image));
+        images.Setup(repository => repository.GetReadableMetadataByIdAsync(image.Id, It.IsAny<ImageViewer>(), It.IsAny<CancellationToken>())).ReturnsAsync(() => ImageReadTestData.Metadata(image));
         var repositories = new Mock<IRepositoryManager>();
         repositories.SetupGet(repository => repository.AppImage).Returns(images.Object);
         return repositories;

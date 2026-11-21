@@ -55,8 +55,16 @@ public sealed class ImageController(IMediator mediator) : ControllerBase
     [AllowAnonymous]
     [EnableRateLimiting("guest-read")]
     [HttpGet("{id:int}/content")]
-    public async Task<IActionResult> GetContent(int id, [FromQuery] string format = "original",
-        CancellationToken cancellationToken = default)
+    public Task<IActionResult> GetContent(int id, [FromQuery] string format = "original",
+        CancellationToken cancellationToken = default) => ReadContent(id, format, false, cancellationToken);
+
+    [Authorize(Roles = "Admin,Moderator")]
+    [HttpGet("/api/admin/images/{id:int}/content")]
+    public Task<IActionResult> GetModerationContent(int id, [FromQuery] string format = "original",
+        CancellationToken cancellationToken = default) => ReadContent(id, format, true, cancellationToken);
+
+    private async Task<IActionResult> ReadContent(int id, string format, bool forModeration,
+        CancellationToken cancellationToken)
     {
         var contentFormat = format.ToLowerInvariant() switch
         {
@@ -68,8 +76,8 @@ public sealed class ImageController(IMediator mediator) : ControllerBase
         if (contentFormat is null)
             return BadRequest("format must be 'original', 'jpeg', or 'preview'.");
 
-        var content = await mediator.Send(new Command(id, contentFormat.Value), cancellationToken);
-        Response.Headers.CacheControl = "private, max-age=3600";
+        var content = await mediator.Send(new Command(id, contentFormat.Value, forModeration), cancellationToken);
+        Response.Headers.CacheControl = "private, no-store";
         return File(content.Stream, content.ContentType);
     }
 

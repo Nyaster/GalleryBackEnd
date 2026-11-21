@@ -16,6 +16,7 @@ public sealed class AppUserEfConfiguration : IEntityTypeConfiguration<AppUser>
         builder.PrimitiveCollection(user => user.Roles).HasColumnName("roles");
         builder.Property(user => user.CanUploadImages).HasDefaultValue(false).IsRequired();
         builder.Property(user => user.UploadsBlocked).HasDefaultValue(false);
+        builder.Property(user => user.DisplayAllContent).HasDefaultValue(false);
         builder.Property(user => user.AuthenticationVersion).HasDefaultValue(0);
         builder.Property(user => user.AuthenticatorFailedAttempts).HasDefaultValue(0);
         builder.PrimitiveCollection(user => user.AuthenticatorBackupCodeHashes)

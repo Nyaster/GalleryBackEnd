@@ -68,7 +68,13 @@ See [API_REFERENCE.md](API_REFERENCE.md) for the exact public routes and visibil
 Guest reads have no viewing quota and share a default limit of 300 requests per IP per minute per API process, including
 image files. Configure `GuestBrowsing__RequestsPerMinute` for SDK runs or `GUEST_BROWSING_REQUESTS_PER_MINUTE` in the
 Compose `.env` file. Guest responses are not cached; opened read routes vary by `Authorization`. Invalid/expired
-tokens return `401`, while ineligible guest image URLs return `404`. No new migration or dependency is required.
+tokens return `401`, while ineligible guest image URLs return `404`.
+
+Apply the `AddContentVisibility` migration before deploying the content settings API. It starts existing and new
+accounts with **Display all content** off and creates an empty rule list. Once all API instances are updated, admins
+can add individual approved tags or groups of tags that must occur together. The backend applies the rules to guests
+and to accounts with the switch off. The switch is saved per account and takes effect with the current access token.
+See the account and admin endpoints in [API_REFERENCE.md](API_REFERENCE.md#display-all-content).
 
 `POST /api/auth/login` and `POST /api/auth/register` return a
 short-lived access token and issue a rotating, Secure/HttpOnly refresh cookie. `POST /api/auth/refresh` reads that

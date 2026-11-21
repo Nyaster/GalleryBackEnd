@@ -218,6 +218,11 @@ namespace Repository.Migrations
                     b.Property<DateTimeOffset>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<bool>("DisplayAllContent")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<string>("Login")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -314,6 +319,43 @@ namespace Repository.Migrations
                     b.HasKey("UserId");
 
                     b.ToTable("CommentRestrictions");
+                });
+
+            modelBuilder.Entity("Entities.Models.ContentVisibilityRule", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("TagGroupKey")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TagGroupKey")
+                        .IsUnique()
+                        .HasDatabaseName("UX_ContentVisibilityRules_TagGroupKey");
+
+                    b.ToTable("ContentVisibilityRules");
+                });
+
+            modelBuilder.Entity("Entities.Models.ContentVisibilityRuleTag", b =>
+                {
+                    b.Property<int>("ContentVisibilityRuleId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TagId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("ContentVisibilityRuleId", "TagId");
+
+                    b.HasIndex("TagId");
+
+                    b.ToTable("ContentVisibilityRuleTags");
                 });
 
             modelBuilder.Entity("Entities.Models.Feedback", b =>
@@ -828,6 +870,21 @@ namespace Repository.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("Entities.Models.ContentVisibilityRuleTag", b =>
+                {
+                    b.HasOne("Entities.Models.ContentVisibilityRule", null)
+                        .WithMany("TagLinks")
+                        .HasForeignKey("ContentVisibilityRuleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Entities.Models.ImageTag", null)
+                        .WithMany()
+                        .HasForeignKey("TagId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Entities.Models.Feedback", b =>
                 {
                     b.HasOne("Entities.Models.AppUser", "Author")
@@ -935,6 +992,11 @@ namespace Repository.Migrations
                     b.Navigation("RefreshSessions");
 
                     b.Navigation("UploadedImages");
+                });
+
+            modelBuilder.Entity("Entities.Models.ContentVisibilityRule", b =>
+                {
+                    b.Navigation("TagLinks");
                 });
 
             modelBuilder.Entity("Entities.Models.ForMeFeed", b =>

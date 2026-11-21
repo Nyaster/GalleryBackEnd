@@ -17,6 +17,9 @@ public sealed class RepositoryManager(RepositoryContext context) : IRepositoryMa
     private readonly Lazy<IAnnouncementRepository> _announcements = new(() => new AnnouncementRepository(context));
     private readonly Lazy<IFeedbackRepository> _feedback = new(() => new FeedbackRepository(context));
 
+    private readonly Lazy<IContentVisibilityRuleRepository> _contentVisibilityRules =
+        new(() => new ContentVisibilityRuleRepository(context));
+
     public IAppUserRepository AppUser => _users.Value;
     public IAppImageRepository AppImage => _images.Value;
     public IImageTagChangeRepository ImageTagChanges => _tagChanges.Value;
@@ -25,6 +28,7 @@ public sealed class RepositoryManager(RepositoryContext context) : IRepositoryMa
     public IDiscoveryRepository Discovery => _discovery.Value;
     public IAnnouncementRepository Announcements => _announcements.Value;
     public IFeedbackRepository Feedback => _feedback.Value;
+    public IContentVisibilityRuleRepository ContentVisibilityRules => _contentVisibilityRules.Value;
 
     public Task<ScrapeRun?> GetScrapeRunAsync(Guid id, bool trackChanges, CancellationToken cancellationToken = default)
     {

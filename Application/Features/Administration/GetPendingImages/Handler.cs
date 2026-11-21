@@ -7,12 +7,15 @@ using Shared.DataTransferObjects;
 
 namespace Application.Features.Administration.GetPendingImages;
 
-public sealed class Handler(IRepositoryManager repositories, IUserContext currentUser) : IRequestHandler<Command, List<AppImageDto>>
+public sealed class Handler(IRepositoryManager repositories, IUserContext currentUser)
+    : IRequestHandler<Command, List<AppImageDto>>
 {
     public async Task<List<AppImageDto>> Handle(Command request, CancellationToken cancellationToken)
     {
-        if (!ImageAuthorization.IsStaff(currentUser)) throw new Entities.Exceptions.AppForbiddenException("Staff access is required.");
-        var images = await repositories.AppImage.GetPendingAsync(request.Page, request.PageSize, ImageAuthorization.GetViewer(currentUser), cancellationToken);
-        return images.Select(image => ImageDtoMapper.ToDto(image)).ToList();
+        if (!ImageAuthorization.IsStaff(currentUser))
+            throw new Entities.Exceptions.AppForbiddenException("Staff access is required.");
+        var images = await repositories.AppImage.GetPendingAsync(request.Page, request.PageSize,
+            ImageAuthorization.GetViewer(currentUser), cancellationToken);
+        return images.Select(ImageDtoMapper.ToModerationDto).ToList();
     }
 }

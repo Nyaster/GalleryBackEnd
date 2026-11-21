@@ -1,6 +1,7 @@
 using System.Data;
 using Contracts;
 using Entities.Models;
+using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Shared.DataTransferObjects;
 
@@ -17,7 +18,8 @@ public sealed class DiscoveryRepository(RepositoryContext context) : IDiscoveryR
             cancellationToken);
         var images = context.Images.AsNoTracking().Where(image => image.DeletedAtUtc == null &&
                                                                   image.Visibility == ImageVisibility.Gallery &&
-                                                                  image.ModerationStatus == ModerationStatus.Approved);
+                                                                  image.ModerationStatus == ModerationStatus.Approved)
+            .ApplyViewerVisibility(context, userId);
         if (userId is null) images = images.Where(GuestImageQuery.IsEligible);
         var galleryTotal = await images.CountAsync(cancellationToken);
         if (aiUsage is { Count: > 0 })

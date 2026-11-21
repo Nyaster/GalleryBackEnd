@@ -18,7 +18,7 @@ public sealed class CommentReadHandlerTests
         var interactions = new Mock<IInteractionRepository>();
         repository.SetupGet(item => item.AppImage).Returns(images.Object);
         repository.SetupGet(item => item.Interactions).Returns(interactions.Object);
-        images.Setup(item => item.GetMetadataByIdAsync(7, It.IsAny<CancellationToken>()))
+        images.Setup(item => item.GetReadableMetadataByIdAsync(7, It.IsAny<ImageViewer>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Metadata());
         var comments = new List<CommentDto>
         {
@@ -48,7 +48,7 @@ public sealed class CommentReadHandlerTests
         var repository = new Mock<IRepositoryManager>();
         var images = new Mock<IAppImageRepository>();
         repository.SetupGet(item => item.AppImage).Returns(images.Object);
-        images.Setup(item => item.GetMetadataByIdAsync(7, It.IsAny<CancellationToken>()))
+        images.Setup(item => item.GetReadableMetadataByIdAsync(7, It.IsAny<ImageViewer>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Metadata() with { Visibility = visibility, ModerationStatus = moderation,
                 DeletedAtUtc = deleted ? DateTimeOffset.UnixEpoch : null });
         var handler = new GetCommentsHandler(repository.Object, new User());

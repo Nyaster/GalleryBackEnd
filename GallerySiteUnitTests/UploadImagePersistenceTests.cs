@@ -24,7 +24,7 @@ public sealed class UploadImagePersistenceTests
         images.Setup(repository => repository.AddAsync(It.IsAny<AppImage>(), It.IsAny<CancellationToken>()))
             .Callback((AppImage image, CancellationToken _) => addedImage = image)
             .Returns(Task.CompletedTask);
-        images.Setup(repository => repository.GetCardByIdAsync(It.IsAny<int>(), It.IsAny<ImageViewer>(), It.IsAny<CancellationToken>()))
+        images.Setup(repository => repository.GetManagementCardByIdAsync(It.IsAny<int>(), It.IsAny<ImageViewer>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new IOException("Response read failed."));
         var repositories = new Mock<IRepositoryManager>();
         repositories.SetupGet(repository => repository.AppImage).Returns(images.Object);
@@ -46,7 +46,7 @@ public sealed class UploadImagePersistenceTests
         Assert.Matches(@"^uploads/[a-f0-9]{32}\.png$", addedImage.StorageKey);
         Assert.Equal(ImageStagingTestFiles.Metadata.ContentType, addedImage.ContentType);
         Assert.Empty(Directory.EnumerateFileSystemEntries(Path.Combine(files.Root, ".tmp")));
-        images.Verify(repository => repository.GetCardByIdAsync(It.IsAny<int>(), It.IsAny<ImageViewer>(), It.IsAny<CancellationToken>()),
+        images.Verify(repository => repository.GetManagementCardByIdAsync(It.IsAny<int>(), It.IsAny<ImageViewer>(), It.IsAny<CancellationToken>()),
             saved ? Times.Once() : Times.Never());
     }
 

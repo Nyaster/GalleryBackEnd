@@ -37,8 +37,8 @@ that the account still exists. Account recovery revokes refresh sessions immedia
 but already-issued access tokens remain valid until expiry (`JwtConfig:AccessTokenMinutes`, default 15 minutes,
 plus 30 seconds of validation clock skew). The legacy `auth_version` claim does not revoke access tokens.
 
-Guest responses use `Cache-Control: private, no-store`. All opened read routes use `Vary: Authorization`, including
-signed-in responses, to separate viewer-dependent content. Previously downloaded files cannot be recalled.
+These read routes use `Cache-Control: private, no-store` and `Vary: Authorization` for guest and signed-in viewers.
+Previously downloaded files cannot be recalled.
 
 There is no image/page viewing quota. Guest reads share a fixed-window, per-IP request budget, including image files,
 with no queue. The default is 300 requests per minute **per API process**. Exhaustion returns `429` ProblemDetails and
@@ -47,9 +47,42 @@ with no queue. The default is 300 requests per minute **per API process**. Exhau
 Authenticated
 reads are exempt from this guest policy; existing write/authentication limits still apply.
 
-All writes, personal feeds, rankings, announcements, feedback, tag-change history, and administration retain their
-existing authentication/authorization requirements. Response DTOs and route names are unchanged. No database migration
-or new dependency is required. This change implements backend access only; guest frontend navigation is separate.
+All writes, personal feeds, rankings, announcements, feedback, tag-change history, and administration require
+authentication.
+
+## Display all content
+
+Registration, login, and refresh return `user.displayAllContent`. `GET /api/auth/me` returns the field directly.
+It defaults to `false` for new and existing accounts. The settings switch sends
+`PUT /api/users/me/content-preferences` with `{"displayAllContent": true}` or `{"displayAllContent": false}`.
+The response is the updated user profile. An omitted or null value returns `400`. Reload the current view after
+saving. The existing access token works across the change, and image endpoints read the saved setting themselves.
+
+When the switch is off, an image is hidden if its approved, attached tags contain **every tag in any one rule**.
+For example, rules `[10]` and `[20, 30]` hide images carrying tag 10 or both 20 and 30. Tag 20 alone still qualifies.
+Guests always follow these rules in addition to guest eligibility. Enabling the switch skips the admin tag rules
+while retaining ordinary image permissions. Staff follow their profile during browsing. Explicit staff moderation
+responses provide a staff-only `contentUrl` under `/api/admin/images/{id}/content`.
+
+Filtering applies before list totals and pagination, including discovery, live and archived rankings, uploads,
+likes, and recommendations. Hidden image IDs return `404` for details, files, comments, and recommendations.
+Image files use `Cache-Control: private, no-store`. Stored ForMe pages enforce current rules and settings while
+retaining their generation-time total. Start a fresh feed after opting in to include additional images.
+
+### Admin rule management
+
+Only admins can manage rules. Use approved tag IDs from `GET /api/admin/tags?status=Approved`.
+
+| Method | Route                                      | Result                                                             |
+|--------|--------------------------------------------|--------------------------------------------------------------------|
+| GET    | `/api/admin/content-visibility-rules`      | List rules as `{id, tagIds}`.                                      |
+| GET    | `/api/admin/content-visibility-rules/{id}` | Read a single rule.                                                |
+| POST   | `/api/admin/content-visibility-rules`      | Create with `{"tagIds":[20,30]}`. Returns `201` and the rule.      |
+| PUT    | `/api/admin/content-visibility-rules/{id}` | Replace the complete tag group atomically. Returns the saved rule. |
+| DELETE | `/api/admin/content-visibility-rules/{id}` | Remove the rule. Returns `204`.                                    |
+
+Use at least one distinct, positive, approved tag ID. Invalid groups return `400`; duplicating an existing group
+in any order returns `409`. Unknown rule IDs return `404`. Changes take effect on subsequent requests.
 
 ## Discovery API
 
@@ -67,7 +100,7 @@ and repeated `aiUsage` filters using the existing enum names (`Unknown`, `HumanM
 default date is the server's current UTC calendar day. Invalid collections, malformed dates, future dates, and invalid
 AI filters return 400 ProblemDetails. Missing credentials select guest visibility; invalid or expired credentials return
 
-401. Successful signed-in responses use `Cache-Control: private`; guests use `private, no-store`. Both vary by
+401. Successful responses use `Cache-Control: private, no-store` for all viewers and vary by
      `Authorization`.
 
 Only approved, non-hidden images with `visibility: "Gallery"` appear, including for staff. Most liked counts current

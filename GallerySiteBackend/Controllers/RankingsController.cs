@@ -8,11 +8,13 @@ namespace GallerySiteBackend.Presentation;
 
 [ApiController]
 [Authorize]
+[ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
 [Route("api/rankings")]
 public sealed class RankingsController(IMediator mediator) : ControllerBase
 {
     [HttpGet("{period}")]
-    public async Task<ActionResult<PageableRankingsDto>> Get(RankingPeriod period, [FromQuery] DateTimeOffset? periodStartUtc,
+    public async Task<ActionResult<PageableRankingsDto>> Get(RankingPeriod period,
+        [FromQuery] DateTimeOffset? periodStartUtc,
         [FromQuery] int page = 1, [FromQuery] int pageSize = 20, [FromQuery] List<string>? aiUsage = null,
         CancellationToken cancellationToken = default)
         => Ok(await mediator.Send(new Application.Features.Rankings.GetRankingsCommand(

@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Contracts;
 using Entities.Exceptions;
 using Entities.Models;
+using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Pgvector.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -75,12 +76,16 @@ public sealed class ForMeFeedRepository(RepositoryContext context, TimeProvider 
                 List<Pgvector.Vector> seeds;
                 using (telemetry.Measure("SeedLoad"))
                 {
+                    var seedImages = context.Images.AsNoTracking()
+                        .Where(image => image.Embedding != null && image.DeletedAtUtc == null &&
+                            image.Visibility == ImageVisibility.Gallery && image.ModerationStatus == ModerationStatus.Approved)
+                        .ApplyViewerVisibility(context, userId);
                     seeds = await context.ImageLikes.AsNoTracking()
-                        .Where(like => like.UserId == userId && like.Image!.Embedding != null &&
-                                       like.Image.DeletedAtUtc == null && like.Image.Visibility == ImageVisibility.Gallery &&
-                                       like.Image.ModerationStatus == ModerationStatus.Approved)
+                        .Where(like => like.UserId == userId)
+                        .Join(seedImages, like => like.ImageId, image => image.Id,
+                            (like, image) => new { like.CreatedAtUtc, like.ImageId, image.Embedding })
                         .OrderByDescending(like => like.CreatedAtUtc).ThenByDescending(like => like.ImageId)
-                        .Select(like => like.Image!.Embedding!).Take(100).ToListAsync(cancellationToken);
+                        .Select(like => like.Embedding!).Take(100).ToListAsync(cancellationToken);
                 }
                 telemetry.SeedCount = seeds.Count;
                 IReadOnlyList<int> representatives;
@@ -274,7 +279,8 @@ public sealed class ForMeFeedRepository(RepositoryContext context, TimeProvider 
     {
         var query = context.Images.AsNoTracking().Where(image => image.DeletedAtUtc == null &&
             image.Visibility == ImageVisibility.Gallery && image.ModerationStatus == ModerationStatus.Approved &&
-            !image.Likes.Any(like => like.UserId == userId));
+            !image.Likes.Any(like => like.UserId == userId))
+            .ApplyViewerVisibility(context, userId);
         if (filters.AiUsage.Length > 0)
         {
             var classifications = filters.AiUsage.Select(value => (AiUsageClassification)value).ToArray();

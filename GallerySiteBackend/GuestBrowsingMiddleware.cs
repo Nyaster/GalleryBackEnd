@@ -21,8 +21,7 @@ public sealed class GuestBrowsingMiddleware(RequestDelegate next)
             if (!context.Response.Headers.Vary.ToString().Split(',')
                     .Any(value => value.Trim().Equals(HeaderNames.Authorization, StringComparison.OrdinalIgnoreCase)))
                 context.Response.Headers.Append(HeaderNames.Vary, HeaderNames.Authorization);
-            if (context.User.Identity?.IsAuthenticated != true)
-                context.Response.Headers.CacheControl = "private, no-store";
+            context.Response.Headers.CacheControl = "private, no-store";
             return Task.CompletedTask;
         });
 

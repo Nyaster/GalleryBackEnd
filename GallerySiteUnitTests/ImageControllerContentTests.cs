@@ -21,9 +21,10 @@ public sealed class ImageControllerContentTests
 
         var file = Assert.IsType<FileStreamResult>(result);
         Assert.Equal("image/jpeg", file.ContentType);
-        Assert.Equal("private, max-age=3600", controller.Response.Headers.CacheControl);
+        Assert.Equal("private, no-store", controller.Response.Headers.CacheControl);
         mediator.Verify(service => service.Send(It.Is<Command>(command =>
-            command.Id == 42 && command.Format == ImageContentFormat.Preview), It.IsAny<CancellationToken>()), Times.Once);
+                command.Id == 42 && command.Format == ImageContentFormat.Preview), It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     [Fact]

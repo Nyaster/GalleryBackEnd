@@ -64,7 +64,8 @@ public sealed class Handler(
         await repositories.AppImage.AddAsync(image, cancellationToken);
         await repositories.SaveAsync(cancellationToken);
         staged.MarkPersisted();
-        var card = await repositories.AppImage.GetCardByIdAsync(image.Id, ImageAuthorization.GetViewer(currentUser), cancellationToken)
+        var card = await repositories.AppImage.GetManagementCardByIdAsync(image.Id,
+                ImageAuthorization.GetViewer(currentUser), cancellationToken)
             ?? throw new InvalidOperationException("The saved image could not be read.");
         return ImageDtoMapper.ToDto(card);
     }

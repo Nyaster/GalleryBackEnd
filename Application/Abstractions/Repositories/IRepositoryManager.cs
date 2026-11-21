@@ -12,6 +12,7 @@ public interface IRepositoryManager
     IDiscoveryRepository Discovery { get; }
     IAnnouncementRepository Announcements { get; }
     IFeedbackRepository Feedback { get; }
+    IContentVisibilityRuleRepository ContentVisibilityRules { get; }
     Task<ScrapeRun?> GetScrapeRunAsync(Guid id, bool trackChanges, CancellationToken cancellationToken = default);
     Task<ScrapeRun?> ClaimNextScrapeRunAsync(DateTimeOffset now, CancellationToken cancellationToken = default);
     Task AddScrapeRunAsync(ScrapeRun run, CancellationToken cancellationToken = default);

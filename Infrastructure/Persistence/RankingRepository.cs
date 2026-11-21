@@ -1,6 +1,7 @@
 using System.Data;
 using Contracts;
 using Entities.Models;
+using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -8,7 +9,7 @@ namespace Repository;
 
 public sealed class RankingRepository(RepositoryContext context) : IRankingRepository
 {
-    // Rank discoverable images before applying the viewer's AI classification filter.
+    // Rank discoverable images before applying viewer-specific filters.
     private const string RankedImagesCte = """
         WITH scores AS (
             SELECT "ImageId", SUM(CASE WHEN "Type" = 'Like' THEN 1 ELSE -1 END)::integer AS "LikeDelta"
@@ -43,16 +44,21 @@ public sealed class RankingRepository(RepositoryContext context) : IRankingRepos
 
     public Task<RankingPage> GetLivePageAsync(DateTimeOffset startUtc, DateTimeOffset endUtc, int page, int pageSize,
         ImageViewer viewer, IReadOnlyList<AiUsageClassification>? aiUsage, CancellationToken cancellationToken = default)
-        => ReadPageAsync(context.Database.SqlQueryRaw<RankingRow>(
+    {
+        var visibleImages = context.Images.AsNoTracking().ApplyViewerVisibility(context, viewer.UserId);
+        var rows = context.Database.SqlQueryRaw<RankingRow>(
             RankedImagesCte + "\n" + """SELECT "ImageId", "LikeDelta", "AiUsage", "Rank" FROM ranked""",
-            new NpgsqlParameter("startUtc", startUtc), new NpgsqlParameter("endUtc", endUtc)),
-            page, pageSize, viewer, aiUsage, cancellationToken);
+            new NpgsqlParameter("startUtc", startUtc), new NpgsqlParameter("endUtc", endUtc))
+            .Where(row => visibleImages.Any(image => image.Id == row.ImageId));
+        return ReadPageAsync(rows, page, pageSize, viewer, aiUsage, cancellationToken);
+    }
 
     public Task<RankingPage> GetArchivePageAsync(int snapshotId, int page, int pageSize, ImageViewer viewer,
         IReadOnlyList<AiUsageClassification>? aiUsage, CancellationToken cancellationToken = default)
         => ReadPageAsync(context.RankingSnapshotEntries.AsNoTracking().Where(entry => entry.SnapshotId == snapshotId)
             .Join(context.Images.AsNoTracking().Where(image => image.DeletedAtUtc == null &&
-                image.Visibility == ImageVisibility.Gallery && image.ModerationStatus == ModerationStatus.Approved),
+                image.Visibility == ImageVisibility.Gallery && image.ModerationStatus == ModerationStatus.Approved)
+                .ApplyViewerVisibility(context, viewer.UserId),
                 entry => entry.ImageId, image => image.Id, (entry, image) => new RankingRow
                 {
                     ImageId = image.Id, LikeDelta = entry.LikeDelta, Rank = entry.Rank, AiUsage = image.AiUsage.ToString()

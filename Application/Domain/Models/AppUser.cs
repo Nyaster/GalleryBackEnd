@@ -9,6 +9,7 @@ public sealed class AppUser
     public List<AppUserRole> Roles { get; set; } = [AppUserRole.User];
     public bool CanUploadImages { get; set; }
     public bool UploadsBlocked { get; set; }
+    public bool DisplayAllContent { get; set; }
     public string? AuthenticatorSecret { get; set; }
     public DateTimeOffset? AuthenticatorEnabledAtUtc { get; set; }
     public long? AuthenticatorLastUsedStep { get; set; }

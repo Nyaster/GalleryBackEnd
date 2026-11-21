@@ -16,26 +16,29 @@ public sealed class AppImageRepository(RepositoryContext context) : IAppImageRep
         => context.Images.Include(image => image.Tags).SingleOrDefaultAsync(image => image.Id == id, cancellationToken);
 
     public Task<ImageMetadata?> GetMetadataByIdAsync(int id, CancellationToken cancellationToken = default)
-        => context.Images.AsNoTracking().Where(image => image.Id == id)
-            .Select(image => new ImageMetadata(image.Id, image.UploadedById, image.Visibility,
-                image.ModerationStatus, image.DeletedAtUtc, image.StorageKey, image.ContentType,
-                image.Embedding != null))
-            .SingleOrDefaultAsync(cancellationToken);
+        => ReadMetadataAsync(ImageQuery(false), id, false, cancellationToken);
 
-    public Task<ImageMetadata?> GetGuestMetadataByIdAsync(int id, CancellationToken cancellationToken = default)
-        => context.Images.AsNoTracking().Where(GuestImageQuery.IsEligible).Where(image => image.Id == id)
+    public Task<ImageMetadata?> GetReadableMetadataByIdAsync(int id, ImageViewer viewer,
+        CancellationToken cancellationToken = default)
+        => ReadMetadataAsync(VisibleImageQuery(viewer), id, viewer.UserId is null, cancellationToken);
+
+    private static Task<ImageMetadata?> ReadMetadataAsync(IQueryable<AppImage> query, int id, bool guestFiltered,
+        CancellationToken cancellationToken)
+        => query.Where(image => image.Id == id)
             .Select(image => new ImageMetadata(image.Id, image.UploadedById, image.Visibility,
                 image.ModerationStatus, image.DeletedAtUtc, image.StorageKey, image.ContentType,
-                image.Embedding != null, true))
+                image.Embedding != null, guestFiltered))
             .SingleOrDefaultAsync(cancellationToken);
 
     public Task<ImageCard?> GetCardByIdAsync(int id, ImageViewer viewer, CancellationToken cancellationToken = default)
-    {
-        var query = context.Images.AsNoTracking().Where(image => image.Id == id);
-        if (viewer.UserId is null) query = query.Where(GuestImageQuery.IsEligible);
-        return ImageCardQuery.Project(query, viewer, guestFiltered: viewer.UserId is null)
+        => ImageCardQuery.Project(VisibleImageQuery(viewer).Where(image => image.Id == id), viewer,
+                guestFiltered: viewer.UserId is null)
             .SingleOrDefaultAsync(cancellationToken);
-    }
+
+    public Task<ImageCard?> GetManagementCardByIdAsync(int id, ImageViewer viewer,
+        CancellationToken cancellationToken = default)
+        => ImageCardQuery.Project(ImageQuery(false).Where(image => image.Id == id), viewer)
+            .SingleOrDefaultAsync(cancellationToken);
 
     public async Task<(List<ImageCard> Images, int Total)> SearchAsync(SearchImageDto request, ImageViewer viewer,
         CancellationToken cancellationToken = default)
@@ -45,8 +48,7 @@ public sealed class AppImageRepository(RepositoryContext context) : IAppImageRep
         var hasRandomSeed = RandomSortSeed.TryGetValue(request.RandomSeed, out var randomSeed);
         if (request.Sort == ImageSort.Random && !hasRandomSeed)
             throw new InvalidOperationException("A valid random sort seed is required.");
-        var query = ImageQuery(false).Where(IsDiscoverable());
-        if (viewer.UserId is null) query = query.Where(GuestImageQuery.IsEligible);
+        var query = VisibleImageQuery(viewer).Where(IsDiscoverable());
         query = request.Kind switch
         {
             ImageKind.Official => query.Where(image => image.Source == ImageSource.Scraped),
@@ -66,7 +68,7 @@ public sealed class AppImageRepository(RepositoryContext context) : IAppImageRep
     public async Task<(List<ImageCard> Images, int Total)> GetUploadedByUserAsync(int userId, bool includeHidden,
         int page, int pageSize, ImageViewer viewer, CancellationToken cancellationToken = default)
     {
-        var query = ImageQuery(false).Where(image =>
+        var query = ImageQuery(false).ApplyViewerVisibility(context, viewer.UserId ?? userId).Where(image =>
             image.UploadedById == userId && (includeHidden || image.DeletedAtUtc == null));
         var total = await query.CountAsync(cancellationToken);
         var size = Math.Clamp(pageSize, 1, 50);
@@ -80,7 +82,9 @@ public sealed class AppImageRepository(RepositoryContext context) : IAppImageRep
         ImageViewer viewer, CancellationToken cancellationToken = default,
         IReadOnlyList<AiUsageClassification>? aiUsage = null)
     {
-        var discoverable = ApplyAiUsageFilter(ImageQuery(false).Where(IsDiscoverable()), aiUsage);
+        // An authenticated personal feed can project cards without viewer-specific details.
+        var visible = ImageQuery(false).ApplyViewerVisibility(context, viewer.UserId ?? userId);
+        var discoverable = ApplyAiUsageFilter(visible.Where(IsDiscoverable()), aiUsage);
         // Join the unique (ImageId, UserId) like instead of looking its timestamp up
         // for every candidate. The existing user/time/image index can supply page order.
         var query = context.ImageLikes.AsNoTracking().Where(like => like.UserId == userId)
@@ -98,15 +102,15 @@ public sealed class AppImageRepository(RepositoryContext context) : IAppImageRep
         ImageViewer viewer, CancellationToken cancellationToken = default,
         IReadOnlyList<AiUsageClassification>? aiUsage = null)
     {
-        var embedding = await context.Images.AsNoTracking().Where(image => image.Id == imageId)
+        var visible = VisibleImageQuery(viewer);
+        var embedding = await visible.Where(image => image.Id == imageId)
             .Select(image => image.Embedding).SingleOrDefaultAsync(cancellationToken);
         if (embedding is null)
             return ([], 0);
         var size = Math.Clamp(pageSize, 1, 50);
         var normalizedPage = Math.Max(page, 1);
-        var query = ImageQuery(false).Where(IsDiscoverable())
+        var query = visible.Where(IsDiscoverable())
             .Where(image => image.Id != imageId && image.Embedding != null);
-        if (viewer.UserId is null) query = query.Where(GuestImageQuery.IsEligible);
         query = ApplyAiUsageFilter(query, aiUsage);
         query = query
             .OrderBy(image => image.Embedding!.L2Distance(embedding))
@@ -155,30 +159,19 @@ public sealed class AppImageRepository(RepositoryContext context) : IAppImageRep
         return existing;
     }
 
-    public Task<List<ImageTag>> GetTagSuggestionsAsync(string normalizedQuery, int limit,
-        CancellationToken cancellationToken = default)
-        => context.Tags.AsNoTracking().Where(tag => tag.ModerationStatus == TagModerationStatus.Approved)
-            .Where(tag => tag.AppImages.Any(image => image.DeletedAtUtc == null &&
-                                                     image.Visibility == ImageVisibility.Gallery &&
-                                                     image.ModerationStatus == ModerationStatus.Approved))
-            .Where(tag => EF.Functions.ILike(tag.NormalizedName, $"{EscapeLike(normalizedQuery)}%", "\\"))
-            .OrderByDescending(tag => tag.AppImages.Count(image => image.DeletedAtUtc == null &&
-                                                                   image.Visibility == ImageVisibility.Gallery &&
-                                                                   image.ModerationStatus == ModerationStatus.Approved))
-            .ThenBy(tag => tag.Name).Take(Math.Clamp(limit, 1, 50)).ToListAsync(cancellationToken);
-
-    public Task<List<ImageTag>> GetGuestTagSuggestionsAsync(string normalizedQuery, int limit,
+    public Task<List<ImageTag>> GetTagSuggestionsAsync(string normalizedQuery, int limit, ImageViewer viewer,
         CancellationToken cancellationToken = default)
     {
-        var eligible = context.Images.AsNoTracking().Where(GuestImageQuery.IsEligible);
+        var eligible = VisibleImageQuery(viewer).Where(IsDiscoverable()).Select(image => image.Id);
         return context.Tags.AsNoTracking().Where(tag => tag.ModerationStatus == TagModerationStatus.Approved)
-            .Where(tag => tag.AppImages.Any(image => eligible.Any(candidate => candidate.Id == image.Id)))
+            .Where(tag => tag.AppImages.Any(image => eligible.Contains(image.Id)))
             .Where(tag => EF.Functions.ILike(tag.NormalizedName, $"{EscapeLike(normalizedQuery)}%", "\\"))
-            .OrderByDescending(tag => tag.AppImages.Count(image => eligible.Any(candidate => candidate.Id == image.Id)))
+            .OrderByDescending(tag => tag.AppImages.Count(image => eligible.Contains(image.Id)))
             .ThenBy(tag => tag.Name).Take(Math.Clamp(limit, 1, 50)).ToListAsync(cancellationToken);
     }
 
-    public async Task<(List<AdminTagDto> Tags, int Total)> GetTagsAsync(TagModerationStatus status, int page, int pageSize,
+    public async Task<(List<AdminTagDto> Tags, int Total)> GetTagsAsync(TagModerationStatus status, int page,
+        int pageSize,
         CancellationToken cancellationToken = default)
     {
         var query = context.Tags.AsNoTracking().Where(tag => tag.ModerationStatus == status)
@@ -237,6 +230,12 @@ public sealed class AppImageRepository(RepositoryContext context) : IAppImageRep
 
     private IQueryable<AppImage> ImageQuery(bool trackChanges)
         => trackChanges ? context.Images : context.Images.AsNoTracking();
+
+    private IQueryable<AppImage> VisibleImageQuery(ImageViewer viewer)
+    {
+        var query = ImageQuery(false).ApplyViewerVisibility(context, viewer.UserId);
+        return viewer.UserId is null ? query.Where(GuestImageQuery.IsEligible) : query;
+    }
 
     private static Task<List<ImageCard>> ReadPageAsync(IQueryable<AppImage> query, int page, int pageSize,
         int total, ImageViewer viewer, CancellationToken cancellationToken)

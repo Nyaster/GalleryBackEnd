@@ -37,8 +37,13 @@ public sealed class ForMeMigrationTests(PostgresFixture fixture) : IClassFixture
         await context.Database.MigrateAsync();
         await AssertIndexAsync(context, 128);
         Assert.Equal(2, observer.BetweenCommandProbes);
-        Assert.True(await context.AppUsers.AnyAsync(user => user.Login == "migration-existing"));
-        Assert.Equal(2, await context.AppUsers.CountAsync(user => user.Login.StartsWith("migration-probe-")));
+        var existingPreference = await context.AppUsers.Where(user => user.Login == "migration-existing")
+            .Select(user => user.DisplayAllContent).SingleAsync();
+        Assert.False(existingPreference);
+        var probePreferences = await context.AppUsers.Where(user => user.Login.StartsWith("migration-probe-"))
+            .Select(user => user.DisplayAllContent).ToListAsync();
+        Assert.Equal(2, probePreferences.Count);
+        Assert.All(probePreferences, preference => Assert.False(preference));
         Assert.True(await context.Images.AnyAsync(candidate => candidate.Id == image.Id && candidate.Embedding != null));
         Assert.Equal(2, await context.Images.CountAsync(candidate => candidate.StorageKey.StartsWith("migration-probe-")));
     }
@@ -142,12 +147,18 @@ public sealed class ForMeMigrationTests(PostgresFixture fixture) : IClassFixture
             if (ProbeBetweenCommands && command.CommandText.Contains("REINDEX INDEX CONCURRENTLY"))
             {
                 await using var probe = fixture.CreateContext();
-                probe.AppUsers.Add(new AppUser { Login = $"migration-probe-{BetweenCommandProbes}",
-                    NormalizedLogin = $"MIGRATION-PROBE-{BetweenCommandProbes}", PasswordHash = "",
-                    CreatedAtUtc = DateTimeOffset.UtcNow });
-                probe.Images.Add(Image($"migration-probe-{BetweenCommandProbes}"));
+                var login = $"migration-probe-{BetweenCommandProbes}";
+                await using var transaction = await probe.Database.BeginTransactionAsync(cancellationToken);
+                // Both REINDEX probes run against the schema before later AppUsers columns were added.
+                await probe.Database.ExecuteSqlInterpolatedAsync($"""
+                                                                  INSERT INTO "AppUsers" ("Login", "NormalizedLogin", "PasswordHash", "CreatedAtUtc", "roles")
+                                                                  VALUES ({login}, {login.ToUpperInvariant()}, '', {DateTimeOffset.UtcNow}, {new[] { (int)AppUserRole.User }})
+                                                                  """, cancellationToken);
+                probe.Images.Add(Image(login));
                 await probe.SaveChangesAsync(cancellationToken);
-                Assert.True(await probe.AppUsers.AnyAsync(user => user.Login == "migration-existing", cancellationToken));
+                await transaction.CommitAsync(cancellationToken);
+                Assert.True(
+                    await probe.AppUsers.AnyAsync(user => user.Login == "migration-existing", cancellationToken));
                 BetweenCommandProbes++;
             }
             return result;

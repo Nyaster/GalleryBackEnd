@@ -35,11 +35,20 @@ internal static class ImageAuthorization
     public static async Task<ImageMetadata> GetReadableMetadataAsync(IAppImageRepository repository, int id,
         IUserContext currentUser, CancellationToken cancellationToken)
     {
-        var image = await (currentUser.UserId is null
-            ? repository.GetGuestMetadataByIdAsync(id, cancellationToken)
-            : repository.GetMetadataByIdAsync(id, cancellationToken))
+        var image = await repository.GetReadableMetadataByIdAsync(id, GetViewer(currentUser), cancellationToken)
             ?? throw new Base404ReturnException("Image not found.");
         EnsureReadable(image, currentUser);
+        return image;
+    }
+
+    public static async Task<ImageMetadata> GetPublicMetadataAsync(IAppImageRepository repository, int id,
+        IUserContext currentUser, CancellationToken cancellationToken)
+    {
+        var viewer = GetViewer(currentUser);
+        var image = await repository.GetReadableMetadataByIdAsync(id, viewer, cancellationToken);
+        if (image is null || (viewer.UserId is null && !image.IsGuestVisible) || image.DeletedAtUtc is not null ||
+            image.Visibility != ImageVisibility.Gallery || image.ModerationStatus != ModerationStatus.Approved)
+            throw new Base404ReturnException("Image not found.");
         return image;
     }
 

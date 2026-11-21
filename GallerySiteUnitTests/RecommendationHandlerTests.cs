@@ -43,7 +43,7 @@ public sealed class RecommendationHandlerTests
         var repositories = new Mock<IRepositoryManager>();
         var images = new Mock<IAppImageRepository>();
         repositories.SetupGet(repository => repository.AppImage).Returns(images.Object);
-        images.Setup(repository => repository.GetMetadataByIdAsync(1, It.IsAny<CancellationToken>())).ReturnsAsync((ImageMetadata?)null);
+        images.Setup(repository => repository.GetReadableMetadataByIdAsync(1, It.IsAny<ImageViewer>(), It.IsAny<CancellationToken>())).ReturnsAsync((ImageMetadata?)null);
         var handler = new Application.Features.Images.GetImageRecommendation.Handler(repositories.Object, new TestUser(7));
 
         await Assert.ThrowsAsync<Base404ReturnException>(() => handler.Handle(
@@ -66,7 +66,7 @@ public sealed class RecommendationHandlerTests
         var repositories = new Mock<IRepositoryManager>();
         var images = new Mock<IAppImageRepository>();
         repositories.SetupGet(repository => repository.AppImage).Returns(images.Object);
-        images.Setup(repository => repository.GetMetadataByIdAsync(image.Id, It.IsAny<CancellationToken>())).ReturnsAsync(() => ImageReadTestData.Metadata(image));
+        images.Setup(repository => repository.GetReadableMetadataByIdAsync(image.Id, It.IsAny<ImageViewer>(), It.IsAny<CancellationToken>())).ReturnsAsync(() => ImageReadTestData.Metadata(image));
         return (repositories, images);
     }
 

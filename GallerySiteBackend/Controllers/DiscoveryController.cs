@@ -27,7 +27,6 @@ public sealed class DiscoveryController(IMediator mediator) : ControllerBase
         var requestedDate = date ?? (Request.Query.ContainsKey("date") ? string.Empty : null);
         var result = await mediator.Send(new GetDiscoveryCommand(collection, requestedDate, page, pageSize,
             AiUsageFilterParser.Parse(aiUsage)), cancellationToken);
-        Response.Headers.CacheControl = "private";
         return Ok(result);
     }
 }

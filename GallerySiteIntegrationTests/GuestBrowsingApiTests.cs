@@ -142,12 +142,72 @@ public sealed class GuestBrowsingApiTests(PostgresFixture database) : IClassFixt
         var user = await context.AppUsers.SingleAsync(item => item.Id == seed.UserId);
         var expired = await database.Authentication(context, expiredClock)
             .LoginAsync(new(user.Login, "integration-password"));
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", expired.Response.AccessToken);
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", expired.Response.AccessToken);
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/images")).StatusCode);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", seed.Token);
         await context.AppUsers.Where(item => item.Id == seed.UserId)
             .ExecuteUpdateAsync(update => update.SetProperty(item => item.AuthenticationVersion, 1));
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/images")).StatusCode);
+    }
+
+    [Fact]
+    public async Task ContentRules_ApplyToGuestAndSameTokenReads_IncludingCachedPreviews()
+    {
+        var seed = await SeedAsync();
+        await using var context = database.CreateContext();
+        var owner = await context.AppUsers.SingleAsync(user => user.Id == seed.UserId);
+        owner.Roles = [AppUserRole.User, AppUserRole.Admin];
+        var first = await context.Images.Include(image => image.Tags)
+            .SingleAsync(image => image.Id == seed.EligibleIds[0]);
+        var extra = new ImageTag
+            { Name = "extra", NormalizedName = "extra", ModerationStatus = TagModerationStatus.Approved };
+        first.Tags.Add(extra);
+        await context.SaveChangesAsync();
+        var adminSession = await database.Authentication(context, seed.Clock)
+            .LoginAsync(new(owner.Login, "integration-password"));
+        await using var app = new ApiFactory(database, seed.Clock);
+        using var admin = app.Client();
+        using var viewer = app.Client();
+        using var guest = app.Client();
+        admin.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", adminSession.Response.AccessToken);
+        viewer.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", seed.Token);
+        var imagePath = $"/api/images/{first.Id}";
+        using var warm = await viewer.GetAsync(imagePath + "/content?format=preview");
+        Assert.Equal(HttpStatusCode.OK, warm.StatusCode);
+        Assert.True(warm.Headers.CacheControl?.NoStore);
+        var topicId = first.Tags.Single(tag => tag.NormalizedName == "guest-topic").Id;
+        using var rule = await admin.PostAsJsonAsync("/api/admin/content-visibility-rules",
+            new { tagIds = new[] { topicId, extra.Id } });
+        rule.EnsureSuccessStatusCode();
+
+        foreach (var client in new[] { guest, viewer, admin })
+        {
+            foreach (var suffix in new[]
+                     {
+                         "", "/content", "/content?format=jpeg", "/content?format=preview", "/comments",
+                         "/recommendations"
+                     })
+                Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync(imagePath + suffix)).StatusCode);
+            var search = await ReadAsync<PageableImagesDto>(client, "/api/images?tags=guest-topic&pageSize=1");
+            Assert.Equal(1, search.Total);
+            Assert.Equal(seed.EligibleIds[1], Assert.Single(search.Images).Id);
+        }
+
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await viewer.GetAsync($"/api/admin/images/{first.Id}/content")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await admin.GetAsync($"/api/admin/images/{first.Id}/content")).StatusCode);
+        const string settings = "/api/users/me/content-preferences";
+        using var enable = await viewer.PutAsJsonAsync(settings, new { displayAllContent = true });
+        enable.EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.OK, (await viewer.GetAsync(imagePath + "/content?format=preview")).StatusCode);
+        Assert.Equal(2, (await ReadAsync<PageableImagesDto>(viewer, "/api/images?tags=guest-topic")).Total);
+        Assert.Equal(HttpStatusCode.NotFound, (await guest.GetAsync(imagePath)).StatusCode);
+        using var disable = await viewer.PutAsJsonAsync(settings, new { displayAllContent = false });
+        disable.EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await viewer.GetAsync(imagePath + "/content?format=preview")).StatusCode);
     }
 
     [Fact]
@@ -254,6 +314,7 @@ public sealed class GuestBrowsingApiTests(PostgresFixture database) : IClassFixt
             if (image.Id != seed.EligibleIds[1]) image.Tags.Add(hiddenPopular);
             if (seed.EligibleIds.Contains(image.Id)) image.Tags.Add(guestPopular);
         }
+
         await context.SaveChangesAsync();
         await using var app = new ApiFactory(database, seed.Clock);
         using var client = app.Client();
@@ -274,6 +335,7 @@ public sealed class GuestBrowsingApiTests(PostgresFixture database) : IClassFixt
     {
         var clock = new TestClock();
         await using var context = database.CreateContext();
+        await context.ContentVisibilityRules.ExecuteDeleteAsync();
         await context.ImageTagChanges.ExecuteDeleteAsync();
         await context.Images.ExecuteDeleteAsync();
         await context.Tags.ExecuteDeleteAsync();

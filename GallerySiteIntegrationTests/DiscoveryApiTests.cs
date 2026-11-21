@@ -283,8 +283,11 @@ public sealed class DiscoveryApiTests(PostgresFixture database) : IClassFixture<
         var pageQuery = capture.Reads[2];
         Assert.Contains("LIMIT", pageQuery);
         Assert.Contains("OFFSET", pageQuery);
-        Assert.DoesNotContain("Tags", pageQuery);
-        Assert.DoesNotContain("AppUsers", pageQuery);
+        Assert.DoesNotContain("\"Name\"", pageQuery);
+        Assert.DoesNotContain("\"NormalizedName\"", pageQuery);
+        Assert.DoesNotContain("\"Login\"", pageQuery);
+        Assert.DoesNotContain("\"NormalizedLogin\"", pageQuery);
+        Assert.DoesNotContain("\"PasswordHash\"", pageQuery);
         Assert.DoesNotContain("Embedding", pageQuery);
         Assert.DoesNotContain("StorageKey", pageQuery);
         if (collection != DiscoveryCollection.NewUploads)

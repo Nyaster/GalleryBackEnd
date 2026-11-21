@@ -2,7 +2,7 @@ using MediatR;
 
 namespace Application.Features.Images.GetImageContent;
 
-public sealed record Command(int Id, ImageContentFormat Format) : IRequest<ImageContent>;
+public sealed record Command(int Id, ImageContentFormat Format, bool ForModeration = false) : IRequest<ImageContent>;
 
 public enum ImageContentFormat
 {

@@ -1,18 +1,36 @@
 using Application.Helpers;
 using Contracts;
+using Entities.Exceptions;
 using MediatR;
 using Service.Contracts;
 
 namespace Application.Features.Images.GetImageContent;
 
-public sealed class Handler(IRepositoryManager repositories, IImageStorage storage, IImageProcessor processor,
-    IImageDerivativeCache derivativeCache, IUserContext currentUser)
+public sealed class Handler(
+    IRepositoryManager repositories,
+    IImageStorage storage,
+    IImageProcessor processor,
+    IImageDerivativeCache derivativeCache,
+    IUserContext currentUser)
     : IRequestHandler<Command, ImageContent>
 {
     public async Task<ImageContent> Handle(Command request, CancellationToken cancellationToken)
     {
-        var image = await ImageAuthorization.GetReadableMetadataAsync(repositories.AppImage, request.Id,
-            currentUser, cancellationToken);
+        ImageMetadata image;
+        if (request.ForModeration)
+        {
+            currentUser.RequireAuthenticated();
+            if (!ImageAuthorization.IsStaff(currentUser))
+                throw new AppForbiddenException("Staff access is required.");
+            image = await repositories.AppImage.GetMetadataByIdAsync(request.Id, cancellationToken)
+                    ?? throw new Base404ReturnException("Image not found.");
+        }
+        else
+        {
+            image = await ImageAuthorization.GetReadableMetadataAsync(repositories.AppImage, request.Id,
+                currentUser, cancellationToken);
+        }
+
         if (!storage.Exists(image.StorageKey))
             throw new InvalidOperationException("Image data is unavailable.");
 
@@ -20,7 +38,8 @@ public sealed class Handler(IRepositoryManager repositories, IImageStorage stora
         {
             ImageContentFormat.Original => new ImageContent(
                 await storage.OpenReadAsync(image.StorageKey, cancellationToken), image.ContentType),
-            ImageContentFormat.Jpeg when string.Equals(image.ContentType, "image/jpeg", StringComparison.OrdinalIgnoreCase) =>
+            ImageContentFormat.Jpeg when string.Equals(image.ContentType, "image/jpeg",
+                    StringComparison.OrdinalIgnoreCase) =>
                 new ImageContent(await storage.OpenReadAsync(image.StorageKey, cancellationToken), image.ContentType),
             ImageContentFormat.Jpeg => new ImageContent(
                 await derivativeCache.GetOrCreateAsync(image.StorageKey, ImageDerivativeVariants.JpegV1,
@@ -28,7 +47,8 @@ public sealed class Handler(IRepositoryManager repositories, IImageStorage stora
             ImageContentFormat.Preview => new ImageContent(
                 await derivativeCache.GetOrCreateAsync(image.StorageKey, ImageDerivativeVariants.PreviewJpeg768V1,
                     processor.CreatePreviewJpegAsync, cancellationToken), "image/jpeg"),
-            _ => throw new ArgumentOutOfRangeException(nameof(request), request.Format, "Unsupported image content format.")
+            _ => throw new ArgumentOutOfRangeException(nameof(request), request.Format,
+                "Unsupported image content format.")
         };
     }
 }
