@@ -67,12 +67,16 @@ See [API_REFERENCE.md](API_REFERENCE.md) for the exact public routes and visibil
 
 Guest reads have no viewing quota and share a default limit of 300 requests per IP per minute per API process, including
 image files. Configure `GuestBrowsing__RequestsPerMinute` for SDK runs or `GUEST_BROWSING_REQUESTS_PER_MINUTE` in the
-Compose `.env` file. Guest responses are not cached; opened read routes vary by `Authorization`. Invalid/expired/revoked
+Compose `.env` file. Guest responses are not cached; opened read routes vary by `Authorization`. Invalid/expired
 tokens return `401`, while ineligible guest image URLs return `404`. No new migration or dependency is required.
 
 `POST /api/auth/login` and `POST /api/auth/register` return a
 short-lived access token and issue a rotating, Secure/HttpOnly refresh cookie. `POST /api/auth/refresh` reads that
-cookie; refresh tokens are never returned in JSON.
+cookie; refresh tokens are never returned in JSON. Access-token validation checks the signature, issuer, audience,
+expiry, and user-ID claim locally. For tokens carrying the Admin or Moderator role, the API also checks that the
+account still exists on each request. Existing access tokens remain valid after password
+recovery until expiry (`JwtConfig:AccessTokenMinutes`, default 15 minutes, plus 30 seconds of validation clock skew).
+Account recovery immediately revokes refresh sessions, preventing those sessions from issuing new access tokens.
 
 Forgotten-password recovery requires an authenticator code or a saved one-time backup code. Normal sign-in remains
 password-only. Users receive 10 backup codes on authenticator confirmation; backup-code password recovery unlinks the
@@ -85,14 +89,16 @@ still work. For SDK development, keys default to `Data/auth-keys` under the appl
 `Authenticator__KeyRingPath` when needed.
 
 Apply the `AddAuthenticatorRecovery` and `AddAuthenticatorBackupCodes` migrations before starting the updated API.
-Replace all old API instances together so session revocation and upload blocks are enforced consistently.
+Replace all old API instances together so access-token validation, refresh-session revocation, and upload blocks are
+enforced consistently.
 
 Authenticator management uses `POST /api/auth/authenticator/setup`, `/confirm`, `/remove`, and `/backup-codes`.
 Setup returns a manual key, an authenticator URI, a setup ID, and a ten-minute expiry. Render QR codes locally.
 Confirmation and backup-code regeneration return ten codes once; store them separately from the authenticator app.
 Replacement, removal, and regeneration require the current password plus an app code or backup code. Starting a
 replacement with the last backup code returns `409` without consuming it: remove the lost app first, then enroll again.
-Anonymous `POST /api/auth/recover` accepts `login`, `code`, and `newPassword` and invalidates existing account sessions.
+Anonymous `POST /api/auth/recover` accepts `login`, `code`, and `newPassword` and revokes existing refresh sessions.
+Already-issued access tokens expire naturally; they are not immediately revoked by recovery.
 `GET /api/auth/me` returns current enrollment, remaining backup-code count, and effective upload access.
 There is no email or administrator password-reset fallback.
 
@@ -113,6 +119,71 @@ successful database save. Later response reads or source-stream disposal cannot 
 failures trigger best-effort cleanup even after request cancellation; deletion failures are logged without replacing
 the original error. Database saving and file storage are not atomic, so process crashes or failed cleanup may leave
 artifacts that require reconciliation.
+
+## Personalized recommendations
+
+`GET /api/images/for-me` builds a signed-in user's feed from up to 25 representative images selected from their latest
+100 eligible likes. Set `ForMeFeed__RepresentativeCount` for SDK/container configuration, or
+`FOR_ME_REPRESENTATIVE_COUNT` in the Compose `.env` file, to choose a limit from 1 through 100. Restart the API after
+changing it. More references cover more interests, but increase search work; the default latency budget is measured
+at 25 references, not promised for a limit of 100.
+
+Feed creation requires a released pgvector version **0.8.0 or newer** and uses the HNSW index with
+`m=16, ef_construction=128`. Check the
+installed `vector` extension version (`SELECT extversion FROM pg_extension WHERE extname = 'vector';`) before rollout;
+the API does not upgrade it automatically. Index searches retrieve
+at most 500 candidates per reference for both filtered and unfiltered feeds and order them by exact
+distance, so they can miss some globally nearest matches. One exact top-up
+can fill an undersized personalized result. Generation resolves only currently approved requested tag names within its
+repeatable-read snapshot, skipping an
+unnecessary tag join when none match. Original filter names remain stored, so later cursor pages still suppress
+images when an unknown or pending tag becomes approved or attached. Cursor requests reuse the stored feed for one hour,
+retain current
+eligibility checks, and remain compatible across reference-limit changes. Apply the `ImproveForMeHnswConstruction`
+migration before running the updated API. It rebuilds the existing index concurrently with higher construction effort.
+See the ForMe section in [API_REFERENCE.md](API_REFERENCE.md) for the request contract.
+
+Only unfiltered ANN retrieval with usable references temporarily sets transaction-local `random_page_cost=1.1` to
+encourage use of the index. The original value is restored before exact top-up, popularity fallback,
+or publication; filtered searches retain their planner costs and may choose an efficient exact plan. This does not
+change global/session defaults or disable sequential scans. Search tuple/memory settings are approximate search budgets,
+not strict process-memory limits. The benchmark's larger maintenance memory is confined to isolated index construction.
+
+The migration changes index construction options and then runs `REINDEX INDEX CONCURRENTLY` as separate commands
+outside a transaction. Ordinary reads/writes can continue; PostgreSQL briefly locks during index replacement.
+Budget for an additional index copy, WAL, temporary disk, and the measured staging build time plus margin. There is no
+automatic production maintenance-memory increase. Before rollout, check free disk and the server's `statement_timeout`.
+`DatabaseMigrations:CommandTimeoutSeconds` defaults to 600 (positive integer), affects migration commands only, and is
+restored before administrator bootstrap. Override with `DatabaseMigrations__CommandTimeoutSeconds` or Compose
+`MIGRATION_COMMAND_TIMEOUT_SECONDS`. For example, after measuring staging, a finite one-hour command budget is:
+
+```bash
+docker compose -f deploy/docker-compose.production.yml run --rm -e DatabaseMigrations__CommandTimeoutSeconds=3600 migrate
+```
+
+This budget is an example, not a build-time guarantee. If interrupted, inspect `pg_index.indisvalid` and PostgreSQL's
+`_ccnew`/`_ccold` replacement indexes before retrying;
+follow [PostgreSQL concurrent-reindex recovery instructions](https://www.postgresql.org/docs/17/sql-reindex.html#SQL-REINDEX-CONCURRENTLY)
+to
+remove an invalid leftover or complete a pending old-index drop. Never drop the valid live index. Matching reloptions
+alone do not prove construction completed: retry the pending migration so it always reindexes. Its rollback similarly
+rebuilds at the previous `m=16, ef_construction=64`; reverting only the application binary leaves the stronger index
+usable.
+No application deployment or extension upgrade is performed automatically.
+
+The opt-in Release benchmark checks retrieval recall against exact searches and measures full generation/paging on
+100,000 synthetic 1,024D embeddings with 25 interest clusters:
+
+```bash
+GALLERY_RUN_PERFORMANCE=1 dotnet test GallerySiteIntegrationTests/GallerySiteIntegrationTests.csproj -c Release --filter FullyQualifiedName~Feed_HundredThousandDenseVectors_MeetsGenerationPagingAndRecallBudgets
+```
+
+Normal acceptance verifies the configured production search settings and records results/query plans in
+`/tmp/gallery-for-me-indexed-benchmark.log`. Add `GALLERY_FOR_ME_CALIBRATE=1` to explicitly run the bounded diagnostic
+calibration; its selected candidate still requires a subsequent normal acceptance run. The speed comparison
+uses the old exact-ten **search phase**, excluding publication, against new 25-reference **full generation**, including
+setup and publication; this is a conservative comparison. Synthetic recall measures retrieval fidelity, not whether
+real users prefer the recommendations. Save a copy of the benchmark log after each run to retain its results.
 
 ## One-time scrape
 
