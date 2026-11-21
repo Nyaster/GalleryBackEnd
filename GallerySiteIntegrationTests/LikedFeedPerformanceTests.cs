@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using Contracts;
 using Entities.Models;
+using Infrastructure.Persistence;
 using Repository;
 
 namespace GallerySiteIntegrationTests;

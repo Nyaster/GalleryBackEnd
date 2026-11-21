@@ -5,6 +5,7 @@ using System.Text.Json;
 using Contracts;
 using Entities.Exceptions;
 using Entities.Models;
+using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Pgvector;
 using Repository;

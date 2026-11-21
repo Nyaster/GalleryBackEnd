@@ -2,6 +2,7 @@ using Contracts;
 using Entities.Models;
 using Microsoft.EntityFrameworkCore;
 using System.Data;
+using Infrastructure.Persistence;
 
 namespace Repository;
 

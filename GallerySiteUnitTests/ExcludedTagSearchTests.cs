@@ -1,6 +1,7 @@
 using Application.Features.Images.GetImageBySearch;
 using Entities.Models;
 using GallerySiteBackend.Presentation;
+using Infrastructure.Persistence;
 using MediatR;
 using Moq;
 using Repository;

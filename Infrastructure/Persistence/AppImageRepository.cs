@@ -2,9 +2,10 @@ using Contracts;
 using Entities.Models;
 using Microsoft.EntityFrameworkCore;
 using Pgvector.EntityFrameworkCore;
+using Repository;
 using Shared.DataTransferObjects;
 
-namespace Repository;
+namespace Infrastructure.Persistence;
 
 public sealed class AppImageRepository(RepositoryContext context) : IAppImageRepository
 {
