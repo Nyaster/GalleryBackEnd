@@ -28,7 +28,8 @@ public sealed class AuthenticatorApiTests(PostgresFixture database) : IClassFixt
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task EnrollRestartRecover_InvalidatesBothTokenTypes_AndAllowsPasswordOnlyLogin(bool useBackupCode)
+    public async Task EnrollRestartRecover_RevokesRefreshSession_KeepsAccessToken_AndAllowsPasswordOnlyLogin(
+        bool useBackupCode)
     {
         var clock = new TestClock();
         JwtTokenResponse registered;
@@ -85,7 +86,7 @@ public sealed class AuthenticatorApiTests(PostgresFixture database) : IClassFixt
         Assert.Contains(recovery.Headers.GetValues("Set-Cookie"),
             cookie => cookie.StartsWith("gallery_refresh=;", StringComparison.Ordinal));
         next.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", registered.AccessToken);
-        Assert.Equal(HttpStatusCode.Unauthorized, (await next.GetAsync("/api/auth/me")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await next.GetAsync("/api/auth/me")).StatusCode);
         next.DefaultRequestHeaders.Authorization = null;
         using var refreshRequest = new HttpRequestMessage(HttpMethod.Post, "/api/auth/refresh");
         refreshRequest.Headers.Add("Cookie", refreshCookie);
@@ -186,7 +187,7 @@ public sealed class AuthenticatorApiTests(PostgresFixture database) : IClassFixt
     }
 
     [Fact]
-    public async Task LegacyTokens_WorkOnlyAtVersionZero_AndDeletedUsersAreRejected()
+    public async Task LegacyTokens_SurviveVersionChanges_AndCurrentUserEndpointRejectsDeletedUsers()
     {
         var clock = new TestClock();
         await using var context = database.CreateContext();
@@ -208,11 +209,35 @@ public sealed class AuthenticatorApiTests(PostgresFixture database) : IClassFixt
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/auth/me")).StatusCode);
         await context.AppUsers.Where(user => user.Id == account.Response.User.Id)
             .ExecuteUpdateAsync(update => update.SetProperty(user => user.AuthenticationVersion, 1));
-        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/auth/me")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/auth/me")).StatusCode);
         client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", account.Response.AccessToken);
         await context.AppUsers.Where(user => user.Id == account.Response.User.Id).ExecuteDeleteAsync();
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/auth/me")).StatusCode);
+    }
+
+    [Theory]
+    [InlineData(AppUserRole.Admin, "/api/admin/feedback")]
+    [InlineData(AppUserRole.Moderator, "/api/admin/images/pending")]
+    public async Task DeletedStaffAccount_LosesAccessWithExistingToken(AppUserRole role, string route)
+    {
+        var clock = new TestClock();
+        await using var context = database.CreateContext();
+        var authentication = database.Authentication(context, clock);
+        var login = "staff" + Guid.NewGuid().ToString("N");
+        var account = await authentication.RegisterAsync(new(login, Password));
+        var user = await context.AppUsers.FindAsync(account.Response.User.Id);
+        user!.Roles = [AppUserRole.User, role];
+        await context.SaveChangesAsync();
+        var session = await authentication.LoginAsync(new(login, Password));
+        await using var app = new ApiFactory(database, clock);
+        using var client = app.Client();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", session.Response.AccessToken);
+
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync(route)).StatusCode);
+        await context.AppUsers.Where(row => row.Id == user.Id).ExecuteDeleteAsync();
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync(route)).StatusCode);
     }
 
     [Fact]

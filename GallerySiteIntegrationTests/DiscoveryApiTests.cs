@@ -23,7 +23,7 @@ public sealed class DiscoveryApiTests(PostgresFixture database) : IClassFixture<
     [InlineData("most-liked")]
     [InlineData("new-uploads")]
     [InlineData("most-commented")]
-    public async Task GetDiscovery_GuestOrRevokedSession_ReturnsGuestResultsOrUnauthorized(string collection)
+    public async Task GetDiscovery_GuestOrChangedAuthenticationVersion_ReturnsResults(string collection)
     {
         var clock = new TestClock();
         await using var app = new ApiFactory(database, clock);
@@ -37,7 +37,7 @@ public sealed class DiscoveryApiTests(PostgresFixture database) : IClassFixture<
             .ExecuteUpdateAsync(update => update.SetProperty(user => user.AuthenticationVersion, 1));
         client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", account.Response.AccessToken);
-        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/discovery/" + collection)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/discovery/" + collection)).StatusCode);
     }
 
     [Fact]

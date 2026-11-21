@@ -1,4 +1,6 @@
 using System.Text;
+using System.Security.Claims;
+using Entities.Models;
 using GallerySiteBackend;
 using Contracts;
 using GallerySiteBackend.Configuration;
@@ -25,7 +27,8 @@ public static class ServiceExtensions
         services.AddCors(options => options.AddPolicy("CorsPolicy", policy =>
         {
             if (origins.Length == 0) return;
-            policy.WithOrigins(origins).AllowAnyHeader().AllowAnyMethod().AllowCredentials().WithExposedHeaders("X-Request-ID");
+            policy.WithOrigins(origins).AllowAnyHeader().AllowAnyMethod().AllowCredentials()
+                .WithExposedHeaders("X-Request-ID");
         }));
     }
 
@@ -53,20 +56,20 @@ public static class ServiceExtensions
             {
                 OnTokenValidated = async context =>
                 {
-                    var id = context.Principal?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-                    var rawVersion = context.Principal?.FindFirst("auth_version")?.Value;
-                    if (!int.TryParse(id, out var userId) ||
-                        (rawVersion is not null && !int.TryParse(rawVersion, out _)))
+                    var principal = context.Principal!;
+                    if (!int.TryParse(principal.FindFirstValue(ClaimTypes.NameIdentifier), out var userId))
                     {
                         context.Fail("Invalid account session.");
                         return;
                     }
 
-                    var version = rawVersion is null ? 0 : int.Parse(rawVersion);
+                    if (!principal.IsInRole(nameof(AppUserRole.Admin)) &&
+                        !principal.IsInRole(nameof(AppUserRole.Moderator)))
+                        return;
+
                     var repositories = context.HttpContext.RequestServices.GetRequiredService<IRepositoryManager>();
-                    var storedVersion = await repositories.AppUser.GetAuthenticationVersionAsync(userId,
-                        context.HttpContext.RequestAborted);
-                    if (storedVersion is null || storedVersion != version)
+                    if (await repositories.AppUser.GetAuthenticationVersionAsync(userId,
+                            context.HttpContext.RequestAborted) is null)
                         context.Fail("Invalid account session.");
                 },
                 OnAuthenticationFailed = context =>

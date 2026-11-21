@@ -147,7 +147,7 @@ public sealed class GuestBrowsingApiTests(PostgresFixture database) : IClassFixt
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", seed.Token);
         await context.AppUsers.Where(item => item.Id == seed.UserId)
             .ExecuteUpdateAsync(update => update.SetProperty(item => item.AuthenticationVersion, 1));
-        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/images")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/images")).StatusCode);
     }
 
     [Fact]
