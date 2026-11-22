@@ -10,5 +10,5 @@ public sealed class AppImageCreationDto
     public IFormFile? ImageFile { get; init; }
     public AiUsageClassification AiUsage { get; init; }
     public bool IsPrivate { get; init; }
-    public IReadOnlyList<string> Tags { get; init; } = [];
+    public List<string> Tags { get; init; } = [];
 }
