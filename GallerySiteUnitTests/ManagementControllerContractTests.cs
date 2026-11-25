@@ -1,3 +1,4 @@
+using Entities.Models;
 using GallerySiteBackend.Presentation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -30,31 +31,22 @@ public sealed class ManagementControllerContractTests
     }
 
     [Theory]
-    [InlineData("PendingImages")]
-    [InlineData("ChangeModeration")]
-    [InlineData("Tags")]
-    [InlineData("ChangeTagModeration")]
-    [InlineData("TagChanges")]
-    [InlineData("ModerateTagChange")]
-    [InlineData("HiddenImages")]
-    public void StaffEndpoints_AllowAdminAndModerator(string methodName)
+    [InlineData(nameof(AdministrationController.PendingImages), AccessPermission.ImagesReviewQueue)]
+    [InlineData(nameof(AdministrationController.HiddenImages), AccessPermission.ImagesReviewQueue)]
+    [InlineData(nameof(AdministrationController.ChangeModeration), "images.changeModeration")]
+    [InlineData(nameof(AdministrationController.Tags), AccessPermission.TagsModerate)]
+    [InlineData(nameof(AdministrationController.ChangeTagModeration), AccessPermission.TagsModerate)]
+    [InlineData(nameof(AdministrationController.TagChanges), AccessPermission.ImageTagsReview)]
+    [InlineData(nameof(AdministrationController.ModerateTagChange), AccessPermission.ImageTagsReview)]
+    [InlineData(nameof(AdministrationController.StartScrape), AccessPermission.ScrapingRun)]
+    [InlineData(nameof(AdministrationController.GetScrape), AccessPermission.ScrapingRun)]
+    [InlineData(nameof(AdministrationController.GetUploadPermission), AccessPermission.UploadsManageAccess)]
+    [InlineData(nameof(AdministrationController.UpdateUploadPermission), AccessPermission.UploadsManageAccess)]
+    public void ManagementEndpoints_RequireActionPermission(string methodName, string expectedPolicy)
     {
         var method = typeof(AdministrationController).GetMethod(methodName) ?? throw new InvalidOperationException($"{methodName} was not found.");
         var authorize = method.GetCustomAttributes(typeof(AuthorizeAttribute), true).Cast<AuthorizeAttribute>().Single();
 
-        Assert.Equal("Admin,Moderator", authorize.Roles);
-    }
-
-    [Theory]
-    [InlineData("StartScrape")]
-    [InlineData("GetScrape")]
-    [InlineData("GetUploadPermission")]
-    [InlineData("UpdateUploadPermission")]
-    public void ScrapeEndpoints_RemainAdminOnly(string methodName)
-    {
-        var method = typeof(AdministrationController).GetMethod(methodName) ?? throw new InvalidOperationException($"{methodName} was not found.");
-        var authorize = method.GetCustomAttributes(typeof(AuthorizeAttribute), true).Cast<AuthorizeAttribute>().Single();
-
-        Assert.Equal("Admin", authorize.Roles);
+        Assert.Equal(expectedPolicy, authorize.Policy);
     }
 }

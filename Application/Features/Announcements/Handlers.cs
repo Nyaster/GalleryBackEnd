@@ -21,7 +21,7 @@ public sealed class UpdateAnnouncementHandler(IRepositoryManager repositories, I
 {
     public async Task<AnnouncementDto> Handle(UpdateAnnouncementCommand request, CancellationToken cancellationToken)
     {
-        EnsureAdministrator(currentUser);
+        EnsurePermission(currentUser, AccessPermission.AnnouncementsManage);
         var content = ValidateContent(request.Request.Content, "Announcement");
         var now = clock.GetUtcNow();
         var announcement = await repositories.Announcements.GetAsync(true, cancellationToken);
@@ -40,11 +40,11 @@ public sealed class UpdateAnnouncementHandler(IRepositoryManager repositories, I
         return new AnnouncementDto(announcement.Content, announcement.UpdatedAtUtc);
     }
 
-    internal static void EnsureAdministrator(IUserContext currentUser)
+    internal static void EnsurePermission(IUserContext currentUser, string permission)
     {
         currentUser.RequireAuthenticated();
-        if (!currentUser.IsInRole(nameof(AppUserRole.Admin)))
-            throw new AppForbiddenException("Administrator access is required.");
+        if (!currentUser.HasPermission(permission))
+            throw new AppForbiddenException("This action requires an additional permission.");
     }
 
     internal static string ValidateContent(string? content, string subject)
@@ -60,7 +60,7 @@ public sealed class ClearAnnouncementHandler(IRepositoryManager repositories, IU
 {
     public async Task Handle(ClearAnnouncementCommand request, CancellationToken cancellationToken)
     {
-        UpdateAnnouncementHandler.EnsureAdministrator(currentUser);
+        UpdateAnnouncementHandler.EnsurePermission(currentUser, AccessPermission.AnnouncementsManage);
         var announcement = await repositories.Announcements.GetAsync(true, cancellationToken);
         if (announcement is null) return;
         repositories.Announcements.Remove(announcement);
@@ -92,7 +92,7 @@ public sealed class GetFeedbackHandler(IRepositoryManager repositories, IUserCon
 {
     public async Task<PageableFeedbackDto> Handle(GetFeedbackCommand request, CancellationToken cancellationToken)
     {
-        UpdateAnnouncementHandler.EnsureAdministrator(currentUser);
+        UpdateAnnouncementHandler.EnsurePermission(currentUser, AccessPermission.FeedbackRead);
         var page = Math.Max(request.Page, 1);
         var pageSize = Math.Clamp(request.PageSize, 1, 50);
         var result = await repositories.Feedback.GetAsync(page, pageSize, cancellationToken);

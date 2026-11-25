@@ -8,7 +8,7 @@ namespace Application.Features.Users;
 
 public sealed record UpdateContentPreferencesCommand(bool DisplayAllContent) : IRequest<AppUserDto>;
 
-public sealed class UpdateContentPreferencesHandler(IRepositoryManager repositories, IUserContext currentUser)
+public sealed class UpdateContentPreferencesHandler(IRepositoryManager repositories, IUserContext currentUser, AccountAccessDto access)
     : IRequestHandler<UpdateContentPreferencesCommand, AppUserDto>
 {
     public async Task<AppUserDto> Handle(UpdateContentPreferencesCommand request, CancellationToken cancellationToken)
@@ -21,6 +21,6 @@ public sealed class UpdateContentPreferencesHandler(IRepositoryManager repositor
         user.DisplayAllContent = request.DisplayAllContent;
         await repositories.SaveAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return AppUserDto.FromUser(user);
+        return AppUserDto.FromUser(user, access);
     }
 }

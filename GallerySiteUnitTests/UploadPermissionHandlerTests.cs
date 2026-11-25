@@ -40,13 +40,14 @@ public sealed class UploadPermissionHandlerTests
                 handler.Handle(UploadCommand(), CancellationToken.None));
         var reported =
             await new Application.Features.Administration.GetUserUploadPermission.Handler(repositories.Object,
-                    new TestUser(1, AppUserRole.Admin))
+                    new TestUser(1, AppUserRole.Admin), Access(user))
                 .Handle(new(7), CancellationToken.None);
         Assert.Equal(allowed, reported.CanUploadImages);
         Assert.Equal(approved, reported.UploadPermissionGranted);
         Assert.Equal(enrolled, reported.AuthenticatorEnabled);
         Assert.Equal(blocked, reported.UploadsBlocked);
-        Assert.Equal(allowed, Shared.DataTransferObjects.AppUserDto.FromUser(user).CanUploadImages);
+        var snapshot = await Access(user).GetAccessAsync(user.Id, CancellationToken.None);
+        Assert.Equal(allowed, Shared.DataTransferObjects.AppUserDto.FromUser(user, snapshot!).CanUploadImages);
         stager.Verify(service => service.StageAsync(It.IsAny<Stream>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
@@ -57,7 +58,7 @@ public sealed class UploadPermissionHandlerTests
         var user = User(7, false);
         user.AuthenticatorEnabledAtUtc = DateTimeOffset.UtcNow;
         var handler = new Application.Features.Administration.UpdateUserUploadPermission.Handler(
-            Repositories(UserRepository(user)).Object, new TestUser(1, AppUserRole.Admin));
+            Repositories(UserRepository(user)).Object, new TestUser(1, AppUserRole.Admin), Access(user));
         Assert.False((await handler.Handle(new(7, true, true), CancellationToken.None)).CanUploadImages);
         Assert.False((await handler.Handle(new(7, false), CancellationToken.None)).CanUploadImages);
         Assert.False((await handler.Handle(new(7, true), CancellationToken.None)).CanUploadImages);
@@ -108,7 +109,7 @@ public sealed class UploadPermissionHandlerTests
         var repositories = Repositories(users);
         var handler =
             new Application.Features.Administration.UpdateUserUploadPermission.Handler(repositories.Object,
-                new TestUser(1, AppUserRole.Admin));
+                new TestUser(1, AppUserRole.Admin), Access(user));
 
         var granted =
             await handler.Handle(new Application.Features.Administration.UpdateUserUploadPermission.Command(12, true),
@@ -139,7 +140,7 @@ public sealed class UploadPermissionHandlerTests
         {
             var handler =
                 new Application.Features.Administration.UpdateUserUploadPermission.Handler(repositories.Object,
-                    new TestUser(1, AppUserRole.Admin));
+                    new TestUser(1, AppUserRole.Admin), Access());
             await Assert.ThrowsAsync<Base404ReturnException>(() => handler.Handle(
                 new Application.Features.Administration.UpdateUserUploadPermission.Command(404, true),
                 CancellationToken.None));
@@ -148,7 +149,7 @@ public sealed class UploadPermissionHandlerTests
         {
             var handler =
                 new Application.Features.Administration.GetUserUploadPermission.Handler(repositories.Object,
-                    new TestUser(1, AppUserRole.Admin));
+                    new TestUser(1, AppUserRole.Admin), Access());
             await Assert.ThrowsAsync<Base404ReturnException>(() => handler.Handle(
                 new Application.Features.Administration.GetUserUploadPermission.Command(404), CancellationToken.None));
         }
@@ -159,7 +160,7 @@ public sealed class UploadPermissionHandlerTests
     {
         var users = new Mock<IAppUserRepository>();
         var handler = new Application.Features.Administration.GetUserUploadPermission.Handler(
-            Repositories(users).Object, new TestUser(1, AppUserRole.Moderator));
+            Repositories(users).Object, new TestUser(1, AppUserRole.Moderator), Access());
 
         await Assert.ThrowsAsync<AppForbiddenException>(() => handler.Handle(
             new Application.Features.Administration.GetUserUploadPermission.Command(12), CancellationToken.None));
@@ -196,6 +197,17 @@ public sealed class UploadPermissionHandlerTests
         return repositories;
     }
 
+    private static IRoleAccessService Access(AppUser? user = null)
+    {
+        var access = new Mock<IRoleAccessService>();
+        if (user is not null)
+            access.Setup(service => service.GetAccessAsync(user.Id, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new AccountAccessDto([], user.Roles.Contains(AppUserRole.Admin)
+                    ? [AccessPermission.UploadsBypassRestrictions]
+                    : []));
+        return access.Object;
+    }
+
     private static AppUser User(int id, bool canUploadImages, params AppUserRole[] roles) => new()
     {
         Id = id,
@@ -212,8 +224,7 @@ public sealed class UploadPermissionHandlerTests
         public int? UserId => userId;
         public string? Login => "tester";
 
-        public bool IsInRole(string role) =>
-            roles.Any(candidate => string.Equals(candidate.ToString(), role, StringComparison.Ordinal));
+        public bool HasPermission(string permission) => roles.Any(role => Entities.Models.AccessPermission.HasLegacyPermission(role.ToString(), permission));
 
         public void RequireAuthenticated()
         {

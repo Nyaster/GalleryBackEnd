@@ -8,6 +8,7 @@ public interface IAppImageRepository
     Task<AppImage?> GetByIdAsync(int id, bool trackChanges, CancellationToken cancellationToken = default);
     Task<AppImage?> GetWithTagsByIdAsync(int id, CancellationToken cancellationToken = default);
     Task<ImageMetadata?> GetMetadataByIdAsync(int id, CancellationToken cancellationToken = default);
+    Task<ImageMetadata?> GetReviewMetadataByIdAsync(int id, CancellationToken cancellationToken = default);
 
     Task<ImageMetadata?> GetReadableMetadataByIdAsync(int id, ImageViewer viewer,
         CancellationToken cancellationToken = default);

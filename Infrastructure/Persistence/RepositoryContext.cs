@@ -12,6 +12,10 @@ public sealed class RepositoryContext(DbContextOptions<RepositoryContext> option
     public DbSet<ContentVisibilityRuleTag> ContentVisibilityRuleTags => Set<ContentVisibilityRuleTag>();
     public DbSet<AppImage> Images => Set<AppImage>();
     public DbSet<AppUser> AppUsers => Set<AppUser>();
+    public DbSet<AccessRole> AccessRoles => Set<AccessRole>();
+    public DbSet<AccountRole> AccountRoles => Set<AccountRole>();
+    public DbSet<AccessRolePermission> AccessRolePermissions => Set<AccessRolePermission>();
+    public DbSet<AccessAudit> AccessAudits => Set<AccessAudit>();
     public DbSet<RefreshSession> RefreshSessions => Set<RefreshSession>();
     public DbSet<Announcement> Announcements => Set<Announcement>();
     public DbSet<Feedback> Feedback => Set<Feedback>();

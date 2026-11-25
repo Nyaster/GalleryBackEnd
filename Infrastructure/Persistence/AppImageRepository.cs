@@ -18,6 +18,11 @@ public sealed class AppImageRepository(RepositoryContext context) : IAppImageRep
     public Task<ImageMetadata?> GetMetadataByIdAsync(int id, CancellationToken cancellationToken = default)
         => ReadMetadataAsync(ImageQuery(false), id, false, cancellationToken);
 
+    public Task<ImageMetadata?> GetReviewMetadataByIdAsync(int id, CancellationToken cancellationToken = default)
+        => ReadMetadataAsync(ImageQuery(false).Where(image =>
+                image.DeletedAtUtc != null || image.ModerationStatus == ModerationStatus.Pending), id, false,
+            cancellationToken);
+
     public Task<ImageMetadata?> GetReadableMetadataByIdAsync(int id, ImageViewer viewer,
         CancellationToken cancellationToken = default)
         => ReadMetadataAsync(VisibleImageQuery(viewer), id, viewer.UserId is null, cancellationToken);

@@ -75,7 +75,7 @@ public sealed class CommentReadHandlerTests
     {
         public int? UserId => authenticated ? 12 : null;
         public string? Login => authenticated ? "alice" : null;
-        public bool IsInRole(string role) => false;
+        public bool HasPermission(string permission) => false;
         public void RequireAuthenticated()
         {
             if (!authenticated) throw new AppUserUnauthorizedException("Authentication is required.");

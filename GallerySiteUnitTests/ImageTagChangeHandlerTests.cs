@@ -1,6 +1,7 @@
 using Application.Features.Administration.ModerateImageTagChange;
 using Application.Features.Images.ReplaceImageTags;
 using Contracts;
+using Entities.Exceptions;
 using Entities.Models;
 using Moq;
 using Service.Contracts;
@@ -16,14 +17,19 @@ public sealed class ImageTagChangeHandlerTests
         var image = Image(Tag("old"));
         var replacement = new List<ImageTag> { Tag("new") };
         var (repositories, images, changes, transaction) = Repositories(image);
-        images.Setup(repository => repository.GetOrCreateTagsAsync(It.IsAny<IEnumerable<string>>(), It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
+        images.Setup(repository => repository.GetOrCreateTagsAsync(It.IsAny<IEnumerable<string>>(),
+                It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(replacement);
         ImageTagChange? added = null;
         changes.Setup(repository => repository.AddAsync(It.IsAny<ImageTagChange>(), It.IsAny<CancellationToken>()))
             .Callback<ImageTagChange, CancellationToken>((change, _) => added = change).Returns(Task.CompletedTask);
-        var handler = new Application.Features.Images.ReplaceImageTags.Handler(repositories.Object, new TestUser(9, AppUserRole.Moderator), TimeProvider.System);
+        var handler = new Application.Features.Images.ReplaceImageTags.Handler(repositories.Object,
+            new TestUser(9, AppUserRole.Moderator), TimeProvider.System);
 
-        var result = await handler.Handle(new Application.Features.Images.ReplaceImageTags.Command(image.Id, new ReplaceImageTagsDto(["new"])), CancellationToken.None);
+        var result =
+            await handler.Handle(
+                new Application.Features.Images.ReplaceImageTags.Command(image.Id, new ReplaceImageTagsDto(["new"])),
+                CancellationToken.None);
 
         Assert.Equal(ImageTagChangeStatus.Approved, result.Status);
         Assert.Equal(["new"], image.Tags.Select(tag => tag.Name));
@@ -35,17 +41,52 @@ public sealed class ImageTagChangeHandlerTests
     }
 
     [Fact]
+    public async Task ReplaceTags_TrustedOwner_AppliesPendingGlobalTagWithoutRecordingAReviewer()
+    {
+        var image = Image(Tag("old"));
+        var pendingTag = Tag("new");
+        pendingTag.ModerationStatus = TagModerationStatus.Pending;
+        var (repositories, images, _, transaction) = Repositories(image);
+        images.Setup(repository => repository.GetOrCreateTagsAsync(It.IsAny<IEnumerable<string>>(),
+                It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([pendingTag]);
+        var user = new Mock<IUserContext>();
+        user.SetupGet(value => value.UserId).Returns(image.UploadedById);
+        user.Setup(value => value.HasPermission(AccessPermission.ImageTagsBypassReviewOnOwnImages)).Returns(true);
+        var handler = new Application.Features.Images.ReplaceImageTags.Handler(repositories.Object,
+            user.Object, TimeProvider.System);
+
+        var result = await handler.Handle(new Application.Features.Images.ReplaceImageTags.Command(image.Id,
+            new ReplaceImageTagsDto(["new"])), CancellationToken.None);
+
+        Assert.Equal(ImageTagChangeStatus.Approved, result.Status);
+        Assert.NotNull(result.AppliedAtUtc);
+        Assert.Null(result.ReviewedAtUtc);
+        Assert.Null(result.ReviewedByUserId);
+        Assert.Contains("Applied automatically", result.ReviewNote);
+        Assert.Equal(TagModerationStatus.Pending, Assert.Single(image.Tags).ModerationStatus);
+        transaction.Verify(value => value.CommitAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task ModerateTagChange_Approve_AppliesProposalAndRecordsReviewerNote()
     {
         var image = Image(Tag("old"));
         var change = PendingChange(image.Id, ["old"], ["new"]);
         var replacement = new List<ImageTag> { Tag("new") };
         var (repositories, images, changes, transaction) = Repositories(image);
-        changes.Setup(repository => repository.GetByIdAsync(change.Id, true, It.IsAny<CancellationToken>())).ReturnsAsync(change);
-        images.Setup(repository => repository.GetOrCreateTagsAsync(change.ProposedTags, It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>())).ReturnsAsync(replacement);
-        var handler = new Application.Features.Administration.ModerateImageTagChange.Handler(repositories.Object, new TestUser(9, AppUserRole.Admin), TimeProvider.System);
+        changes.Setup(repository => repository.GetByIdAsync(change.Id, true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(change);
+        images.Setup(repository =>
+            repository.GetOrCreateTagsAsync(change.ProposedTags, It.IsAny<DateTimeOffset>(),
+                It.IsAny<CancellationToken>())).ReturnsAsync(replacement);
+        var handler = new Application.Features.Administration.ModerateImageTagChange.Handler(repositories.Object,
+            new TestUser(9, AppUserRole.Admin), TimeProvider.System);
 
-        var result = await handler.Handle(new Application.Features.Administration.ModerateImageTagChange.Command(change.Id, TagChangeDecision.Approve, " valid "), CancellationToken.None);
+        var result =
+            await handler.Handle(
+                new Application.Features.Administration.ModerateImageTagChange.Command(change.Id,
+                    TagChangeDecision.Approve, " valid "), CancellationToken.None);
 
         Assert.Equal(ImageTagChangeStatus.Approved, result.Status);
         Assert.Equal(["new"], image.Tags.Select(tag => tag.Name));
@@ -60,10 +101,15 @@ public sealed class ImageTagChangeHandlerTests
         var image = Image(Tag("old"));
         var change = PendingChange(image.Id, ["old"], ["bad"]);
         var (repositories, _, changes, transaction) = Repositories(image);
-        changes.Setup(repository => repository.GetByIdAsync(change.Id, true, It.IsAny<CancellationToken>())).ReturnsAsync(change);
-        var handler = new Application.Features.Administration.ModerateImageTagChange.Handler(repositories.Object, new TestUser(9, AppUserRole.Moderator), TimeProvider.System);
+        changes.Setup(repository => repository.GetByIdAsync(change.Id, true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(change);
+        var handler = new Application.Features.Administration.ModerateImageTagChange.Handler(repositories.Object,
+            new TestUser(9, AppUserRole.Moderator), TimeProvider.System);
 
-        var result = await handler.Handle(new Application.Features.Administration.ModerateImageTagChange.Command(change.Id, TagChangeDecision.Reject, "not suitable"), CancellationToken.None);
+        var result =
+            await handler.Handle(
+                new Application.Features.Administration.ModerateImageTagChange.Command(change.Id,
+                    TagChangeDecision.Reject, "not suitable"), CancellationToken.None);
 
         Assert.Equal(ImageTagChangeStatus.Rejected, result.Status);
         Assert.Equal(["old"], image.Tags.Select(tag => tag.Name));
@@ -72,29 +118,70 @@ public sealed class ImageTagChangeHandlerTests
     }
 
     [Fact]
-    public async Task ModerateTagChange_RejectLatestApproved_RestoresPreviousTags()
+    public async Task ModerateTagChange_RevertLatestApproved_RestoresPreviousTags()
     {
         var image = Image(Tag("new"));
         var change = PendingChange(image.Id, ["old"], ["new"]);
         change.Status = ImageTagChangeStatus.Approved;
         change.AppliedAtUtc = DateTimeOffset.UtcNow;
+        change.ReviewNote = "Approved during review.";
         var previous = new List<ImageTag> { Tag("old") };
         var (repositories, images, changes, transaction) = Repositories(image);
-        changes.Setup(repository => repository.GetByIdAsync(change.Id, true, It.IsAny<CancellationToken>())).ReturnsAsync(change);
-        changes.Setup(repository => repository.GetLatestApprovedForImageAsync(image.Id, It.IsAny<CancellationToken>())).ReturnsAsync(change);
-        images.Setup(repository => repository.GetOrCreateTagsAsync(change.PreviousTags, It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>())).ReturnsAsync(previous);
-        var handler = new Application.Features.Administration.ModerateImageTagChange.Handler(repositories.Object, new TestUser(9, AppUserRole.Admin), TimeProvider.System);
+        changes.Setup(repository => repository.GetByIdAsync(change.Id, true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(change);
+        changes.Setup(repository => repository.GetLatestApprovedForImageAsync(image.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(change);
+        images.Setup(repository =>
+            repository.GetOrCreateTagsAsync(change.PreviousTags, It.IsAny<DateTimeOffset>(),
+                It.IsAny<CancellationToken>())).ReturnsAsync(previous);
+        var handler = new Application.Features.Administration.ModerateImageTagChange.Handler(repositories.Object,
+            new TestUser(9, AppUserRole.Admin), TimeProvider.System);
 
-        var result = await handler.Handle(new Application.Features.Administration.ModerateImageTagChange.Command(change.Id, TagChangeDecision.Reject, "undo"), CancellationToken.None);
+        var result =
+            await handler.Handle(
+                new Application.Features.Administration.ModerateImageTagChange.Command(change.Id,
+                    TagChangeDecision.Revert, "undo"), CancellationToken.None);
 
         Assert.Equal(ImageTagChangeStatus.Reverted, result.Status);
         Assert.Equal(["old"], image.Tags.Select(tag => tag.Name));
         Assert.Equal(9, change.RevertedByUserId);
         Assert.Equal("undo", change.ReversionNote);
+        Assert.Equal("Approved during review.", result.ReviewNote);
+        Assert.Equal(change.AppliedAtUtc, result.AppliedAtUtc);
         transaction.Verify(value => value.CommitAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    private static (Mock<IRepositoryManager> Repositories, Mock<IAppImageRepository> Images, Mock<IImageTagChangeRepository> Changes, Mock<IRepositoryTransaction> Transaction) Repositories(AppImage image)
+    [Theory]
+    [InlineData(TagChangeDecision.Revert, ImageTagChangeStatus.Pending, ImageTagChangeKind.Replacement)]
+    [InlineData(TagChangeDecision.Reject, ImageTagChangeStatus.Approved, ImageTagChangeKind.Replacement)]
+    [InlineData(TagChangeDecision.Approve, ImageTagChangeStatus.Approved, ImageTagChangeKind.Replacement)]
+    [InlineData(TagChangeDecision.Revert, ImageTagChangeStatus.Approved, ImageTagChangeKind.GlobalTagRejection)]
+    [InlineData(TagChangeDecision.Revert, ImageTagChangeStatus.Reverted, ImageTagChangeKind.Replacement)]
+    public async Task ModerateTagChange_IncompatibleDecision_ConflictsWithoutChangingHistory(
+        TagChangeDecision decision, ImageTagChangeStatus status, ImageTagChangeKind kind)
+    {
+        var image = Image(Tag("new"));
+        var change = PendingChange(image.Id, ["old"], ["new"]);
+        change.Status = status;
+        change.Kind = kind;
+        var (repositories, _, changes, transaction) = Repositories(image);
+        changes.Setup(repository => repository.GetByIdAsync(change.Id, true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(change);
+        var handler = new Application.Features.Administration.ModerateImageTagChange.Handler(
+            repositories.Object, new TestUser(9, AppUserRole.Admin), TimeProvider.System);
+
+        await Assert.ThrowsAsync<Base409ConflictException>(() => handler.Handle(
+            new Application.Features.Administration.ModerateImageTagChange.Command(change.Id, decision, null),
+            CancellationToken.None));
+
+        Assert.Equal(status, change.Status);
+        Assert.Equal("new", Assert.Single(image.Tags).Name);
+        repositories.Verify(repository => repository.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
+        transaction.Verify(value => value.CommitAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    private static (Mock<IRepositoryManager> Repositories, Mock<IAppImageRepository> Images,
+        Mock<IImageTagChangeRepository> Changes, Mock<IRepositoryTransaction> Transaction) Repositories(AppImage image)
     {
         var repositories = new Mock<IRepositoryManager>();
         var images = new Mock<IAppImageRepository>();
@@ -102,16 +189,21 @@ public sealed class ImageTagChangeHandlerTests
         var transaction = new Mock<IRepositoryTransaction>();
         repositories.SetupGet(repository => repository.AppImage).Returns(images.Object);
         repositories.SetupGet(repository => repository.ImageTagChanges).Returns(changes.Object);
-        images.Setup(repository => repository.GetWithTagsByIdAsync(image.Id, It.IsAny<CancellationToken>())).ReturnsAsync(image);
-        changes.Setup(repository => repository.GetPendingForImageAsync(image.Id, It.IsAny<CancellationToken>())).ReturnsAsync((ImageTagChange?)null);
-        repositories.Setup(repository => repository.SaveAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-        repositories.Setup(repository => repository.BeginSerializableTransactionAsync(It.IsAny<CancellationToken>())).ReturnsAsync(transaction.Object);
+        images.Setup(repository => repository.GetWithTagsByIdAsync(image.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(image);
+        changes.Setup(repository => repository.GetPendingForImageAsync(image.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ImageTagChange?)null);
+        repositories.Setup(repository => repository.SaveAsync(It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        repositories.Setup(repository => repository.BeginSerializableTransactionAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(transaction.Object);
         transaction.Setup(value => value.CommitAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
         transaction.Setup(value => value.RollbackAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
         return (repositories, images, changes, transaction);
     }
 
-    private static ImageTagChange PendingChange(int imageId, IReadOnlyList<string> previous, IReadOnlyList<string> proposed) => new()
+    private static ImageTagChange PendingChange(int imageId, IReadOnlyList<string> previous,
+        IReadOnlyList<string> proposed) => new()
     {
         Id = 8,
         ImageId = imageId,
@@ -153,7 +245,12 @@ public sealed class ImageTagChangeHandlerTests
     {
         public int? UserId => userId;
         public string? Login => "tester";
-        public bool IsInRole(string role) => roles.Any(candidate => candidate.ToString() == role);
-        public void RequireAuthenticated() { }
+
+        public bool HasPermission(string permission) => roles.Any(role =>
+            Entities.Models.AccessPermission.HasLegacyPermission(role.ToString(), permission));
+
+        public void RequireAuthenticated()
+        {
+        }
     }
 }

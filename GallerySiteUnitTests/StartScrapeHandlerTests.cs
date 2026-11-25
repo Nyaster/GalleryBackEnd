@@ -76,7 +76,7 @@ public sealed class StartScrapeHandlerTests
     {
         public int? UserId => 1;
         public string? Login => "admin";
-        public bool IsInRole(string role) => role == nameof(AppUserRole.Admin);
+        public bool HasPermission(string permission) => Entities.Models.AccessPermission.HasLegacyPermission("Admin", permission);
         public void RequireAuthenticated() { }
     }
 }

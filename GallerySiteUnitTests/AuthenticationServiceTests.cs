@@ -9,6 +9,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Service;
+using Service.Contracts;
 using Shared.DataTransferObjects;
 
 namespace GallerySiteUnitTests;
@@ -118,6 +119,11 @@ public sealed class AuthenticationServiceTests
     }
 
     private static AuthenticationService CreateService(IRepositoryManager repositories)
-        => new(repositories, new PasswordHasher<AppUser>(), Options.Create(Jwt), TimeProvider.System,
-            NullLoggerFactory.Instance);
+    {
+        var access = new Mock<IRoleAccessService>();
+        access.Setup(service => service.GetAccessAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AccountAccessDto(["User"], []));
+        return new AuthenticationService(repositories, new PasswordHasher<AppUser>(), Options.Create(Jwt),
+            TimeProvider.System, NullLoggerFactory.Instance, access.Object);
+    }
 }

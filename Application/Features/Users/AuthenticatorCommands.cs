@@ -52,7 +52,7 @@ public sealed class AuthenticatorCommandHandler(IAuthenticatorService authentica
     }
 }
 
-public sealed class GetCurrentUserHandler(IRepositoryManager repositories, IUserContext currentUser)
+public sealed class GetCurrentUserHandler(IRepositoryManager repositories, IUserContext currentUser, AccountAccessDto access)
     : IRequestHandler<GetCurrentUserQuery, AppUserDto>
 {
     public async Task<AppUserDto> Handle(GetCurrentUserQuery request, CancellationToken cancellationToken)
@@ -62,7 +62,7 @@ public sealed class GetCurrentUserHandler(IRepositoryManager repositories, IUser
             ? await repositories.AppUser.GetByIdAsync(id, false, cancellationToken)
             : null;
         return user is not null
-            ? AppUserDto.FromUser(user)
+            ? AppUserDto.FromUser(user, access)
             : throw new AppUserUnauthorizedException("Authentication is required.");
     }
 }

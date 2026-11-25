@@ -1,3 +1,5 @@
+using Entities.Models;
+
 namespace Shared.DataTransferObjects;
 
 public sealed record AppUserDto(
@@ -10,8 +12,12 @@ public sealed record AppUserDto(
     int BackupCodesRemaining = 0,
     bool DisplayAllContent = false)
 {
-    public static AppUserDto FromUser(Entities.Models.AppUser user)
-        => new(user.Id, user.Login, user.Roles.Select(role => role.ToString()).ToArray(),
-            user.AuthenticatorEnabledAtUtc is not null, Entities.Models.UploadAccess.IsAllowed(user),
-            user.UploadsBlocked, user.AuthenticatorBackupCodeHashes.Count, user.DisplayAllContent);
+    public IReadOnlyList<string> Permissions { get; init; } = [];
+
+    public static AppUserDto FromUser(AppUser user, AccountAccessDto access)
+        => new(user.Id, user.Login, access.Roles, user.AuthenticatorEnabledAtUtc is not null,
+            UploadAccess.IsAllowed(user, access.Permissions.Contains(AccessPermission.UploadsBypassRestrictions)),
+            user.UploadsBlocked, user.AuthenticatorBackupCodeHashes.Count, user.DisplayAllContent)
+        { Permissions = access.Permissions };
+
 }

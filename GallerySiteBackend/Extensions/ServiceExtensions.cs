@@ -7,6 +7,7 @@ using GallerySiteBackend.Configuration;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Repository;
+using Service.Contracts;
 
 namespace GallerySiteBackend.Extensions;
 
@@ -63,14 +64,23 @@ public static class ServiceExtensions
                         return;
                     }
 
-                    if (!principal.IsInRole(nameof(AppUserRole.Admin)) &&
-                        !principal.IsInRole(nameof(AppUserRole.Moderator)))
-                        return;
-
-                    var repositories = context.HttpContext.RequestServices.GetRequiredService<IRepositoryManager>();
-                    if (await repositories.AppUser.GetAuthenticationVersionAsync(userId,
-                            context.HttpContext.RequestAborted) is null)
+                    var accessService = context.HttpContext.RequestServices.GetRequiredService<IRoleAccessService>();
+                    var access = await accessService.GetAccessAsync(userId, context.HttpContext.RequestAborted);
+                    if (access is null)
+                    {
                         context.Fail("Invalid account session.");
+                        return;
+                    }
+
+                    // Replace authorization claims even on tokens issued before role migration.
+                    var identity = (ClaimsIdentity)principal.Identity!;
+                    foreach (var claim in identity.Claims.Where(c =>
+                                 c.Type == identity.RoleClaimType || c.Type == AccessPermission.ClaimType).ToArray())
+                        identity.RemoveClaim(claim);
+                    identity.AddClaims(access.Roles.Select(role => new Claim(identity.RoleClaimType, role)));
+                    identity.AddClaims(access.Permissions.Select(permission =>
+                        new Claim(AccessPermission.ClaimType, permission)));
+                    context.HttpContext.Features.Set(access);
                 },
                 OnAuthenticationFailed = context =>
                 {

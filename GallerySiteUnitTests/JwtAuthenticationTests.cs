@@ -1,7 +1,9 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
-using Contracts;
+using Entities.Models;
+using Service.Contracts;
+using Shared.DataTransferObjects;
 using GallerySiteBackend.Extensions;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -23,18 +25,27 @@ public sealed class JwtAuthenticationTests
     [InlineData(null)]
     [InlineData("0")]
     [InlineData("42")]
-    public async Task ValidAccessToken_AuthenticatesWithoutRepositoryAccess(string? legacyVersion)
+    public async Task ValidAccessToken_UsesCurrentAccountPermissionsRegardlessOfLegacyClaims(string? legacyVersion)
     {
-        var repositories = new Mock<IRepositoryManager>(MockBehavior.Strict);
-        using var services = CreateServices(repositories.Object);
-        var claims = new List<Claim> { new(ClaimTypes.NameIdentifier, "123") };
+        var access = new Mock<IRoleAccessService>(MockBehavior.Strict);
+        access.Setup(service => service.GetAccessAsync(123, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AccountAccessDto(["Tag Reviewer"], [AccessPermission.ImageTagsReview]));
+        using var services = CreateServices(access.Object);
+        var claims = new List<Claim>
+        {
+            new(ClaimTypes.NameIdentifier, "123"), new(ClaimTypes.Role, "Admin"),
+            new(AccessPermission.ClaimType, AccessPermission.RolesManage)
+        };
         if (legacyVersion is not null) claims.Add(new Claim("auth_version", legacyVersion));
 
         var result = await AuthenticateAsync(services, CreateToken(claims));
 
         Assert.True(result.Succeeded, result.Failure?.ToString());
         Assert.Equal("123", result.Principal!.FindFirst(ClaimTypes.NameIdentifier)?.Value);
-        repositories.VerifyNoOtherCalls();
+        Assert.False(result.Principal.IsInRole("Admin"));
+        Assert.True(result.Principal.IsInRole("Tag Reviewer"));
+        Assert.False(result.Principal.HasClaim(AccessPermission.ClaimType, AccessPermission.RolesManage));
+        Assert.True(result.Principal.HasClaim(AccessPermission.ClaimType, AccessPermission.ImageTagsReview));
     }
 
     [Theory]
@@ -48,7 +59,7 @@ public sealed class JwtAuthenticationTests
     [InlineData("invalid-user")]
     public async Task InvalidAccessToken_IsRejectedWithoutRepositoryAccess(string invalidPart)
     {
-        var repositories = new Mock<IRepositoryManager>(MockBehavior.Strict);
+        var repositories = new Mock<IRoleAccessService>(MockBehavior.Strict);
         using var services = CreateServices(repositories.Object);
         var claims = new List<Claim>();
         if (invalidPart != "missing-user")
@@ -62,7 +73,7 @@ public sealed class JwtAuthenticationTests
         repositories.VerifyNoOtherCalls();
     }
 
-    private static ServiceProvider CreateServices(IRepositoryManager repositories)
+    private static ServiceProvider CreateServices(IRoleAccessService repositories)
     {
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {

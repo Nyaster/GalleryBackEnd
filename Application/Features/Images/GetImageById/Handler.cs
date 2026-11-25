@@ -14,6 +14,6 @@ public sealed class Handler(IRepositoryManager repositories, IUserContext curren
         var image = await repositories.AppImage.GetCardByIdAsync(request.Id, ImageAuthorization.GetViewer(currentUser), cancellationToken)
             ?? throw new Base404ReturnException("Image not found.");
         ImageAuthorization.EnsureReadable(image, currentUser);
-        return ImageDtoMapper.ToDto(image);
+        return ImageDtoMapper.ToDto(image, currentUser);
     }
 }

@@ -24,9 +24,9 @@ public sealed class AuthenticatorServiceTests
         Assert.NotEqual(setup.ManualKey, fixture.User.PendingAuthenticatorSecret);
         Assert.Contains("Lilgallery%3Agalleryuser", setup.AuthenticatorUri);
         Assert.Equal(fixture.Clock.GetUtcNow().AddMinutes(10), setup.ExpiresAtUtc);
-        Assert.False(UploadAccess.IsAllowed(fixture.User));
+        Assert.False(UploadAccess.IsAllowed(fixture.User, bypassRestrictions: false));
         await fixture.Service.ConfirmAsync(7, new(setup.SetupId, fixture.Code(setup.ManualKey)));
-        Assert.True(UploadAccess.IsAllowed(fixture.User));
+        Assert.True(UploadAccess.IsAllowed(fixture.User, bypassRestrictions: false));
         Assert.Null(fixture.User.PendingAuthenticatorSecret);
     }
 
@@ -59,7 +59,7 @@ public sealed class AuthenticatorServiceTests
             fixture.Service.SetupAsync(7, new("wrong", fixture.Code(first.ManualKey))));
         var replacement = await fixture.Service.SetupAsync(7, new(Fixture.Password, fixture.Code(first.ManualKey)));
         Assert.Equal(originalSecret, fixture.User.AuthenticatorSecret);
-        Assert.True(UploadAccess.IsAllowed(fixture.User));
+        Assert.True(UploadAccess.IsAllowed(fixture.User, bypassRestrictions: false));
         await fixture.Service.ConfirmAsync(7, new(replacement.SetupId, fixture.Code(replacement.ManualKey)));
         Assert.NotEqual(originalSecret, fixture.User.AuthenticatorSecret);
         fixture.Clock.Advance(TimeSpan.FromSeconds(30));
@@ -83,7 +83,7 @@ public sealed class AuthenticatorServiceTests
         Assert.Null(fixture.User.AuthenticatorSecret);
         Assert.Null(fixture.User.AuthenticatorEnabledAtUtc);
         Assert.Null(fixture.User.AuthenticatorSetupId);
-        Assert.Equal(approved, UploadAccess.IsAllowed(fixture.User));
+        Assert.Equal(approved, UploadAccess.IsAllowed(fixture.User, bypassRestrictions: false));
         await Assert.ThrowsAsync<AppUserUnauthorizedException>(() =>
             fixture.Service.RecoverAsync(new("galleryuser", fixture.Code(setup.ManualKey), Fixture.NewPassword)));
     }
@@ -218,7 +218,7 @@ public sealed class AuthenticatorServiceTests
             Assert.DoesNotContain(code.Replace("-", ""), fixture.User.AuthenticatorBackupCodeHashes);
         }
 
-        var status = AppUserDto.FromUser(fixture.User);
+        var status = AppUserDto.FromUser(fixture.User, new AccountAccessDto(["User"], []));
         Assert.Equal(10, status.BackupCodesRemaining);
         var json = System.Text.Json.JsonSerializer.Serialize(status);
         Assert.All(fixture.BackupCodes, code => Assert.DoesNotContain(code, json));
@@ -248,7 +248,7 @@ public sealed class AuthenticatorServiceTests
         Assert.Equal(1, fixture.User.AuthenticationVersion);
         Assert.Equal(granted, fixture.User.CanUploadImages);
         Assert.Equal(blocked, fixture.User.UploadsBlocked);
-        Assert.Equal(granted && !blocked, UploadAccess.IsAllowed(fixture.User));
+        Assert.Equal(granted && !blocked, UploadAccess.IsAllowed(fixture.User, bypassRestrictions: false));
         fixture.Users.Verify(
             users => users.RevokeAllRefreshSessionsAsync(7, It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()),
             Times.Once);
@@ -285,7 +285,7 @@ public sealed class AuthenticatorServiceTests
         var result = await fixture.Service.RegenerateBackupCodesAsync(7,
             new(Fixture.Password, useBackup ? originalCodes[1] : fixture.Code(setup.ManualKey)));
         Assert.Equal(10, result.BackupCodes.Count);
-        Assert.Equal(10, AppUserDto.FromUser(fixture.User).BackupCodesRemaining);
+        Assert.Equal(10, AppUserDto.FromUser(fixture.User, new AccountAccessDto(["User"], [])).BackupCodesRemaining);
         Assert.Null(fixture.User.AuthenticatorSetupId);
         Assert.NotNull(fixture.User.AuthenticatorEnabledAtUtc);
         await Assert.ThrowsAsync<AppUserUnauthorizedException>(() =>

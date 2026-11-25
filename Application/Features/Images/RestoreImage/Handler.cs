@@ -8,19 +8,24 @@ using Shared.DataTransferObjects;
 
 namespace Application.Features.Images.RestoreImage;
 
-public sealed class Handler(IRepositoryManager repositories, IUserContext currentUser) : IRequestHandler<Command, AppImageDto>
+public sealed class Handler(IRepositoryManager repositories, IUserContext currentUser) : IRequestHandler<Command, AppImageDto?>
 {
-    public async Task<AppImageDto> Handle(Command request, CancellationToken cancellationToken)
+    public async Task<AppImageDto?> Handle(Command request, CancellationToken cancellationToken)
     {
+        await using var transaction = await repositories.BeginSerializableTransactionAsync(cancellationToken);
         var image = await repositories.AppImage.GetByIdAsync(request.ImageId, true, cancellationToken)
             ?? throw new Base404ReturnException("Image not found.");
-        ImageAuthorization.EnsureCanManage(image, currentUser);
-        image.DeletedAtUtc = null;
-        image.ModerationStatus = ModerationStatus.Pending;
-        await repositories.SaveAsync(cancellationToken);
-        var card = await repositories.AppImage.GetManagementCardByIdAsync(image.Id,
-                ImageAuthorization.GetViewer(currentUser), cancellationToken)
-            ?? throw new InvalidOperationException("The saved image could not be read.");
-        return ImageDtoMapper.ToDto(card);
+        ImageAuthorization.EnsureOwnerOrPermission(image.UploadedById, currentUser, AccessPermission.ImagesRestoreAny);
+        ImageAuthorization.EnsureReadableForManagement(image, currentUser);
+        if (image.DeletedAtUtc is not null)
+        {
+            image.DeletedAtUtc = null;
+            image.ModerationStatus = ModerationStatus.Pending;
+            await repositories.SaveAsync(cancellationToken);
+        }
+        var response = await ImageAuthorization.GetManagementMutationResponseAsync(repositories.AppImage, image,
+            currentUser, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return response;
     }
 }

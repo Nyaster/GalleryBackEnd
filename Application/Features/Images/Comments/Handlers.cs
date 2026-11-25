@@ -46,7 +46,8 @@ public sealed class DeleteCommentHandler(IRepositoryManager repositories, IUserC
     public async Task Handle(DeleteCommentCommand request, CancellationToken cancellationToken)
     {
         currentUser.RequireAuthenticated();
-        if (request.IsStaffDeletion && !ImageAuthorization.IsStaff(currentUser)) throw new AppForbiddenException("Staff access is required.");
+        if (request.IsStaffDeletion && !currentUser.HasPermission(AccessPermission.CommentsDeleteAny))
+            throw new AppForbiddenException("Permission to delete other users’ comments is required.");
         var comment = await repositories.Interactions.GetCommentAsync(request.CommentId, true, cancellationToken) ?? throw new Base404ReturnException("Comment not found.");
         if (comment.DeletedAtUtc is not null) throw new Base404ReturnException("Comment not found.");
         if (!request.IsStaffDeletion && comment.AuthorId != currentUser.UserId) throw new AppForbiddenException("You can only delete your own comments.");

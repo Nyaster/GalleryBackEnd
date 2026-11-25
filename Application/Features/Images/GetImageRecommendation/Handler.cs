@@ -19,6 +19,6 @@ public sealed class Handler(IRepositoryManager repositories, IUserContext curren
         var pageSize = Math.Clamp(request.PageSize, 1, 50);
         var result = await repositories.AppImage.GetRecommendationsAsync(image.Id, page, pageSize, ImageAuthorization.GetViewer(currentUser), cancellationToken, request.AiUsage);
         return new PageableRecommendationsDto(page, pageSize, result.Total,
-            result.Images.Select(recommendation => ImageDtoMapper.ToDto(recommendation)).ToList());
+            result.Images.Select(recommendation => ImageDtoMapper.ToDto(recommendation, currentUser)).ToList());
     }
 }

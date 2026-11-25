@@ -6,6 +6,7 @@ public sealed class AppUser
     public required string Login { get; set; }
     public required string NormalizedLogin { get; set; }
     public required string PasswordHash { get; set; }
+    // Legacy integer array retained for migration compatibility. AccountRoles supplies live authorization.
     public List<AppUserRole> Roles { get; set; } = [AppUserRole.User];
     public bool CanUploadImages { get; set; }
     public bool UploadsBlocked { get; set; }
@@ -31,7 +32,7 @@ public sealed class AppUser
 
 public enum AppUserRole
 {
-    Admin,
-    Moderator,
-    User
+    Admin = 0,
+    Moderator = 1,
+    User = 2
 }

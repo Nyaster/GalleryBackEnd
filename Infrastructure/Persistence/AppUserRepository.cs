@@ -30,10 +30,6 @@ public sealed class AppUserRepository(RepositoryContext context) : IAppUserRepos
     public Task<AppUser?> GetByIdAsync(int id, bool trackChanges, CancellationToken cancellationToken = default)
         => QueryUsers(trackChanges).SingleOrDefaultAsync(user => user.Id == id, cancellationToken);
 
-    public Task<int?> GetAuthenticationVersionAsync(int id, CancellationToken cancellationToken = default)
-        => context.AppUsers.Where(user => user.Id == id)
-            .Select(user => (int?)user.AuthenticationVersion).SingleOrDefaultAsync(cancellationToken);
-
     public Task<RefreshSession?> GetRefreshSessionAsync(byte[] tokenHash, bool trackChanges,
         CancellationToken cancellationToken = default)
     {
@@ -51,7 +47,6 @@ public sealed class AppUserRepository(RepositoryContext context) : IAppUserRepos
     public async Task<RefreshSessionRotationResult> RotateRefreshSessionAsync(byte[] tokenHash,
         RefreshSession replacement, DateTimeOffset now, CancellationToken cancellationToken = default)
     {
-        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         // Discover the owner without a lock, then lock the user before the session. Recovery
         // uses the same order, so rotation cannot escape revocation or deadlock with it.
         var userId = await context.RefreshSessions.AsNoTracking().Where(item => item.TokenHash == tokenHash)
@@ -73,7 +68,6 @@ public sealed class AppUserRepository(RepositoryContext context) : IAppUserRepos
                                                                     UPDATE "RefreshSessions" SET "RevokedAtUtc" = {now}, "RevokeReason" = {"reuse detected"}
                                                                     WHERE "FamilyId" = {session.FamilyId} AND "RevokedAtUtc" IS NULL
                                                                     """, cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
             return new RefreshSessionRotationResult(null, session?.UserId, session is not null);
         }
 
@@ -84,7 +78,6 @@ public sealed class AppUserRepository(RepositoryContext context) : IAppUserRepos
         replacement.UserId = session.UserId;
         await context.RefreshSessions.AddAsync(replacement, cancellationToken);
         await context.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
         return new RefreshSessionRotationResult(user, user.Id, false);
     }
 

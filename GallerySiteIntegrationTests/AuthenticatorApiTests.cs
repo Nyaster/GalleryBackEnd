@@ -226,8 +226,9 @@ public sealed class AuthenticatorApiTests(PostgresFixture database) : IClassFixt
         var authentication = database.Authentication(context, clock);
         var login = "staff" + Guid.NewGuid().ToString("N");
         var account = await authentication.RegisterAsync(new(login, Password));
-        var user = await context.AppUsers.FindAsync(account.Response.User.Id);
-        user!.Roles = [AppUserRole.User, role];
+        var userId = account.Response.User.Id;
+        context.AccountRoles.Add(new AccountRole
+            { UserId = userId, RoleId = role == AppUserRole.Admin ? AccessRole.AdminId : AccessRole.ModeratorId });
         await context.SaveChangesAsync();
         var session = await authentication.LoginAsync(new(login, Password));
         await using var app = new ApiFactory(database, clock);
@@ -236,7 +237,7 @@ public sealed class AuthenticatorApiTests(PostgresFixture database) : IClassFixt
             new AuthenticationHeaderValue("Bearer", session.Response.AccessToken);
 
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync(route)).StatusCode);
-        await context.AppUsers.Where(row => row.Id == user.Id).ExecuteDeleteAsync();
+        await context.AppUsers.Where(row => row.Id == userId).ExecuteDeleteAsync();
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync(route)).StatusCode);
     }
 

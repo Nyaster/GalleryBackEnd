@@ -22,8 +22,7 @@ public sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logge
             Base409ConflictException => StatusCodes.Status409Conflict,
             ForMeFeedLimitException => StatusCodes.Status429TooManyRequests,
             ForMeFeedDeadlineException => StatusCodes.Status503ServiceUnavailable,
-            PostgresException { SqlState: PostgresErrorCodes.SerializationFailure } => StatusCodes.Status409Conflict,
-            DbUpdateException { InnerException: PostgresException { SqlState: PostgresErrorCodes.SerializationFailure } } => StatusCodes.Status409Conflict,
+            _ when IsSerializationFailure(error) => StatusCodes.Status409Conflict,
             DbUpdateException { InnerException: PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } } => StatusCodes.Status409Conflict,
             _ => StatusCodes.Status500InternalServerError
         };
@@ -50,6 +49,12 @@ public sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logge
         };
         var problem = new ProblemDetails
         {
+            Type = error switch
+            {
+                RoleAssignmentsChangedException => "urn:lilgallery:problem:role-assignments-changed",
+                RoleDefinitionChangedException => "urn:lilgallery:problem:role-definition-changed",
+                _ => null
+            },
             Status = status,
             Title = ReasonPhrases.GetReasonPhrase(status),
             Detail = detail,
@@ -59,11 +64,11 @@ public sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logge
         if (error is ForMeFeedLimitException limit)
             context.Response.Headers.RetryAfter = limit.RetryAfterSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
         context.Response.StatusCode = status;
-        await context.Response.WriteAsJsonAsync(problem, cancellationToken);
+        await context.Response.WriteAsJsonAsync(problem, options: null,
+            contentType: problem.Type is null ? null : "application/problem+json", cancellationToken: cancellationToken);
         return true;
     }
 
     private static bool IsSerializationFailure(Exception error)
-        => error is PostgresException { SqlState: PostgresErrorCodes.SerializationFailure }
-            or DbUpdateException { InnerException: PostgresException { SqlState: PostgresErrorCodes.SerializationFailure } };
+        => error.GetBaseException() is PostgresException { SqlState: PostgresErrorCodes.SerializationFailure };
 }

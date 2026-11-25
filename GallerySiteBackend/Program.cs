@@ -1,5 +1,6 @@
 using Application.BackgroundService;
 using Contracts;
+using Entities.Models;
 using GallerySiteBackend;
 using GallerySiteBackend.Configuration;
 using GallerySiteBackend.Extensions;
@@ -20,6 +21,7 @@ using Service;
 using Service.Contracts;
 using System.Text;
 using Shared.Configuration;
+using Shared.DataTransferObjects;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 
@@ -40,6 +42,8 @@ builder.Services.AddControllers().AddJsonOptions(options =>
     options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IUserContext, HttpUserContext>();
+builder.Services.AddScoped(services => services.GetRequiredService<IHttpContextAccessor>().HttpContext?
+    .Features.Get<AccountAccessDto>() ?? throw new Entities.Exceptions.AppUserUnauthorizedException("Authentication is required."));
 builder.Services.AddSingleton(TimeProvider.System);
 var authenticatorKeyPath = builder.Configuration["Authenticator:KeyRingPath"]
     ?? Path.Combine(builder.Environment.ContentRootPath, "Data", "auth-keys");
@@ -65,6 +69,7 @@ builder.Services.AddOptions<ParserSettings>().Bind(builder.Configuration.GetSect
 builder.Services.AddOptions<DatabaseMigrationOptions>().Bind(builder.Configuration.GetSection("DatabaseMigrations"))
     .ValidateDataAnnotations().ValidateOnStart();
 builder.Services.AddOptions<BootstrapAdminOptions>().Bind(builder.Configuration.GetSection("BootstrapAdmin"));
+builder.Services.AddOptions<RoleAssignmentOptions>().Bind(builder.Configuration.GetSection("RoleAssignments"));
 builder.Services.Configure<FormOptions>(options => options.MultipartBodyLengthLimit =
     (builder.Configuration.GetValue<int?>("ImageStorage:MaximumUploadMegabytes") ?? 20) * 1024L * 1024L);
 
@@ -76,7 +81,16 @@ builder.Services.AddHttpClient();
 builder.Services.AddMediatR(options => options.RegisterServicesFromAssembly(typeof(Application.AssemblyApplication).Assembly));
 builder.Services.ConfigureCors(builder.Configuration);
 builder.Services.ConfigureJwtToken(builder.Configuration);
-builder.Services.AddAuthorization(options => options.AddPolicy("AdminOnly", policy => policy.RequireRole("Admin")));
+builder.Services.AddAuthorization(options =>
+{
+    foreach (var permission in AccessPermission.AllKeys)
+        options.AddPolicy(permission,
+            policy => policy.RequireAuthenticatedUser().RequireClaim(AccessPermission.ClaimType, permission));
+    options.AddPolicy("images.changeModeration", policy => policy.RequireAuthenticatedUser()
+        .RequireClaim(AccessPermission.ClaimType, AccessPermission.ImagesModerate, AccessPermission.ImagesClassifyAi));
+    options.AddPolicy("images.readReviewContent", policy => policy.RequireAuthenticatedUser()
+        .RequireClaim(AccessPermission.ClaimType, AccessPermission.ImagesReviewQueue, AccessPermission.ImagesReadRestricted));
+});
 builder.Services.AddSingleton<IAuthorizationMiddlewareResultHandler, SecurityAuthorizationMiddlewareResultHandler>();
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {

@@ -1,4 +1,3 @@
-using Application.Helpers;
 using Contracts;
 using Entities.Exceptions;
 using Entities.Models;
@@ -12,21 +11,26 @@ public sealed class GetCommentRestrictionHandler(IRepositoryManager repositories
 {
     public async Task<CommentRestrictionDto> Handle(GetCommentRestrictionCommand request, CancellationToken cancellationToken)
     {
-        EnsureStaff(currentUser);
+        EnsureCanManageRestrictions(currentUser);
         var user = await repositories.AppUser.GetByIdAsync(request.UserId, false, cancellationToken) ?? throw new Base404ReturnException("User not found.");
         var restriction = await repositories.Interactions.GetCommentRestrictionAsync(user.Id, false, cancellationToken);
         var active = restriction is not null && (restriction.RestrictedUntilUtc is null || restriction.RestrictedUntilUtc > clock.GetUtcNow());
         return new CommentRestrictionDto(user.Id, user.Login, active, restriction?.RestrictedUntilUtc);
     }
 
-    internal static void EnsureStaff(IUserContext user) { if (!ImageAuthorization.IsStaff(user)) throw new AppForbiddenException("Staff access is required."); }
+    internal static void EnsureCanManageRestrictions(IUserContext user)
+    {
+        user.RequireAuthenticated();
+        if (!user.HasPermission(AccessPermission.CommentsManageRestrictions))
+            throw new AppForbiddenException("Comment restriction management permission is required.");
+    }
 }
 
 public sealed class SetCommentRestrictionHandler(IRepositoryManager repositories, IUserContext currentUser, TimeProvider clock) : IRequestHandler<SetCommentRestrictionCommand, CommentRestrictionDto>
 {
     public async Task<CommentRestrictionDto> Handle(SetCommentRestrictionCommand request, CancellationToken cancellationToken)
     {
-        GetCommentRestrictionHandler.EnsureStaff(currentUser);
+        GetCommentRestrictionHandler.EnsureCanManageRestrictions(currentUser);
         var user = await repositories.AppUser.GetByIdAsync(request.UserId, false, cancellationToken) ?? throw new Base404ReturnException("User not found.");
         var now = clock.GetUtcNow();
         var requestedUntil = request.Request.RestrictedUntilUtc;
@@ -49,7 +53,7 @@ public sealed class DeleteCommentRestrictionHandler(IRepositoryManager repositor
 {
     public async Task Handle(DeleteCommentRestrictionCommand request, CancellationToken cancellationToken)
     {
-        GetCommentRestrictionHandler.EnsureStaff(currentUser);
+        GetCommentRestrictionHandler.EnsureCanManageRestrictions(currentUser);
         _ = await repositories.AppUser.GetByIdAsync(request.UserId, false, cancellationToken) ?? throw new Base404ReturnException("User not found.");
         var restriction = await repositories.Interactions.GetCommentRestrictionAsync(request.UserId, true, cancellationToken);
         if (restriction is not null) { repositories.Interactions.RemoveCommentRestriction(restriction); await repositories.SaveAsync(cancellationToken); }

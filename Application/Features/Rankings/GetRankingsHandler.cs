@@ -34,9 +34,9 @@ public sealed class GetRankingsHandler(IRepositoryManager repositories, IUserCon
         return Response(request.Period, snapshot.PeriodStartUtc, snapshot.PeriodEndUtc, true, page, pageSize, archive);
     }
 
-    private static PageableRankingsDto Response(RankingPeriod period, DateTimeOffset start, DateTimeOffset end,
+    private PageableRankingsDto Response(RankingPeriod period, DateTimeOffset start, DateTimeOffset end,
         bool archived, int page, int pageSize, RankingPage result)
         => new(period, start, end, archived, page, pageSize, result.Total,
             result.Entries.Select(entry => new RankingEntryDto(entry.Rank, entry.LikeDelta,
-                ImageDtoMapper.ToDto(entry.Image))).ToArray());
+                ImageDtoMapper.ToDto(entry.Image, currentUser))).ToArray());
 }

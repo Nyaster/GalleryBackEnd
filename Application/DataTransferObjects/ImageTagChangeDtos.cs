@@ -25,14 +25,20 @@ public sealed record ImageTagChangeDto(
     DateTimeOffset? RevertedAtUtc,
     string? ReversionNote);
 
-public sealed record PageableImageTagChangesDto(int Page, int PageSize, int Total, IReadOnlyList<ImageTagChangeDto> Changes);
+public sealed record PageableImageTagChangesDto(
+    int Page,
+    int PageSize,
+    int Total,
+    IReadOnlyList<ImageTagChangeDto> Changes);
 
 public enum TagChangeDecision
 {
     Approve,
-    Reject
+    Reject,
+    Revert
 }
 
 public sealed record TagChangeModerationDto(
-    [param: Required, EnumDataType(typeof(TagChangeDecision))] TagChangeDecision? Decision,
+    [param: Required, EnumDataType(typeof(TagChangeDecision))]
+    TagChangeDecision? Decision,
     [param: StringLength(500)] string? Note);

@@ -58,8 +58,8 @@ public sealed class ImageController(IMediator mediator) : ControllerBase
     public Task<IActionResult> GetContent(int id, [FromQuery] string format = "original",
         CancellationToken cancellationToken = default) => ReadContent(id, format, false, cancellationToken);
 
-    [Authorize(Roles = "Admin,Moderator")]
     [HttpGet("/api/admin/images/{id:int}/content")]
+    [Authorize(Policy = "images.readReviewContent")]
     public Task<IActionResult> GetModerationContent(int id, [FromQuery] string format = "original",
         CancellationToken cancellationToken = default) => ReadContent(id, format, true, cancellationToken);
 
@@ -134,12 +134,22 @@ public sealed class ImageController(IMediator mediator) : ControllerBase
     }
 
     [HttpPost("{id:int}/restore")]
+    [ProducesResponseType<AppImageDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<ActionResult<AppImageDto>> Restore(int id, CancellationToken cancellationToken)
-        => Ok(await mediator.Send(new Application.Features.Images.RestoreImage.Command(id), cancellationToken));
+    {
+        var image = await mediator.Send(new Application.Features.Images.RestoreImage.Command(id), cancellationToken);
+        return image is null ? NoContent() : Ok(image);
+    }
 
     [HttpPost("{id:int}/publish")]
+    [ProducesResponseType<AppImageDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<ActionResult<AppImageDto>> Publish(int id, CancellationToken cancellationToken)
-        => Ok(await mediator.Send(new Application.Features.Images.PublishImage.Command(id), cancellationToken));
+    {
+        var image = await mediator.Send(new Application.Features.Images.PublishImage.Command(id), cancellationToken);
+        return image is null ? NoContent() : Ok(image);
+    }
 
     [AllowAnonymous]
     [EnableRateLimiting("guest-read")]

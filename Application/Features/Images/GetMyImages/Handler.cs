@@ -15,6 +15,6 @@ public sealed class Handler(IRepositoryManager repositories, IUserContext curren
         var pageSize = Math.Clamp(request.PageSize, 1, 50);
         var result = await repositories.AppImage.GetUploadedByUserAsync(currentUser.UserId!.Value, request.IncludeHidden, page, pageSize, ImageAuthorization.GetViewer(currentUser), cancellationToken);
         return new PageableImagesDto(page, pageSize, result.Total, ImageSort.Newest,
-            result.Images.Select(image => ImageDtoMapper.ToDto(image)).ToList());
+            result.Images.Select(image => ImageDtoMapper.ToDto(image, currentUser)).ToList());
     }
 }

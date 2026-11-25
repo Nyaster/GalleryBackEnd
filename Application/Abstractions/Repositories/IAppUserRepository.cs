@@ -14,14 +14,14 @@ public interface IAppUserRepository
 
     Task<AppUser?> GetByIdAsync(int id, bool trackChanges, CancellationToken cancellationToken = default);
 
-    Task<int?> GetAuthenticationVersionAsync(int id, CancellationToken cancellationToken = default);
-
     Task<RefreshSession?> GetRefreshSessionAsync(byte[] tokenHash, bool trackChanges,
         CancellationToken cancellationToken = default);
 
     Task AddAsync(AppUser user, CancellationToken cancellationToken = default);
     Task AddRefreshSessionAsync(RefreshSession session, CancellationToken cancellationToken = default);
 
+    // The caller owns the transaction through permission lookup and token issuance.
+    // Commit family revocation on detected reuse even though the refresh request is rejected.
     Task<RefreshSessionRotationResult> RotateRefreshSessionAsync(byte[] tokenHash, RefreshSession replacement,
         DateTimeOffset now, CancellationToken cancellationToken = default);
 

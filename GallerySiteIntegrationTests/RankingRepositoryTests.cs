@@ -285,7 +285,7 @@ public sealed class RankingRepositoryTests(PostgresFixture database) : IClassFix
     {
         public int? UserId => id;
         public string? Login => "rank-owner";
-        public bool IsInRole(string role) => false;
+        public bool HasPermission(string permission) => false;
         public void RequireAuthenticated() { }
     }
 }

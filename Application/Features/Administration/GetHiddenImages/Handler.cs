@@ -1,6 +1,7 @@
 using Application.Helpers;
 using Contracts;
 using Entities.Exceptions;
+using Entities.Models;
 using MediatR;
 using Service.Contracts;
 using Shared.DataTransferObjects;
@@ -12,9 +13,10 @@ public sealed class Handler(IRepositoryManager repositories, IUserContext curren
 {
     public async Task<List<AppImageDto>> Handle(Command request, CancellationToken cancellationToken)
     {
-        if (!ImageAuthorization.IsStaff(currentUser)) throw new AppForbiddenException("Staff access is required.");
+        if (!currentUser.HasPermission(AccessPermission.ImagesReviewQueue))
+            throw new AppForbiddenException("Image review queue permission is required.");
         var images = await repositories.AppImage.GetHiddenAsync(request.Page, request.PageSize,
-            ImageAuthorization.GetViewer(currentUser), cancellationToken);
-        return images.Select(ImageDtoMapper.ToModerationDto).ToList();
+            ImageAuthorization.GetViewer(currentUser, includeReviewTags: true), cancellationToken);
+        return images.Select(image => ImageDtoMapper.ToModerationDto(image, currentUser)).ToList();
     }
 }

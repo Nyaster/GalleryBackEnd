@@ -30,14 +30,14 @@ public sealed class AnnouncementAndFeedbackTests
     }
 
     [Theory]
-    [InlineData("UpdateAnnouncement")]
-    [InlineData("ClearAnnouncement")]
-    [InlineData("Feedback")]
-    public void AdministrationEndpoints_AreAdminOnly(string methodName)
+    [InlineData(nameof(AdministrationController.UpdateAnnouncement), AccessPermission.AnnouncementsManage)]
+    [InlineData(nameof(AdministrationController.ClearAnnouncement), AccessPermission.AnnouncementsManage)]
+    [InlineData(nameof(AdministrationController.Feedback), AccessPermission.FeedbackRead)]
+    public void AdministrationEndpoints_RequireActionPermission(string methodName, string expectedPolicy)
     {
         var method = typeof(AdministrationController).GetMethod(methodName) ?? throw new InvalidOperationException($"{methodName} was not found.");
         var authorize = method.GetCustomAttributes(typeof(AuthorizeAttribute), true).Cast<AuthorizeAttribute>().Single();
-        Assert.Equal("Admin", authorize.Roles);
+        Assert.Equal(expectedPolicy, authorize.Policy);
     }
 
     [Fact]
@@ -188,7 +188,7 @@ public sealed class AnnouncementAndFeedbackTests
     {
         public int? UserId => userId;
         public string? Login => login ?? "user";
-        public bool IsInRole(string role) => isAdmin && role == nameof(AppUserRole.Admin);
+        public bool HasPermission(string permission) => isAdmin && Entities.Models.AccessPermission.HasLegacyPermission("Admin", permission);
         public void RequireAuthenticated() { }
     }
 

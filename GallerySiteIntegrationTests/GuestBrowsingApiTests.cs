@@ -156,16 +156,15 @@ public sealed class GuestBrowsingApiTests(PostgresFixture database) : IClassFixt
     {
         var seed = await SeedAsync();
         await using var context = database.CreateContext();
-        var owner = await context.AppUsers.SingleAsync(user => user.Id == seed.UserId);
-        owner.Roles = [AppUserRole.User, AppUserRole.Admin];
+        var adminSession = await database.Authentication(context, seed.Clock).RegisterAsync(
+            new("visibilityadmin" + Guid.NewGuid().ToString("N"), "integration-password"));
+        context.AccountRoles.Add(new AccountRole { UserId = adminSession.Response.User.Id, RoleId = AccessRole.AdminId });
         var first = await context.Images.Include(image => image.Tags)
             .SingleAsync(image => image.Id == seed.EligibleIds[0]);
         var extra = new ImageTag
             { Name = "extra", NormalizedName = "extra", ModerationStatus = TagModerationStatus.Approved };
         first.Tags.Add(extra);
         await context.SaveChangesAsync();
-        var adminSession = await database.Authentication(context, seed.Clock)
-            .LoginAsync(new(owner.Login, "integration-password"));
         await using var app = new ApiFactory(database, seed.Clock);
         using var admin = app.Client();
         using var viewer = app.Client();

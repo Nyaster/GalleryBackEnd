@@ -320,8 +320,7 @@ public sealed class DiscoveryApiTests(PostgresFixture database) : IClassFixture<
         await using var context = database.CreateContext();
         if (staff)
         {
-            var user = await context.AppUsers.SingleAsync(user => user.Id == seed.Viewer.Id);
-            user.Roles = [AppUserRole.User, AppUserRole.Admin];
+            context.AccountRoles.Add(new AccountRole { UserId = seed.Viewer.Id, RoleId = AccessRole.AdminId });
             await context.SaveChangesAsync();
         }
 

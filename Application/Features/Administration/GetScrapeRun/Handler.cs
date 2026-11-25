@@ -12,7 +12,8 @@ public sealed class Handler(IRepositoryManager repositories, IUserContext curren
 {
     public async Task<ScrapeRunDto> Handle(Command request, CancellationToken cancellationToken)
     {
-        if (!currentUser.IsInRole(nameof(AppUserRole.Admin))) throw new AppForbiddenException("Administrator access is required.");
+        if (!currentUser.HasPermission(AccessPermission.ScrapingRun))
+            throw new AppForbiddenException("Scraping permission is required.");
         var run = await repositories.GetScrapeRunAsync(request.Id, false, cancellationToken)
             ?? throw new Base404ReturnException("Scrape run not found.");
         return StartScrape.Handler.ToDto(run);

@@ -320,7 +320,7 @@ public sealed class ForMeObservabilityTests(PostgresFixture database) : IClassFi
     {
         public int? UserId => id;
         public string? Login => "unused";
-        public bool IsInRole(string role) => false;
+        public bool HasPermission(string permission) => false;
         public void RequireAuthenticated() { }
     }
 

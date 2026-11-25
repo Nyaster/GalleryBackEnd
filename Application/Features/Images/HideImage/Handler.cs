@@ -1,3 +1,4 @@
+using Entities.Models;
 using Application.Helpers;
 using Contracts;
 using Entities.Exceptions;
@@ -12,7 +13,7 @@ public sealed class Handler(IRepositoryManager repositories, IUserContext curren
     {
         var image = await repositories.AppImage.GetByIdAsync(request.ImageId, true, cancellationToken)
             ?? throw new Base404ReturnException("Image not found.");
-        ImageAuthorization.EnsureCanManage(image, currentUser);
+        ImageAuthorization.EnsureOwnerOrPermission(image.UploadedById, currentUser, AccessPermission.ImagesHideAny);
         image.DeletedAtUtc ??= clock.GetUtcNow();
         await repositories.SaveAsync(cancellationToken);
     }

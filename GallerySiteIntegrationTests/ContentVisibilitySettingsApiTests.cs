@@ -154,10 +154,13 @@ public sealed class ContentVisibilitySettingsApiTests(PostgresFixture database) 
         var authentication = database.Authentication(context, clock);
         var login = "visibility" + Guid.NewGuid().ToString("N");
         var registration = await authentication.RegisterAsync(new(login, Password));
-        var user = (await context.AppUsers.FindAsync(registration.Response.User.Id))!;
         if (role != AppUserRole.User)
         {
-            user.Roles.Add(role);
+            context.AccountRoles.Add(new AccountRole
+            {
+                UserId = registration.Response.User.Id,
+                RoleId = role == AppUserRole.Admin ? AccessRole.AdminId : AccessRole.ModeratorId
+            });
             await context.SaveChangesAsync();
         }
 

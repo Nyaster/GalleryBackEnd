@@ -93,7 +93,7 @@ public sealed class ForMeTelemetryTests
     {
         public int? UserId => authenticated ? 7 : null;
         public string? Login => "user-secret";
-        public bool IsInRole(string role) => false;
+        public bool HasPermission(string permission) => false;
         public void RequireAuthenticated()
         {
             if (!authenticated) throw new Base401UnauthorizedException("user-secret");

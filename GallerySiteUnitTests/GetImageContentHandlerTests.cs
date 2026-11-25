@@ -140,6 +140,48 @@ public sealed class GetImageContentHandlerTests
         cache.VerifyNoOtherCalls();
     }
 
+    [Theory]
+    [InlineData(ImageContentFormat.Original)]
+    [InlineData(ImageContentFormat.Jpeg)]
+    public async Task Handle_ReviewQueuePermission_RejectsFullContent(ImageContentFormat format)
+    {
+        var image = Image("image/jpeg", uploadedById: 7);
+        var storage = new Mock<IImageStorage>(MockBehavior.Strict);
+        var handler = new Handler(Repositories(image).Object, storage.Object, Mock.Of<IImageProcessor>(),
+            Mock.Of<IImageDerivativeCache>(), new TestUser(8, AccessPermission.ImagesReviewQueue));
+
+        await Assert.ThrowsAsync<AppForbiddenException>(() =>
+            handler.Handle(new Command(image.Id, format, ForModeration: true), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Handle_ReviewQueuePermission_UsesOnlyScopedPreviewMetadata()
+    {
+        var image = Image("image/jpeg", uploadedById: 7);
+        var repositories = Repositories(image);
+        var repository = Mock.Get(repositories.Object.AppImage);
+        repository.Setup(value => value.GetReviewMetadataByIdAsync(image.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ImageReadTestData.Metadata(image));
+        var storage = new Mock<IImageStorage>();
+        storage.Setup(value => value.Exists(image.StorageKey)).Returns(true);
+        var cache = new Mock<IImageDerivativeCache>();
+        cache.Setup(value => value.GetOrCreateAsync(image.StorageKey, ImageDerivativeVariants.PreviewJpeg768V1,
+                It.IsAny<Func<Stream, CancellationToken, Task<Stream>>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => new MemoryStream([6, 7]));
+        var handler = new Handler(repositories.Object, storage.Object, Mock.Of<IImageProcessor>(), cache.Object,
+            new TestUser(8, AccessPermission.ImagesReviewQueue));
+
+        var result = await handler.Handle(new Command(image.Id, ImageContentFormat.Preview, ForModeration: true),
+            CancellationToken.None);
+        await using var stream = result.Stream;
+        Assert.Equal([6, 7], await ReadAsync(stream));
+
+        await Assert.ThrowsAsync<AppForbiddenException>(() =>
+            handler.Handle(new Command(image.Id, ImageContentFormat.Preview), CancellationToken.None));
+        repository.Verify(value => value.GetMetadataByIdAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
     private static Mock<IRepositoryManager> Repositories(AppImage image)
     {
         var images = new Mock<IAppImageRepository>();
@@ -169,11 +211,11 @@ public sealed class GetImageContentHandlerTests
         return output.ToArray();
     }
 
-    private sealed class TestUser(int userId) : IUserContext
+    private sealed class TestUser(int userId, params string[] permissions) : IUserContext
     {
         public int? UserId => userId;
         public string? Login => "tester";
-        public bool IsInRole(string role) => false;
+        public bool HasPermission(string permission) => permissions.Contains(permission);
         public void RequireAuthenticated() { }
     }
 }

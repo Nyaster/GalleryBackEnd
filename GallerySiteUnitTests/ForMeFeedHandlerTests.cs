@@ -124,7 +124,7 @@ public sealed class ForMeFeedHandlerTests
     {
         public int? UserId => id;
         public string? Login => "test";
-        public bool IsInRole(string role) => false;
+        public bool HasPermission(string permission) => false;
         public void RequireAuthenticated()
         {
             if (id is null) throw new Base401UnauthorizedException("Authentication required.");

@@ -14,7 +14,8 @@ public sealed class Handler(IRepositoryManager repositories, IUserContext curren
 {
     public async Task<ScrapeRunDto> Handle(Command request, CancellationToken cancellationToken)
     {
-        if (!currentUser.IsInRole(nameof(AppUserRole.Admin))) throw new AppForbiddenException("Administrator access is required.");
+        if (!currentUser.HasPermission(AccessPermission.ScrapingRun))
+            throw new AppForbiddenException("Scraping permission is required.");
         if (!parserSettings.Value.Enabled) throw new Base400BadRequestException("Scraping is disabled by configuration.");
         var maximumImagesPerRun = parserSettings.Value.MaximumImagesPerRun;
         if (maximumImagesPerRun is < 1 or > ParserSettings.AbsoluteMaximumImagesPerRun)

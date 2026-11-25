@@ -70,7 +70,7 @@ public sealed class LikedImagesHandlerTests
     {
         public int? UserId => userId;
         public string? Login => "tester";
-        public bool IsInRole(string role) => false;
+        public bool HasPermission(string permission) => false;
         public void RequireAuthenticated() { }
     }
 }

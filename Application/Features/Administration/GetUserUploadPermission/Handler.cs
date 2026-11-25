@@ -7,23 +7,29 @@ using Shared.DataTransferObjects;
 
 namespace Application.Features.Administration.GetUserUploadPermission;
 
-public sealed class Handler(IRepositoryManager repositories, IUserContext currentUser) : IRequestHandler<Command, UploadPermissionDto>
+public sealed class Handler(IRepositoryManager repositories, IUserContext currentUser, IRoleAccessService roleAccess) : IRequestHandler<Command, UploadPermissionDto>
 {
     public async Task<UploadPermissionDto> Handle(Command request, CancellationToken cancellationToken)
     {
-        EnsureAdministrator(currentUser);
+        EnsureCanManageAccess(currentUser);
         var user = await repositories.AppUser.GetByIdAsync(request.UserId, false, cancellationToken)
             ?? throw new Base404ReturnException("User not found.");
-        return ToDto(user);
+        return await ToDtoAsync(user, roleAccess, cancellationToken);
     }
 
-    internal static void EnsureAdministrator(IUserContext currentUser)
+    internal static void EnsureCanManageAccess(IUserContext currentUser)
     {
-        if (!currentUser.IsInRole(nameof(AppUserRole.Admin)))
-            throw new AppForbiddenException("Administrator access is required.");
+        currentUser.RequireAuthenticated();
+        if (!currentUser.HasPermission(AccessPermission.UploadsManageAccess))
+            throw new AppForbiddenException("Upload access management permission is required.");
     }
 
-    internal static UploadPermissionDto ToDto(AppUser user)
-        => new(user.Id, user.Login, UploadAccess.IsAllowed(user), user.CanUploadImages,
-            user.AuthenticatorEnabledAtUtc is not null, user.UploadsBlocked);
+    internal static async Task<UploadPermissionDto> ToDtoAsync(AppUser user, IRoleAccessService roleAccess,
+        CancellationToken cancellationToken)
+    {
+        var access = await roleAccess.GetAccessAsync(user.Id, cancellationToken);
+        var bypassRestrictions = access?.Permissions.Contains(AccessPermission.UploadsBypassRestrictions) == true;
+        return new UploadPermissionDto(user.Id, user.Login, UploadAccess.IsAllowed(user, bypassRestrictions),
+            user.CanUploadImages, user.AuthenticatorEnabledAtUtc is not null, user.UploadsBlocked);
+    }
 }

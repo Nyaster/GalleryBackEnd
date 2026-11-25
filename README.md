@@ -24,8 +24,8 @@ dotnet ef migrations has-pending-model-changes --project Infrastructure --startu
 
 ## Runtime
 
-The API targets .NET 10, PostgreSQL with the `vector` extension, and a persistent local image volume. It applies its
-initial EF migration at startup and creates an administrator only when both `BootstrapAdmin__Login` and
+The API targets .NET 10, PostgreSQL with the `vector` extension, and a persistent local image volume. Its
+`--migrate` command applies EF migrations and can create an administrator when both `BootstrapAdmin__Login` and
 `BootstrapAdmin__Password` are configured.
 
 ## Run locally
@@ -54,6 +54,7 @@ credentials are provided. Then run:
 dotnet restore GallerySiteBackend.sln
 dotnet build GallerySiteBackend.sln
 dotnet test GallerySiteUnitTests/GallerySiteUnitTests.csproj
+dotnet run --project GallerySiteBackend/GallerySiteBackend.csproj -- --migrate
 dotnet run --project GallerySiteBackend/GallerySiteBackend.csproj
 ```
 
@@ -79,8 +80,9 @@ See the account and admin endpoints in [API_REFERENCE.md](API_REFERENCE.md#displ
 `POST /api/auth/login` and `POST /api/auth/register` return a
 short-lived access token and issue a rotating, Secure/HttpOnly refresh cookie. `POST /api/auth/refresh` reads that
 cookie; refresh tokens are never returned in JSON. Access-token validation checks the signature, issuer, audience,
-expiry, and user-ID claim locally. For tokens carrying the Admin or Moderator role, the API also checks that the
-account still exists on each request. Existing access tokens remain valid after password
+expiry, and user-ID claim locally. Each authenticated request resolves current roles and permissions from PostgreSQL.
+Role assignments and edits therefore take effect with an existing token. Existing access tokens remain valid after
+password
 recovery until expiry (`JwtConfig:AccessTokenMinutes`, default 15 minutes, plus 30 seconds of validation clock skew).
 Account recovery immediately revokes refresh sessions, preventing those sessions from issuing new access tokens.
 
@@ -115,9 +117,26 @@ Apply the `AddDiscoveryPeriodIndexes` migration when deploying the discovery que
 indexes for daily likes and undeleted comments. Before recreating the API, run the Compose `migrate` service following
 [deploy/DEPLOYMENT.md](deploy/DEPLOYMENT.md).
 
-User uploads begin as `Pending`; only an administrator can approve or reject them. Gallery search and recommendations
-include only approved, non-private images. The uploader and administrators can still read pending or private images
-directly. API errors are RFC 7807 problem-details responses.
+User uploads begin as `Pending` unless the uploader has `uploads.bypassReview`. Accounts with `images.moderate`
+can approve or reject images. Gallery search and recommendations include only approved, non-private images.
+Owners and accounts with `images.readRestricted` can read restricted images subject to the visibility settings.
+API errors are RFC 7807 problem-details responses.
+
+Admins can manage role definitions and account assignments in the staff access screen. The migration preserves
+existing Admin and Moderator access and gives each account the baseline User role. Trusted Contributor starts
+unassigned. Assigning it grants both automatic approval for eligible new uploads and immediate tag changes on
+the contributor’s own images. Upload blocks, selected visibility, and global tag moderation still apply.
+
+The role editor sends `expectedRoleIds` from the loaded account with its replacement `roleIds`. The API checks
+that snapshot under the assignment write lock. A stale draft receives HTTP 409 with Problem Details type
+`urn:lilgallery:problem:role-assignments-changed`. During rollout, older clients may omit the snapshot and
+write unconditionally. Once all writers send it, set `RoleAssignments__RequireExpectedRoleIds=true`
+(`REQUIRE_EXPECTED_ROLE_IDS=true` in Compose) on every API replica. An explicit JSON null is invalid in either mode.
+
+For this release, back up PostgreSQL, stop the old API replicas, run the new image with `--migrate`, then
+start the new API and serve the matching SPA. Check the role memberships before editing them. Once custom
+roles or grants are in use, an application rollback requires a release that understands the new role tables.
+See [the access management API](API_REFERENCE.md#roles-and-permissions).
 
 Upload and scrape imports share an image staging lifecycle: temporary data is inspected and moved to its final
 storage key, but the staging handle still owns the file until the caller marks it persisted immediately after a
@@ -125,6 +144,34 @@ successful database save. Later response reads or source-stream disposal cannot 
 failures trigger best-effort cleanup even after request cancellation; deletion failures are logged without replacing
 the original error. Database saving and file storage are not atomic, so process crashes or failed cleanup may leave
 artifacts that require reconciliation.
+
+## Frontend handoff for role and moderation writes
+
+Deploy the role editor, moderation queue, and image detail changes with the matching API.
+Older role editors and status forms receive `400` when they omit a required baseline.
+
+- **Edit role definitions.** Read the opaque `version` from `GET /api/admin/access/roles`. For
+  `PUT /api/admin/access/roles/{id}`, send the draft’s original version as `expectedVersion`, alongside
+  `name` and the complete `permissions` array. Successful creates and updates return the current version.
+  On `409` with type `urn:lilgallery:problem:role-definition-changed`, reload the list and let the administrator
+  review the latest grants before retrying. Member count changes alone keep the version valid. Role creation
+  still accepts just `name` and `permissions`.
+- **Assign account roles.** Send `roleIds` and the original `expectedRoleIds` to
+  `PUT /api/admin/access/accounts/{id}/roles`. A stale snapshot returns the typed assignment conflict even if a
+  desired role was removed and deleted. An unknown desired ID with a matching snapshot returns `400`.
+- **Moderate or classify an image.** For `PATCH /api/admin/images/{id}/moderation`, a status decision takes
+  `{"status":"Approved","expectedStatus":"Pending"}` when the reviewer saw a pending image. Classification alone
+  takes, for example, `{"aiUsage":"HumanMade"}`. Show each control on non-hidden images with its corresponding
+  permission. Handle `200` with a readable card and `204` with an empty body. Refresh ordinary detail or the
+  queue after a save. On `409`, refresh before offering another decision. Bodyless
+  `POST /api/images/{id}/publish` and `POST /api/images/{id}/restore` also use these response codes.
+- **Decide a tag proposal.** For `PATCH /api/admin/tag-changes/{id}/moderation`, send `decision` as
+  `Approve` or `Reject` for a pending replacement and `Revert` for an eligible approved replacement. Each
+  accepts an optional `note`. On `409`, refresh the proposal or history. Global tag rejection entries are audit
+  history.
+- **Display tag history and queue previews.** Read `canViewTagHistory` independently of `canEditTags`. Owners
+  and holders of `imageTags.review` may read image tag history. Keep the proposal and its decision controls
+  usable when an ordinary image detail request returns `403` or `404` while loading the queue preview.
 
 ## Personalized recommendations
 

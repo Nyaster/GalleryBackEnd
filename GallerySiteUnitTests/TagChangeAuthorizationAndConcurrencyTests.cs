@@ -39,64 +39,106 @@ public sealed class TagChangeAuthorizationAndConcurrencyTests
     }
 
     [Fact]
+    public async Task TagEditorWithoutReviewPermission_CanEditTagsButCannotReadHistory()
+    {
+        var editor = new Mock<IUserContext>();
+        editor.SetupGet(value => value.UserId).Returns(8);
+        editor.Setup(value => value.HasPermission(AccessPermission.ImageTagsEditAny)).Returns(true);
+        var image = Image(7);
+        var repositories = new Mock<IRepositoryManager>();
+        var images = new Mock<IAppImageRepository>();
+        repositories.SetupGet(value => value.AppImage).Returns(images.Object);
+        images.Setup(value => value.GetCardByIdAsync(image.Id, It.IsAny<ImageViewer>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ImageReadTestData.Card(image));
+        var handler = new Application.Features.Images.GetImageById.Handler(repositories.Object, editor.Object);
+
+        var dto = await handler.Handle(new Application.Features.Images.GetImageById.Command(image.Id),
+            CancellationToken.None);
+
+        Assert.True(dto.CanEditTags);
+        Assert.False(dto.CanViewTagHistory);
+        await Assert.ThrowsAsync<AppForbiddenException>(() => GetHistory(editor.Object));
+    }
+
+    [Fact]
     public async Task GetAdminTagChanges_NonStaffCaller_IsForbidden()
     {
-        var handler = new Application.Features.Administration.GetImageTagChanges.Handler(new Mock<IRepositoryManager>().Object, new TestUser(7));
+        var handler =
+            new Application.Features.Administration.GetImageTagChanges.Handler(new Mock<IRepositoryManager>().Object,
+                new TestUser(7));
 
         await Assert.ThrowsAsync<AppForbiddenException>(() => handler.Handle(
-            new Application.Features.Administration.GetImageTagChanges.Command(null, null, null, 1, 20), CancellationToken.None));
+            new Application.Features.Administration.GetImageTagChanges.Command(null, null, null, 1, 20),
+            CancellationToken.None));
     }
 
     [Fact]
     public async Task ModerateTagChange_NonStaffCaller_IsForbiddenBeforeStartingTransaction()
     {
         var repositories = new Mock<IRepositoryManager>();
-        var handler = new Application.Features.Administration.ModerateImageTagChange.Handler(repositories.Object, new TestUser(7), TimeProvider.System);
+        var handler =
+            new Application.Features.Administration.ModerateImageTagChange.Handler(repositories.Object, new TestUser(7),
+                TimeProvider.System);
 
         await Assert.ThrowsAsync<AppForbiddenException>(() => handler.Handle(
-            new Application.Features.Administration.ModerateImageTagChange.Command(1, TagChangeDecision.Approve, null), CancellationToken.None));
+            new Application.Features.Administration.ModerateImageTagChange.Command(1, TagChangeDecision.Approve, null),
+            CancellationToken.None));
 
-        repositories.Verify(value => value.BeginSerializableTransactionAsync(It.IsAny<CancellationToken>()), Times.Never);
+        repositories.Verify(value => value.BeginSerializableTransactionAsync(It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Fact]
-    public async Task ReplaceTags_SaveFailure_RollsBackWithoutCommit()
+    public async Task ReplaceTags_SaveFailure_DisposesWithoutCommit()
     {
         var image = Image(7);
         var (repositories, images, changes, transaction) = TransactionalRepositories(image);
-        images.Setup(value => value.GetOrCreateTagsAsync(It.IsAny<IEnumerable<string>>(), It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
+        images.Setup(value => value.GetOrCreateTagsAsync(It.IsAny<IEnumerable<string>>(), It.IsAny<DateTimeOffset>(),
+                It.IsAny<CancellationToken>()))
             .ReturnsAsync([Tag("new")]);
-        changes.Setup(value => value.AddAsync(It.IsAny<ImageTagChange>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-        repositories.Setup(value => value.SaveAsync(It.IsAny<CancellationToken>())).ThrowsAsync(new DbUpdateException("save failed"));
-        var handler = new Application.Features.Images.ReplaceImageTags.Handler(repositories.Object, new TestUser(7), TimeProvider.System);
+        changes.Setup(value => value.AddAsync(It.IsAny<ImageTagChange>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        repositories.Setup(value => value.SaveAsync(It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new DbUpdateException("save failed"));
+        var handler =
+            new Application.Features.Images.ReplaceImageTags.Handler(repositories.Object, new TestUser(7),
+                TimeProvider.System);
 
         await Assert.ThrowsAsync<DbUpdateException>(() => handler.Handle(
-            new Application.Features.Images.ReplaceImageTags.Command(image.Id, new ReplaceImageTagsDto(["new"])), CancellationToken.None));
+            new Application.Features.Images.ReplaceImageTags.Command(image.Id, new ReplaceImageTagsDto(["new"])),
+            CancellationToken.None));
 
-        transaction.Verify(value => value.RollbackAsync(It.IsAny<CancellationToken>()), Times.Once);
+        transaction.Verify(value => value.DisposeAsync(), Times.Once);
         transaction.Verify(value => value.CommitAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
-    public async Task ApprovalRacingWithRejection_SerializationFailureRollsBackAndDoesNotReportSuccess()
+    public async Task ApprovalRacingWithRejection_CommitConflictSurvivesTransactionCleanup()
     {
         var image = Image(7, Tag("old"));
         var change = Change(image.Id, ["old"], ["new"]);
         var (repositories, images, changes, transaction) = TransactionalRepositories(image);
         changes.Setup(value => value.GetByIdAsync(change.Id, true, It.IsAny<CancellationToken>())).ReturnsAsync(change);
-        images.Setup(value => value.GetOrCreateTagsAsync(change.ProposedTags, It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>())).ReturnsAsync([Tag("new")]);
+        images.Setup(value =>
+                value.GetOrCreateTagsAsync(change.ProposedTags, It.IsAny<DateTimeOffset>(),
+                    It.IsAny<CancellationToken>()))
+            .ReturnsAsync([Tag("new")]);
         transaction.Setup(value => value.CommitAsync(It.IsAny<CancellationToken>())).ThrowsAsync(
             new PostgresException("serialization failure", "ERROR", "ERROR", PostgresErrorCodes.SerializationFailure));
-        var handler = new Application.Features.Administration.ModerateImageTagChange.Handler(repositories.Object, new TestUser(9, AppUserRole.Admin), TimeProvider.System);
+        transaction.Setup(value => value.RollbackAsync(It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("The database already ended the transaction."));
+        var handler = new Application.Features.Administration.ModerateImageTagChange.Handler(repositories.Object,
+            new TestUser(9, AppUserRole.Admin), TimeProvider.System);
 
         await Assert.ThrowsAsync<PostgresException>(() => handler.Handle(
-            new Application.Features.Administration.ModerateImageTagChange.Command(change.Id, TagChangeDecision.Approve, null), CancellationToken.None));
+            new Application.Features.Administration.ModerateImageTagChange.Command(change.Id, TagChangeDecision.Approve,
+                null), CancellationToken.None));
 
-        transaction.Verify(value => value.RollbackAsync(It.IsAny<CancellationToken>()), Times.Once);
+        transaction.Verify(value => value.DisposeAsync(), Times.Once);
     }
 
     [Fact]
-    public async Task GlobalRejectionRacingWithApproval_CommitFailureRollsBackAndDoesNotReportSuccess()
+    public async Task GlobalRejectionRacingWithApproval_CommitConflictSurvivesTransactionCleanup()
     {
         var tag = Tag("blocked");
         var image = Image(7, tag);
@@ -110,29 +152,45 @@ public sealed class TagChangeAuthorizationAndConcurrencyTests
         repositories.SetupGet(value => value.ImageTagChanges).Returns(changes.Object);
         repositories.Setup(value => value.SaveAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
         images.Setup(value => value.GetTagByIdAsync(tag.Id, true, It.IsAny<CancellationToken>())).ReturnsAsync(tag);
-        changes.Setup(value => value.GetPendingContainingTagAsync(tag.NormalizedName, It.IsAny<CancellationToken>())).ReturnsAsync([pending]);
-        changes.Setup(value => value.AddRangeAsync(It.IsAny<IEnumerable<ImageTagChange>>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-        transaction.Setup(value => value.CommitAsync(It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException("concurrent approval"));
-        var handler = new Application.Features.Administration.ChangeTagModeration.Handler(repositories.Object, new TestUser(9, AppUserRole.Admin), TimeProvider.System);
+        changes.Setup(value => value.GetPendingContainingTagAsync(tag.NormalizedName, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([pending]);
+        changes.Setup(value =>
+                value.AddRangeAsync(It.IsAny<IEnumerable<ImageTagChange>>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        transaction.Setup(value => value.CommitAsync(It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new PostgresException("serialization failure", "ERROR", "ERROR",
+                PostgresErrorCodes.SerializationFailure));
+        transaction.Setup(value => value.RollbackAsync(It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("The database already ended the transaction."));
+        var handler = new Application.Features.Administration.ChangeTagModeration.Handler(repositories.Object,
+            new TestUser(9, AppUserRole.Admin), TimeProvider.System);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => handler.Handle(
-            new Application.Features.Administration.ChangeTagModeration.Command(tag.Id, TagModerationStatus.Rejected), CancellationToken.None));
+        await Assert.ThrowsAsync<PostgresException>(() => handler.Handle(
+            new Application.Features.Administration.ChangeTagModeration.Command(tag.Id, TagModerationStatus.Rejected),
+            CancellationToken.None));
 
-        transaction.Verify(value => value.RollbackAsync(It.IsAny<CancellationToken>()), Times.Once);
+        transaction.Verify(value => value.DisposeAsync(), Times.Once);
     }
 
-    [Fact]
-    public async Task SerializationFailure_ReturnsConflictWithRetryMessage()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SerializationFailure_ReturnsConflictWithRetryMessage(bool fromSave)
     {
         var context = new DefaultHttpContext();
+        var postgresError = new PostgresException("serialization failure", "ERROR", "ERROR",
+            PostgresErrorCodes.SerializationFailure);
+        Exception error = fromSave ? new DbUpdateException("could not save changes", postgresError) : postgresError;
         context.Features.Set<IExceptionHandlerFeature>(new ExceptionHandlerFeature
         {
-            Error = new PostgresException("serialization failure", "ERROR", "ERROR", PostgresErrorCodes.SerializationFailure)
+            Error = error
         });
         context.Response.Body = new MemoryStream();
-        var handler = new GlobalExceptionHandler(NullLogger<GlobalExceptionHandler>.Instance, NullLoggerFactory.Instance);
+        var handler =
+            new GlobalExceptionHandler(NullLogger<GlobalExceptionHandler>.Instance, NullLoggerFactory.Instance);
 
-        await handler.TryHandleAsync(context, context.Features.Get<IExceptionHandlerFeature>()!.Error, CancellationToken.None);
+        await handler.TryHandleAsync(context, context.Features.Get<IExceptionHandlerFeature>()!.Error,
+            CancellationToken.None);
 
         context.Response.Body.Position = 0;
         var problem = await System.Text.Json.JsonSerializer.DeserializeAsync<ProblemDetails>(context.Response.Body);
@@ -148,15 +206,19 @@ public sealed class TagChangeAuthorizationAndConcurrencyTests
         var changes = new Mock<IImageTagChangeRepository>();
         repositories.SetupGet(value => value.AppImage).Returns(images.Object);
         repositories.SetupGet(value => value.ImageTagChanges).Returns(changes.Object);
-        images.Setup(value => value.GetMetadataByIdAsync(image.Id, It.IsAny<CancellationToken>())).ReturnsAsync(() => ImageReadTestData.Metadata(image));
+        images.Setup(value => value.GetMetadataByIdAsync(image.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => ImageReadTestData.Metadata(image));
         changes.Setup(value => value.GetAsync(image.Id, null, null, 1, 20, It.IsAny<CancellationToken>()))
             .ReturnsAsync((new List<ImageTagChange> { Change(image.Id, [], ["new"]) }, 1));
         var handler = new Application.Features.Images.GetImageTagChanges.Handler(repositories.Object, user);
 
-        return await handler.Handle(new Application.Features.Images.GetImageTagChanges.Command(image.Id, 1, 20), CancellationToken.None);
+        return await handler.Handle(new Application.Features.Images.GetImageTagChanges.Command(image.Id, 1, 20),
+            CancellationToken.None);
     }
 
-    private static (Mock<IRepositoryManager> Repositories, Mock<IAppImageRepository> Images, Mock<IImageTagChangeRepository> Changes, Mock<IRepositoryTransaction> Transaction) TransactionalRepositories(AppImage image)
+    private static (Mock<IRepositoryManager> Repositories, Mock<IAppImageRepository> Images,
+        Mock<IImageTagChangeRepository> Changes, Mock<IRepositoryTransaction> Transaction) TransactionalRepositories(
+            AppImage image)
     {
         var repositories = new Mock<IRepositoryManager>();
         var images = new Mock<IAppImageRepository>();
@@ -166,7 +228,8 @@ public sealed class TagChangeAuthorizationAndConcurrencyTests
         repositories.SetupGet(value => value.ImageTagChanges).Returns(changes.Object);
         repositories.Setup(value => value.SaveAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
         images.Setup(value => value.GetWithTagsByIdAsync(image.Id, It.IsAny<CancellationToken>())).ReturnsAsync(image);
-        changes.Setup(value => value.GetPendingForImageAsync(image.Id, It.IsAny<CancellationToken>())).ReturnsAsync((ImageTagChange?)null);
+        changes.Setup(value => value.GetPendingForImageAsync(image.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ImageTagChange?)null);
         return (repositories, images, changes, transaction);
     }
 
@@ -175,7 +238,8 @@ public sealed class TagChangeAuthorizationAndConcurrencyTests
         var transaction = new Mock<IRepositoryTransaction>();
         transaction.Setup(value => value.CommitAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
         transaction.Setup(value => value.RollbackAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-        repositories.Setup(value => value.BeginSerializableTransactionAsync(It.IsAny<CancellationToken>())).ReturnsAsync(transaction.Object);
+        repositories.Setup(value => value.BeginSerializableTransactionAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(transaction.Object);
         return transaction;
     }
 
@@ -204,24 +268,30 @@ public sealed class TagChangeAuthorizationAndConcurrencyTests
         ModerationStatus = TagModerationStatus.Approved
     };
 
-    private static ImageTagChange Change(int imageId, IReadOnlyList<string> previous, IReadOnlyList<string> proposed) => new()
-    {
-        Id = 2,
-        ImageId = imageId,
-        PreviousTags = previous.ToList(),
-        ProposedTags = proposed.ToList(),
-        Kind = ImageTagChangeKind.Replacement,
-        Status = ImageTagChangeStatus.Pending,
-        EditedByUserId = 7,
-        EditedByLogin = "owner",
-        CreatedAtUtc = DateTimeOffset.UtcNow
-    };
+    private static ImageTagChange Change(int imageId, IReadOnlyList<string> previous, IReadOnlyList<string> proposed) =>
+        new()
+        {
+            Id = 2,
+            ImageId = imageId,
+            PreviousTags = previous.ToList(),
+            ProposedTags = proposed.ToList(),
+            Kind = ImageTagChangeKind.Replacement,
+            Status = ImageTagChangeStatus.Pending,
+            EditedByUserId = 7,
+            EditedByLogin = "owner",
+            CreatedAtUtc = DateTimeOffset.UtcNow
+        };
 
     private sealed class TestUser(int userId, params AppUserRole[] roles) : IUserContext
     {
         public int? UserId => userId;
         public string? Login => "tester";
-        public bool IsInRole(string role) => roles.Any(candidate => candidate.ToString() == role);
-        public void RequireAuthenticated() { }
+
+        public bool HasPermission(string permission) => roles.Any(role =>
+            Entities.Models.AccessPermission.HasLegacyPermission(role.ToString(), permission));
+
+        public void RequireAuthenticated()
+        {
+        }
     }
 }

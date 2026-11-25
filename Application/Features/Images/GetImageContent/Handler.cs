@@ -1,3 +1,4 @@
+using Entities.Models;
 using Application.Helpers;
 using Contracts;
 using Entities.Exceptions;
@@ -20,10 +21,16 @@ public sealed class Handler(
         if (request.ForModeration)
         {
             currentUser.RequireAuthenticated();
-            if (!ImageAuthorization.IsStaff(currentUser))
-                throw new AppForbiddenException("Staff access is required.");
-            image = await repositories.AppImage.GetMetadataByIdAsync(request.Id, cancellationToken)
-                    ?? throw new Base404ReturnException("Image not found.");
+            var canReadRestricted = currentUser.HasPermission(AccessPermission.ImagesReadRestricted);
+            if (!canReadRestricted &&
+                (!currentUser.HasPermission(AccessPermission.ImagesReviewQueue) ||
+                 request.Format != ImageContentFormat.Preview))
+                throw new AppForbiddenException("Only review previews are available with your permissions.");
+
+            var metadata = canReadRestricted
+                ? await repositories.AppImage.GetMetadataByIdAsync(request.Id, cancellationToken)
+                : await repositories.AppImage.GetReviewMetadataByIdAsync(request.Id, cancellationToken);
+            image = metadata ?? throw new Base404ReturnException("Image not found.");
         }
         else
         {

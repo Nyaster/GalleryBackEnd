@@ -26,15 +26,15 @@ public sealed class InteractionAndRankingContractTests
     }
 
     [Theory]
-    [InlineData("DeleteComment")]
-    [InlineData("GetCommentRestriction")]
-    [InlineData("SetCommentRestriction")]
-    [InlineData("DeleteCommentRestriction")]
-    public void CommentStaffEndpoints_AllowAdminAndModerator(string methodName)
+    [InlineData(nameof(AdministrationController.DeleteComment), AccessPermission.CommentsDeleteAny)]
+    [InlineData(nameof(AdministrationController.GetCommentRestriction), AccessPermission.CommentsManageRestrictions)]
+    [InlineData(nameof(AdministrationController.SetCommentRestriction), AccessPermission.CommentsManageRestrictions)]
+    [InlineData(nameof(AdministrationController.DeleteCommentRestriction), AccessPermission.CommentsManageRestrictions)]
+    public void CommentManagementEndpoints_RequireActionPermission(string methodName, string expectedPolicy)
     {
         var method = typeof(AdministrationController).GetMethod(methodName) ?? throw new InvalidOperationException($"{methodName} was not found.");
         var authorize = method.GetCustomAttributes(typeof(AuthorizeAttribute), true).Cast<AuthorizeAttribute>().Single();
-        Assert.Equal("Admin,Moderator", authorize.Roles);
+        Assert.Equal(expectedPolicy, authorize.Policy);
     }
 
     [Fact]

@@ -5,8 +5,13 @@ using System.Text.Json;
 using Contracts;
 using Entities.Exceptions;
 using Entities.Models;
+using GallerySiteBackend;
 using Infrastructure.Persistence;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Logging.Abstractions;
+using Npgsql;
 using Pgvector;
 using Repository;
 using Service.Contracts;
@@ -80,6 +85,10 @@ public sealed class ImageReadRepositoryTests(PostgresFixture database) : IClassF
         Assert.Equal(seed.PendingId, Assert.Single(pending).Id);
         var hidden = await repository.GetHiddenAsync(1, 2, owner);
         Assert.Equal(seed.HiddenId, Assert.Single(hidden).Id);
+        Assert.NotNull(await repository.GetReviewMetadataByIdAsync(seed.PendingId));
+        Assert.NotNull(await repository.GetReviewMetadataByIdAsync(seed.HiddenId));
+        Assert.Null(await repository.GetReviewMetadataByIdAsync(seed.PrivateId));
+        Assert.Null(await repository.GetReviewMetadataByIdAsync(seed.PublicIds[0]));
         Assert.Empty((await repository.SearchAsync(new SearchImageDto(null, Page: int.MaxValue, PageSize: 50), visitor)).Images);
         Assert.Empty(await repository.GetPendingAsync(int.MaxValue, 50, owner));
         Assert.Empty(await repository.GetHiddenAsync(int.MaxValue, 50, owner));
@@ -161,6 +170,7 @@ public sealed class ImageReadRepositoryTests(PostgresFixture database) : IClassF
             .Handle(new(seed.PublicIds[0]), CancellationToken.None);
         var restored = await new Application.Features.Images.RestoreImage.Handler(repositories, owner)
             .Handle(new(seed.PublicIds[0]), CancellationToken.None);
+        Assert.NotNull(restored);
         Assert.Equal(ModerationStatus.Pending, restored.ModerationStatus);
         Assert.Null(restored.HiddenAtUtc);
         Assert.Equal(60, restored.LikeCount);
@@ -170,14 +180,23 @@ public sealed class ImageReadRepositoryTests(PostgresFixture database) : IClassF
 
         var approved = await new Application.Features.Administration.ChangeModeration.Handler(repositories,
                 new Viewer(seed.VisitorId, true))
-            .Handle(new(seed.PublicIds[0], ModerationStatus.Approved, AiUsageClassification.AiAssisted), CancellationToken.None);
+            .Handle(new(seed.PublicIds[0], ModerationStatus.Approved, AiUsageClassification.AiAssisted,
+                ExpectedStatus: ModerationStatus.Pending), CancellationToken.None);
+        Assert.NotNull(approved);
         Assert.Equal(60, approved.LikeCount);
         Assert.Equal(30, approved.CommentCount);
         Assert.True(approved.IsLikedByCurrentUser);
         Assert.Equal(AiUsageClassification.AiAssisted, approved.AiUsage);
         Assert.Equal(new[] { "pending" }, approved.PendingTags);
+        var alreadyRestored = await new Application.Features.Images.RestoreImage.Handler(repositories, owner)
+            .Handle(new(seed.PublicIds[0]), CancellationToken.None);
+        Assert.NotNull(alreadyRestored);
+        Assert.Equal(ModerationStatus.Approved, alreadyRestored.ModerationStatus);
+        Assert.False(alreadyRestored.CanRestore);
+        Assert.True(alreadyRestored.CanHide);
         var published = await new Application.Features.Images.PublishImage.Handler(repositories, owner)
             .Handle(new(seed.PrivateId), CancellationToken.None);
+        Assert.NotNull(published);
         Assert.Equal(ImageVisibility.Gallery, published.Visibility);
         Assert.Equal(ModerationStatus.Approved, published.ModerationStatus);
         Assert.Equal(new[] { "pending" }, published.PendingTags);
@@ -219,6 +238,103 @@ public sealed class ImageReadRepositoryTests(PostgresFixture database) : IClassF
         Assert.Equal(card.Id, Assert.Single(liked.Images).Id);
         Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync($"/api/images/{seed.PrivateId}")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/images/{seed.HiddenId}")).StatusCode);
+    }
+
+    [Theory]
+    [InlineData(ScopedImageMutation.Status, AccessPermission.ImagesModerate)]
+    [InlineData(ScopedImageMutation.Classification, AccessPermission.ImagesClassifyAi)]
+    [InlineData(ScopedImageMutation.Publish, AccessPermission.ImagesPublishAny)]
+    [InlineData(ScopedImageMutation.Restore, AccessPermission.ImagesRestoreAny)]
+    public async Task ScopedImageMutation_ConcurrentChangeRemovesReviewAccess_RejectsStaleWrite(
+        ScopedImageMutation mutation, string permission)
+    {
+        var seed = await SeedAsync();
+        var imageId = mutation switch
+        {
+            ScopedImageMutation.Publish => seed.PrivateId,
+            ScopedImageMutation.Restore => seed.HiddenId,
+            _ => seed.PendingId
+        };
+        await using var competitor = database.CreateContext();
+        var competingImage = await competitor.Images.SingleAsync(image => image.Id == imageId);
+        if (mutation == ScopedImageMutation.Publish)
+        {
+            competingImage.ModerationStatus = ModerationStatus.Pending;
+            await competitor.SaveChangesAsync();
+        }
+
+        await using var requestContext = database.CreateContext(new BeforeImageSave(async cancellationToken =>
+        {
+            competingImage.ModerationStatus = ModerationStatus.Rejected;
+            competingImage.DeletedAtUtc = null;
+            await competitor.SaveChangesAsync(cancellationToken);
+        }));
+        var repositories = new RepositoryManager(requestContext);
+        var user = new QueueActor(seed.VisitorId, permission);
+
+        var error = await Record.ExceptionAsync(async () =>
+        {
+            _ = mutation switch
+            {
+                ScopedImageMutation.Status => await new Application.Features.Administration.ChangeModeration.Handler(
+                    repositories, user).Handle(new(imageId, ModerationStatus.Approved,
+                    ExpectedStatus: ModerationStatus.Pending), CancellationToken.None),
+                ScopedImageMutation.Classification => await new Application.Features.Administration.ChangeModeration.Handler(
+                    repositories, user).Handle(new(imageId, AiUsage: AiUsageClassification.AiGenerated),
+                    CancellationToken.None),
+                ScopedImageMutation.Publish => await new Application.Features.Images.PublishImage.Handler(
+                    repositories, user).Handle(new(imageId), CancellationToken.None),
+                _ => await new Application.Features.Images.RestoreImage.Handler(repositories, user)
+                    .Handle(new(imageId), CancellationToken.None)
+            };
+        });
+
+        Assert.NotNull(error);
+        Assert.Equal(PostgresErrorCodes.SerializationFailure,
+            Assert.IsType<PostgresException>(error.GetBaseException()).SqlState);
+        var exceptionHandler = new GlobalExceptionHandler(NullLogger<GlobalExceptionHandler>.Instance,
+            NullLoggerFactory.Instance);
+        var httpContext = new DefaultHttpContext();
+        await using var body = new MemoryStream();
+        httpContext.Response.Body = body;
+        await exceptionHandler.TryHandleAsync(httpContext, error, CancellationToken.None);
+        Assert.Equal(StatusCodes.Status409Conflict, httpContext.Response.StatusCode);
+        body.Position = 0;
+        using var problem = await JsonDocument.ParseAsync(body);
+        Assert.Contains("Refetch", problem.RootElement.GetProperty("detail").GetString());
+        var saved = await competitor.Images.AsNoTracking().SingleAsync(image => image.Id == imageId);
+        Assert.Equal(ModerationStatus.Rejected, saved.ModerationStatus);
+        Assert.Equal(AiUsageClassification.HumanMade, saved.AiUsage);
+        if (mutation == ScopedImageMutation.Publish)
+            Assert.Equal(ImageVisibility.Private, saved.Visibility);
+        Assert.Null(saved.DeletedAtUtc);
+    }
+
+    public enum ScopedImageMutation
+    {
+        Status,
+        Classification,
+        Publish,
+        Restore
+    }
+
+    private sealed class BeforeImageSave(Func<CancellationToken, Task> beforeSave) : SaveChangesInterceptor
+    {
+        public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData,
+            InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            await beforeSave(cancellationToken);
+            return result;
+        }
+    }
+
+    private sealed class QueueActor(int userId, string mutationPermission) : IUserContext
+    {
+        public int? UserId => userId;
+        public string? Login => "queue-actor";
+        public bool HasPermission(string permission) =>
+            permission == AccessPermission.ImagesReviewQueue || permission == mutationPermission;
+        public void RequireAuthenticated() { }
     }
 
     private async Task<Seed> SeedAsync()
@@ -276,7 +392,7 @@ public sealed class ImageReadRepositoryTests(PostgresFixture database) : IClassF
     {
         public int? UserId => id;
         public string? Login => "viewer";
-        public bool IsInRole(string role) => staff && role == "Moderator";
+        public bool HasPermission(string permission) => staff && Entities.Models.AccessPermission.HasLegacyPermission("Moderator", permission);
         public void RequireAuthenticated() { }
     }
 }

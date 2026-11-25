@@ -34,6 +34,6 @@ public sealed class Handler(IRepositoryManager repositories, IUserContext curren
 
         var result = await repositories.AppImage.SearchAsync(normalized, ImageAuthorization.GetViewer(currentUser), cancellationToken);
         return new PageableImagesDto(normalized.Page, normalized.PageSize, result.Total, normalized.Sort,
-            result.Images.Select(image => ImageDtoMapper.ToDto(image)).ToArray(), normalized.RandomSeed);
+            result.Images.Select(image => ImageDtoMapper.ToDto(image, currentUser)).ToArray(), normalized.RandomSeed);
     }
 }

@@ -1,6 +1,7 @@
 using Application.Helpers;
 using Contracts;
 using Entities.Exceptions;
+using Entities.Models;
 using MediatR;
 using Service.Contracts;
 using Shared.DataTransferObjects;
@@ -11,7 +12,8 @@ public sealed class Handler(IRepositoryManager repositories, IUserContext curren
 {
     public async Task<PageableImageTagChangesDto> Handle(Command request, CancellationToken cancellationToken)
     {
-        if (!ImageAuthorization.IsStaff(currentUser)) throw new AppForbiddenException("Staff access is required.");
+        if (!currentUser.HasPermission(AccessPermission.ImageTagsReview))
+            throw new AppForbiddenException("Image-tag review permission is required.");
         var page = Math.Max(request.Page, 1);
         var pageSize = Math.Clamp(request.PageSize, 1, 50);
         var result = await repositories.ImageTagChanges.GetAsync(request.ImageId, request.Status, request.EditedByUserId, page, pageSize, cancellationToken);

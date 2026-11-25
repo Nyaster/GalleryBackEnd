@@ -18,4 +18,9 @@ public sealed record AppImageDto(
     DateTimeOffset? HiddenAtUtc = null,
     int LikeCount = 0,
     int CommentCount = 0,
-    bool IsLikedByCurrentUser = false);
+    bool IsLikedByCurrentUser = false,
+    bool CanHide = false,
+    bool CanRestore = false,
+    bool CanPublish = false,
+    bool CanEditTags = false,
+    bool CanViewTagHistory = false);

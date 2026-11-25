@@ -74,7 +74,7 @@ public sealed class Handler(IForMeFeedRepository feeds, IForMeFeedCursorProtecto
             var next = page.HasMore ? cursors.Protect(new ForMeFeedCursor(1, feedId, userId,
                 page.LastRank, page.Feed.PageSize, page.Feed.ExpiresAtUtc)) : null;
             result = new ForMeFeedDto(page.Feed.Mode, page.Feed.CreatedAtUtc, page.Feed.ExpiresAtUtc,
-                page.Feed.PageSize, page.Feed.Total, page.Images.Select(ImageDtoMapper.ToDto).ToArray(), next);
+                page.Feed.PageSize, page.Feed.Total, page.Images.Select(image => ImageDtoMapper.ToDto(image, currentUser)).ToArray(), next);
             return result;
         }
         catch (Exception exception)

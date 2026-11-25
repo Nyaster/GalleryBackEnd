@@ -214,6 +214,7 @@ public sealed class TagAndImageManagementHandlerTests
 
         Assert.Equal(ImageVisibility.Gallery, image.Visibility);
         Assert.Equal(status, image.ModerationStatus);
+        Assert.NotNull(result);
         Assert.Equal(ImageVisibility.Gallery, result.Visibility);
         Assert.Equal(status, result.ModerationStatus);
         repositories.Verify(repository => repository.SaveAsync(It.IsAny<CancellationToken>()), Times.Once);
@@ -267,6 +268,8 @@ public sealed class TagAndImageManagementHandlerTests
         repositories.SetupGet(repository => repository.ImageTagChanges).Returns(tagChanges.Object);
         images.Setup(repository => repository.GetByIdAsync(image.Id, true, It.IsAny<CancellationToken>())).ReturnsAsync(image);
         images.Setup(repository => repository.GetWithTagsByIdAsync(image.Id, It.IsAny<CancellationToken>())).ReturnsAsync(image);
+        images.Setup(repository => repository.GetCardByIdAsync(image.Id, It.IsAny<ImageViewer>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((int id, ImageViewer viewer, CancellationToken token) => ImageReadTestData.Card(image, viewer));
         images.Setup(repository => repository.GetManagementCardByIdAsync(image.Id, It.IsAny<ImageViewer>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((int id, ImageViewer viewer, CancellationToken token) => ImageReadTestData.Card(image, viewer));
         tagChanges.Setup(repository => repository.GetPendingForImageAsync(image.Id, It.IsAny<CancellationToken>())).ReturnsAsync((ImageTagChange?)null);
@@ -313,7 +316,7 @@ public sealed class TagAndImageManagementHandlerTests
     {
         public int? UserId => userId;
         public string? Login => "tester";
-        public bool IsInRole(string role) => roles.Any(candidate => string.Equals(candidate.ToString(), role, StringComparison.Ordinal));
+        public bool HasPermission(string permission) => roles.Any(role => Entities.Models.AccessPermission.HasLegacyPermission(role.ToString(), permission));
         public void RequireAuthenticated() { }
     }
 }

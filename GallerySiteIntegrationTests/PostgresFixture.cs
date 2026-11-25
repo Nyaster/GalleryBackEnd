@@ -51,7 +51,7 @@ public sealed class PostgresFixture : IAsyncLifetime
 
     public AuthenticationService Authentication(RepositoryContext context, TimeProvider clock)
         => new(new RepositoryManager(context), new PasswordHasher<AppUser>(), Options.Create(Jwt), clock,
-            NullLoggerFactory.Instance);
+            NullLoggerFactory.Instance, new RoleAccessService(context, clock));
 
     public AuthenticatorService Authenticator(RepositoryContext context, TimeProvider clock)
         => new(new RepositoryManager(context), new PasswordHasher<AppUser>(),
