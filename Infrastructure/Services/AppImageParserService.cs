@@ -7,15 +7,19 @@ using AngleSharp.Html.Dom;
 using Contracts;
 using Entities.Exceptions;
 using Entities.Models;
+using Infrastructure.Persistence;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Service.Contracts;
+using Repository;
 using Configuration = AngleSharp.Configuration;
 
 namespace Service;
 
 public sealed class AppImageParserService(
     IRepositoryManager repositories,
+    IServiceScopeFactory scopeFactory,
     IImageStager stager,
     IOptions<ParserSettings> options,
     TimeProvider clock,
@@ -59,7 +63,7 @@ public sealed class AppImageParserService(
                 page, run.TotalPages, pageCandidates.Count, run.ImagesDiscovered);
             await SaveProgressAsync(run, "source-page", cancellationToken);
         }
-        var existing = await repositories.AppImage.GetByExternalMediaIdsAsync(candidates.Select(candidate => candidate.MediaId), true, cancellationToken);
+        var existing = await repositories.AppImage.GetByExternalMediaIdsAsync(candidates.Select(candidate => candidate.MediaId), false, cancellationToken);
         await SynchronizeExistingImagesAsync(existing, candidates, cancellationToken);
         var existingIds = existing.Select(image => image.ExternalMediaId!.Value).ToHashSet();
         var newCandidates = candidates.Where(candidate => !existingIds.Contains(candidate.MediaId)).ToList();
@@ -108,39 +112,18 @@ public sealed class AppImageParserService(
         if (existingImages.Count == 0) return;
 
         var candidatesByMediaId = candidates.ToDictionary(candidate => candidate.MediaId);
-        var sourceTagsByMediaId = candidatesByMediaId.ToDictionary(pair => pair.Key,
-            pair => NormalizeTags(pair.Value.Tags));
-        var tagsByName = new Dictionary<string, ImageTag>(StringComparer.Ordinal);
-        var now = clock.GetUtcNow();
-        foreach (var tagNames in sourceTagsByMediaId.Values.SelectMany(tags => tags).Distinct().Chunk(20))
-            foreach (var tag in await repositories.AppImage.GetOrCreateTagsAsync(tagNames, now, cancellationToken))
-                tagsByName[tag.NormalizedName] = tag;
-
-        var changedImages = 0;
         foreach (var image in existingImages)
         {
             var source = candidatesByMediaId[image.ExternalMediaId!.Value];
-            var sourceTags = sourceTagsByMediaId[source.MediaId]
-                .Select(tagName => tagsByName[tagName]).ToList();
-            var tagsChanged = !HaveSameTags(image.Tags, sourceTags);
-            var uploadedAtChanged = image.UploadedAtUtc != source.UploadedAtUtc;
-            if (!tagsChanged && !uploadedAtChanged) continue;
-
-            image.Tags = sourceTags;
-            image.UploadedAtUtc = source.UploadedAtUtc;
-            changedImages++;
+            var tags = ScrapedImageTagSync.SourceTags(source.Tags);
+            if (image.UploadedAtUtc == source.UploadedAtUtc && !ScrapedImageTagSync.NeedsMerge(image, tags)) continue;
+            await using var scope = scopeFactory.CreateAsyncScope();
+            var database = scope.ServiceProvider.GetRequiredService<RepositoryContext>();
+            if (!await ScrapedImageTagSync.TrySynchronizeAsync(database, image.Id, tags, source.UploadedAtUtc,
+                    clock.GetUtcNow(), cancellationToken))
+                logger.LogInformation("Skipped concurrent metadata update for scraped image {MediaId}", source.MediaId);
         }
-
-        if (changedImages > 0)
-            logger.LogInformation("Synchronized source metadata for {UpdatedImages} existing scraped images", changedImages);
     }
-
-    private static List<string> NormalizeTags(IReadOnlyList<string> tags)
-        => tags.Select(tag => tag.Trim().ToLowerInvariant()).Where(tag => tag.Length > 0).Distinct().Take(20).ToList();
-
-    private static bool HaveSameTags(IReadOnlyList<ImageTag> currentTags, IReadOnlyList<ImageTag> sourceTags)
-        => currentTags.Select(tag => tag.NormalizedName).Order(StringComparer.Ordinal)
-            .SequenceEqual(sourceTags.Select(tag => tag.NormalizedName).Order(StringComparer.Ordinal), StringComparer.Ordinal);
 
     private async Task SaveProgressAsync(ScrapeRun run, string checkpoint, CancellationToken cancellationToken)
     {
@@ -157,40 +140,58 @@ public sealed class AppImageParserService(
         CancellationToken cancellationToken)
     {
         EnsureAllowedImageUri(candidate.ImageUrl, settings);
-        using var handler = new HttpClientHandler { CookieContainer = CreateCookies(cookie, new Uri(settings.SiteUrl).Host), AllowAutoRedirect = false };
+        using var handler = new HttpClientHandler
+            { CookieContainer = CreateCookies(cookie, new Uri(settings.SiteUrl).Host), AllowAutoRedirect = false };
         using var client = new HttpClient(handler, disposeHandler: false);
         client.Timeout = TimeSpan.FromSeconds(30);
         using var response = await SendImageRequestAsync(client, candidate.ImageUrl, settings, cancellationToken);
         response.EnsureSuccessStatusCode();
-        if (response.Content.Headers.ContentLength is long contentLength && contentLength > settings.MaximumDownloadMegabytes * 1024L * 1024L)
+        if (response.Content.Headers.ContentLength is long contentLength &&
+            contentLength > settings.MaximumDownloadMegabytes * 1024L * 1024L)
             throw new ImageUploadValidationError("Remote image exceeds the configured download limit.");
         await using var body = await response.Content.ReadAsStreamAsync(cancellationToken);
-        await using var boundedBody = new LengthLimitedReadStream(body, settings.MaximumDownloadMegabytes * 1024L * 1024L);
-        await PersistCandidateAsync(candidate, boundedBody, cancellationToken);
-        return true;
+        await using var boundedBody =
+            new LengthLimitedReadStream(body, settings.MaximumDownloadMegabytes * 1024L * 1024L);
+        return await PersistCandidateAsync(candidate, boundedBody, cancellationToken);
     }
 
-    private async Task PersistCandidateAsync(ScrapedCandidate candidate, Stream source, CancellationToken cancellationToken)
+    private async Task<bool> PersistCandidateAsync(ScrapedCandidate candidate, Stream source,
+        CancellationToken cancellationToken)
     {
         await using var staged = await stager.StageAsync(source, $"scraped/{candidate.MediaId}-", cancellationToken);
-        var tags = await repositories.AppImage.GetOrCreateTagsAsync(candidate.Tags, clock.GetUtcNow(), cancellationToken);
-        await repositories.AppImage.AddAsync(new SelebusImage
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var writer = scope.ServiceProvider.GetRequiredService<IRepositoryManager>();
+        await using var transaction = await writer.BeginSerializableTransactionAsync(cancellationToken);
+        try
         {
-            Source = ImageSource.Scraped,
-            ExternalMediaId = candidate.MediaId,
-            UploadedAtUtc = candidate.UploadedAtUtc,
-            Visibility = ImageVisibility.Gallery,
-            ModerationStatus = ModerationStatus.Approved,
-            AiUsage = AiUsageClassification.HumanMade,
-            StorageKey = staged.StorageKey,
-            ContentType = staged.Metadata.ContentType,
-            Width = staged.Metadata.Width,
-            Height = staged.Metadata.Height,
-            Tags = tags,
-            EmbeddingStatus = EmbeddingStatus.Pending
-        }, cancellationToken);
-        await repositories.SaveAsync(cancellationToken);
+            var tags = await writer.AppImage.GetOrCreateTagsAsync(candidate.Tags,
+                clock.GetUtcNow(), cancellationToken);
+            await writer.AppImage.AddAsync(new SelebusImage
+            {
+                Source = ImageSource.Scraped,
+                ExternalMediaId = candidate.MediaId,
+                UploadedAtUtc = candidate.UploadedAtUtc,
+                Visibility = ImageVisibility.Gallery,
+                ModerationStatus = ModerationStatus.Approved,
+                AiUsage = AiUsageClassification.HumanMade,
+                StorageKey = staged.StorageKey,
+                ContentType = staged.Metadata.ContentType,
+                Width = staged.Metadata.Width,
+                Height = staged.Metadata.Height,
+                Tags = tags.Where(tag => tag.ModerationStatus != TagModerationStatus.Rejected).ToList(),
+                EmbeddingStatus = EmbeddingStatus.Pending
+            }, cancellationToken);
+            await writer.SaveAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
+        catch (Exception error) when (ScrapedImageTagSync.IsWriteConflict(error))
+        {
+            logger.LogInformation("Skipped concurrent import for scraped image {MediaId}", candidate.MediaId);
+            return false;
+        }
+
         staged.MarkPersisted();
+        return true;
     }
 
     private static async Task EnsureLoginAsync(IBrowsingContext context, ParserSettings settings, CancellationToken cancellationToken)
