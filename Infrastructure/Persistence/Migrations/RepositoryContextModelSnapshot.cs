@@ -884,6 +884,56 @@ namespace Repository.Migrations
                     b.ToTable("ScrapeRuns");
                 });
 
+            modelBuilder.Entity("Repository.ImageViewModel+ImageViewBatchReceipt", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAtUtc");
+
+                    b.ToTable("ImageViewBatchReceipts", (string)null);
+                });
+
+            modelBuilder.Entity("Repository.ImageViewModel+ImageViewCounter", b =>
+                {
+                    b.Property<int>("ImageId")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("TotalViews")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("UniqueRegisteredViewers")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("ImageId");
+
+                    b.ToTable("ImageViewCounters", (string)null);
+                });
+
+            modelBuilder.Entity("Repository.ImageViewModel+ImageViewFirstSeen", b =>
+                {
+                    b.Property<int>("ImageId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("SeenAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("ImageId", "UserId");
+
+                    b.HasIndex("ImageId", "SeenAtUtc");
+
+                    b.ToTable("ImageViewFirstSeen", (string)null);
+                });
+
             modelBuilder.Entity("Entities.Models.SelebusImage", b =>
                 {
                     b.HasBaseType("Entities.Models.AppImage");
@@ -1090,6 +1140,24 @@ namespace Repository.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Repository.ImageViewModel+ImageViewCounter", b =>
+                {
+                    b.HasOne("Entities.Models.AppImage", null)
+                        .WithOne()
+                        .HasForeignKey("Repository.ImageViewModel+ImageViewCounter", "ImageId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Repository.ImageViewModel+ImageViewFirstSeen", b =>
+                {
+                    b.HasOne("Entities.Models.AppImage", null)
+                        .WithMany()
+                        .HasForeignKey("ImageId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Entities.Models.AccessRole", b =>

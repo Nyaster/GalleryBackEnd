@@ -50,7 +50,11 @@ public sealed class TagChangeAuthorizationAndConcurrencyTests
         repositories.SetupGet(value => value.AppImage).Returns(images.Object);
         images.Setup(value => value.GetCardByIdAsync(image.Id, It.IsAny<ImageViewer>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(ImageReadTestData.Card(image));
-        var handler = new Application.Features.Images.GetImageById.Handler(repositories.Object, editor.Object);
+        var views = new Mock<IImageViewRepository>();
+        views.Setup(value => value.GetTotalsAsync(image.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ImageViewTotals(0, 0));
+        var handler =
+            new Application.Features.Images.GetImageById.Handler(repositories.Object, editor.Object, views.Object);
 
         var dto = await handler.Handle(new Application.Features.Images.GetImageById.Command(image.Id),
             CancellationToken.None);

@@ -1,4 +1,6 @@
 using Application.Features.Images.GetImageContent;
+using Application.Features.Images.Views;
+using Entities.Exceptions;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -51,6 +53,31 @@ public sealed class ImageController(IMediator mediator) : ControllerBase
     [HttpGet("{id:int}", Name = "GetImage")]
     public async Task<ActionResult<AppImageDto>> Get(int id, CancellationToken cancellationToken)
         => Ok(await mediator.Send(new Application.Features.Images.GetImageById.Command(id), cancellationToken));
+
+    [AllowAnonymous]
+    [EnableRateLimiting("guest-read")]
+    [HttpPost("{id:int}/views")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> RecordView(int id, CancellationToken cancellationToken)
+    {
+        await mediator.Send(new RecordImageView(id), cancellationToken);
+        return NoContent();
+    }
+
+    [AllowAnonymous]
+    [EnableRateLimiting("guest-read")]
+    [HttpGet("{id:int}/views/daily")]
+    [ProducesResponseType<IReadOnlyList<ImageViewDay>>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<ImageViewDay>>> GetDailyViews(int id, [FromQuery] string? from,
+        [FromQuery] string? through, CancellationToken cancellationToken)
+    {
+        if ((Request.Query.TryGetValue("from", out var fromValues) && (fromValues.Count != 1 || from is null)) ||
+            (Request.Query.TryGetValue("through", out var throughValues) &&
+             (throughValues.Count != 1 || through is null)))
+            throw new Base400BadRequestException("Supply one nonempty value for each date bound.");
+
+        return Ok(await mediator.Send(new GetDailyImageViews(id, from, through), cancellationToken));
+    }
 
     [AllowAnonymous]
     [EnableRateLimiting("guest-read")]

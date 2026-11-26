@@ -40,6 +40,7 @@ public sealed class RepositoryContext(DbContextOptions<RepositoryContext> option
             .HasName("hashint4extended")
             .IsBuiltIn();
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppImageEfConfiguration).Assembly);
+        ImageViewModel.Configure(modelBuilder);
         base.OnModelCreating(modelBuilder);
     }
 }

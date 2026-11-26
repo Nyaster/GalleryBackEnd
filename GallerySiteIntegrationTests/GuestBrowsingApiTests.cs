@@ -11,7 +11,7 @@ using Shared.DataTransferObjects;
 
 namespace GallerySiteIntegrationTests;
 
-public sealed class GuestBrowsingApiTests(PostgresFixture database) : IClassFixture<PostgresFixture>
+public sealed partial class GuestBrowsingApiTests(PostgresFixture database) : IClassFixture<PostgresFixture>
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {

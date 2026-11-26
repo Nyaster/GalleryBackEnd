@@ -63,7 +63,8 @@ dotnet run --project GallerySiteBackend/GallerySiteBackend.csproj
 Gallery search, image details/files, recommendations, comments, tag suggestions, and daily discovery support guest
 browsing. Guests see only approved, public, undeleted user uploads with an approved `sfw` tag. Attached `nsfw` tags
 (including pending tags), and pending tag replacements proposing `nsfw`, block guest access. Signed-in users retain
-existing broader access. Writes, personal feeds, rankings, announcements, and administration require authentication.
+existing broader access. Guests can report an open of a guest-visible image. Other writes, personal feeds, rankings,
+announcements, and administration require authentication.
 See [API_REFERENCE.md](API_REFERENCE.md) for the exact public routes and visibility rules.
 
 Guest reads have no viewing quota and share a default limit of 300 requests per IP per minute per API process, including
@@ -144,6 +145,41 @@ successful database save. Later response reads or source-stream disposal cannot 
 failures trigger best-effort cleanup even after request cancellation; deletion failures are logged without replacing
 the original error. Database saving and file storage are not atomic, so process crashes or failed cleanup may leave
 artifacts that require reconciliation.
+
+## Image views and daily statistics
+
+Apply the `AddImageViews` database migration before starting the updated API. Counters start at zero
+for existing images. Anyone who can read an image’s ordinary detail page can see its statistics, including guests.
+
+### Frontend handoff
+
+- **Display the counters** from `GET /api/images/{id}`. The detail JSON includes the integer fields
+  `totalViews` and `uniqueRegisteredViewers`. The first counts opens by guests and registered viewers. The second
+  counts each registered account once per image across all visits. The uploader’s own signed-in opens add to neither.
+- **Report an open** with a bodyless `POST /api/images/{id}/views` once the main image displays on the detail page.
+  Send the usual bearer token when signed in. Count a refresh or a later visit as another open. Guard against
+  duplicate calls from rerenders, repeated load events, expanding the same image, or background detail reloads.
+  Thumbnails, prefetch, and moderation queue previews should never trigger this call. The response is an empty
+  `204`, including for the uploader. Treat reporting as best-effort and avoid automatically retrying an uncertain
+  POST, since each accepted request represents an open.
+- **Plot new registered viewers per day** with `GET /api/images/{id}/views/daily`. Omitting both bounds requests
+  the latest 30 UTC calendar dates including today. To choose a range, send both `from` and `through` as
+  `YYYY-MM-DD`, for example `?from=2026-11-24&through=2026-11-25`. The inclusive range is 1–366 days.
+  A successful response contains every requested date in ascending order, including days with zero viewers, e.g.
+  `[{"date":"2026-11-24","newUniqueViewers":0},{"date":"2026-11-25","newUniqueViewers":2}]`.
+  A returning viewer appears on their first observed UTC date only. The response contains aggregate counts.
+
+All three endpoints enforce ordinary image visibility. Handle an invalid supplied token as `401`, denied or
+missing detail as `403` or `404`, and guest rate limits as `429`. Invalid daily ranges receive `400`. Viewing the
+image should succeed independently of reporting a view or fetching a graph.
+
+Each API process buffers opens in memory and normally flushes about every ten seconds, or sooner at capacity.
+PostgreSQL applies each batch atomically and deduplicates registered viewers across API replicas. The first-view
+timestamp comes from the open, so a delayed batch can revise an earlier UTC day. Counter and graph reads show
+committed data. A crash, a full buffer during an outage, or an unsuccessful shutdown flush can lose recent opens.
+The `GallerySite.ImageViews` meter reports dropped events (`gallery.image_views.dropped`), flush duration in
+milliseconds (`gallery.image_views.flush.duration`), and oldest pending age in seconds
+(`gallery.image_views.oldest_pending.age`).
 
 ## Frontend handoff for role and moderation writes
 

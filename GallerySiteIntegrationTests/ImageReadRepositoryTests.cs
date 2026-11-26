@@ -120,9 +120,10 @@ public sealed class ImageReadRepositoryTests(PostgresFixture database) : IClassF
         var capture = new QueryCapture();
         await using var context = database.CreateContext(capture);
         var repositories = new RepositoryManager(context);
-        var owner = new Application.Features.Images.GetImageById.Handler(repositories, new Viewer(seed.OwnerId));
-        var visitor = new Application.Features.Images.GetImageById.Handler(repositories, new Viewer(seed.VisitorId));
-        var staff = new Application.Features.Images.GetImageById.Handler(repositories, new Viewer(seed.VisitorId, true));
+        var views = new ImageViewRepository(context);
+        var owner = new Application.Features.Images.GetImageById.Handler(repositories, new Viewer(seed.OwnerId), views);
+        var visitor = new Application.Features.Images.GetImageById.Handler(repositories, new Viewer(seed.VisitorId), views);
+        var staff = new Application.Features.Images.GetImageById.Handler(repositories, new Viewer(seed.VisitorId, true), views);
 
         Assert.NotNull((await owner.Handle(new(seed.PrivateId), CancellationToken.None)).PendingTags);
         Assert.NotNull((await staff.Handle(new(seed.PendingId), CancellationToken.None)).PendingTags);

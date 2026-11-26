@@ -45,6 +45,10 @@ builder.Services.AddScoped<IUserContext, HttpUserContext>();
 builder.Services.AddScoped(services => services.GetRequiredService<IHttpContextAccessor>().HttpContext?
     .Features.Get<AccountAccessDto>() ?? throw new Entities.Exceptions.AppUserUnauthorizedException("Authentication is required."));
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<ImageViewAccumulator>();
+builder.Services.AddSingleton<IImageViewRecorder>(services => services.GetRequiredService<ImageViewAccumulator>());
+builder.Services.AddScoped<IImageViewRepository, Infrastructure.Persistence.ImageViewRepository>();
+builder.Services.AddHostedService<ImageViewFlushService>();
 var authenticatorKeyPath = builder.Configuration["Authenticator:KeyRingPath"]
     ?? Path.Combine(builder.Environment.ContentRootPath, "Data", "auth-keys");
 var authenticatorKeyDirectory = OperatingSystem.IsWindows()

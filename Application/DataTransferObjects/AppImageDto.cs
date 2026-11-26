@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Entities.Models;
 
 namespace Shared.DataTransferObjects;
@@ -23,4 +24,11 @@ public sealed record AppImageDto(
     bool CanRestore = false,
     bool CanPublish = false,
     bool CanEditTags = false,
-    bool CanViewTagHistory = false);
+    bool CanViewTagHistory = false)
+{
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public long? TotalViews { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public long? UniqueRegisteredViewers { get; init; }
+}
